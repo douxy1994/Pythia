@@ -1,9 +1,11 @@
+#[cfg(target_os = "macos")]
 use std::fs;
 
 use crate::config::get;
 use crate::config::set;
 use crate::StringWrapper;
 use crate::APP;
+#[cfg(target_os = "macos")]
 use dirs::cache_dir;
 use log::{info, warn};
 use tauri::Manager;
@@ -89,6 +91,9 @@ fn build_window(label: &str, title: &str) -> (Window, bool) {
             .additional_browser_args("--disable-web-security")
             .focused(true)
             .title(title)
+            .resizable(true)
+            .minimizable(true)
+            .maximizable(true)
             .visible(false);
 
             #[cfg(target_os = "macos")]
@@ -133,10 +138,10 @@ fn translate_window() -> Window {
         }
     };
     let (window, exists) = build_window("translate", "Translate");
+    window.set_skip_taskbar(false).unwrap();
     if exists {
         return window;
     }
-    window.set_skip_taskbar(true).unwrap();
     // Get Translate Window Size
     let width = match get("translate_window_width") {
         Some(v) => v.as_i64().unwrap(),
@@ -223,10 +228,22 @@ fn translate_window() -> Window {
     window
 }
 
+pub fn show_translate_from_dock() {
+    let app_handle = APP.get().unwrap();
+    if let Some(window) = app_handle.get_window("translate") {
+        window.set_skip_taskbar(false).unwrap();
+        window.unminimize().unwrap();
+        window.show().unwrap();
+        window.set_focus().unwrap();
+        return;
+    }
+
+    input_translate();
+}
+
 pub fn selection_translate() {
-    use selection::get_text;
     // Get Selected Text
-    let text = get_text();
+    let text = crate::selected_text::get_text();
     if !text.trim().is_empty() {
         let app_handle = APP.get().unwrap();
         // Write into State

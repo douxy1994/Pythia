@@ -8,7 +8,10 @@ mod config;
 mod error;
 mod hotkey;
 mod lang_detect;
+#[cfg(target_os = "macos")]
+mod macos_dock;
 mod screenshot;
+mod selected_text;
 mod server;
 mod system_ocr;
 mod tray;
@@ -68,7 +71,8 @@ fn main() {
             info!("============== Start App ==============");
             #[cfg(target_os = "macos")]
             {
-                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                app.set_activation_policy(tauri::ActivationPolicy::Regular);
+                macos_dock::install_reopen_handler();
                 let trusted =
                     macos_accessibility_client::accessibility::application_is_trusted_with_prompt();
                 info!("MacOS Accessibility Trusted: {}", trusted);
@@ -101,7 +105,10 @@ fn main() {
             }
             match get("proxy_enable") {
                 Some(v) => {
-                    if v.as_bool().unwrap() && get("proxy_host").map_or(false, |host| !host.as_str().unwrap().is_empty()) {
+                    if v.as_bool().unwrap()
+                        && get("proxy_host")
+                            .map_or(false, |host| !host.as_str().unwrap().is_empty())
+                    {
                         let _ = set_proxy();
                     }
                 }
