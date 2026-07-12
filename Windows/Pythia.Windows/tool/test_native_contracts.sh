@@ -59,5 +59,13 @@ grep -F 'Shell_NotifyIconW(NIM_MODIFY, &data)' \
   "$ROOT/windows/runner/pythia_platform_channel.cpp" >/dev/null
 grep -F '$checksum = "$installer.sha256"' \
   "$ROOT/tool/build_windows_installer.ps1" >/dev/null
+grep -F 'eafc69c06f3b23bdccbf22d3fde83b499ddc4901' \
+  "$ROOT/tool/build_windows_installer.ps1" >/dev/null
+grep -F '6753be2c5e2740d859900fd902824db2ec568da5c5b52486524c9762d778b0b0' \
+  "$ROOT/tool/build_windows_installer.ps1" >/dev/null
+grep -F '/DChineseLanguageFile=' \
+  "$ROOT/tool/build_windows_installer.ps1" >/dev/null
+grep -F 'MessagesFile: "{#ChineseLanguageFile}"' \
+  "$ROOT/installer/Pythia.iss" >/dev/null
 
 echo "Pythia native contracts passed (tray actions, notifications, screenshot geometry, updater, and Windows x64 guard)."

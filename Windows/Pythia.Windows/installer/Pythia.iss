@@ -2,6 +2,9 @@
 #define AppVersion "1.0.0"
 #define AppPublisher "douxy1994"
 #define AppExeName "Pythia.exe"
+#ifndef ChineseLanguageFile
+  #define ChineseLanguageFile "compiler:Languages\ChineseSimplified.isl"
+#endif
 
 [Setup]
 AppId={{6F96CE7A-6729-4F43-9878-FF171728A2D4}
@@ -24,7 +27,7 @@ CloseApplications=yes
 RestartApplications=no
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimplified"; MessagesFile: "{#ChineseLanguageFile}"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]

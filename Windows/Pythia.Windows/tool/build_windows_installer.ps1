@@ -10,6 +10,10 @@ $isccCandidates = @(
     "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
 )
 $iscc = $isccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+$chineseLanguageCommit = "eafc69c06f3b23bdccbf22d3fde83b499ddc4901"
+$chineseLanguageSha256 = "6753be2c5e2740d859900fd902824db2ec568da5c5b52486524c9762d778b0b0"
+$chineseLanguageFile = Join-Path $env:TEMP "Pythia-ChineseSimplified-$chineseLanguageCommit.isl"
+$chineseLanguageUrl = "https://raw.githubusercontent.com/jrsoftware/issrc/$chineseLanguageCommit/Files/Languages/ChineseSimplified.isl"
 
 if (-not (Test-Path $release)) {
     throw "Windows x64 release directory does not exist: $release"
@@ -18,11 +22,21 @@ if (-not $iscc) {
     throw "Inno Setup 6 compiler was not found. Install it before packaging."
 }
 
+if (-not (Test-Path $chineseLanguageFile) -or
+    (Get-FileHash -Algorithm SHA256 $chineseLanguageFile).Hash.ToLowerInvariant() -ne $chineseLanguageSha256) {
+    Invoke-WebRequest -Uri $chineseLanguageUrl -OutFile $chineseLanguageFile
+}
+$actualLanguageHash = (Get-FileHash -Algorithm SHA256 $chineseLanguageFile).Hash.ToLowerInvariant()
+if ($actualLanguageHash -ne $chineseLanguageSha256) {
+    Remove-Item $chineseLanguageFile -Force -ErrorAction SilentlyContinue
+    throw "Chinese Inno Setup language file checksum mismatch."
+}
+
 Push-Location $root
 try {
     dart run tool/verify_release_package.dart $release
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
-    & $iscc "installer\Pythia.iss"
+    & $iscc "/DChineseLanguageFile=$chineseLanguageFile" "installer\Pythia.iss"
     if ($LASTEXITCODE -ne 0) {
         throw "Inno Setup failed with exit code $LASTEXITCODE"
     }
