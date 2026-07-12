@@ -24,6 +24,16 @@ grep -F 'UIA_TextPatternId' \
 grep -F 'GetSelection' \
   "$ROOT/windows/runner/pythia_platform_channel.cpp" >/dev/null
 grep -F 'Uiautomationcore' \
+  "$ROOT/windows/runner/CMakeLists.txt" >/dev/null
+grep -F 'set(FLUTTER_LIBRARY ${FLUTTER_LIBRARY} PARENT_SCOPE)' \
+  "$ROOT/windows/flutter/CMakeLists.txt" >/dev/null
+grep -F 'set(FLUTTER_ICU_DATA_FILE "${EPHEMERAL_DIR}/icudtl.dat" PARENT_SCOPE)' \
+  "$ROOT/windows/flutter/CMakeLists.txt" >/dev/null
+grep -F 'set(AOT_LIBRARY "${PROJECT_DIR}/build/windows/app.so" PARENT_SCOPE)' \
+  "$ROOT/windows/flutter/CMakeLists.txt" >/dev/null
+grep -F 'add_subdirectory("runner")' \
+  "$ROOT/windows/CMakeLists.txt" >/dev/null
+grep -F 'install(FILES "${AOT_LIBRARY}"' \
   "$ROOT/windows/CMakeLists.txt" >/dev/null
 if grep -F 'ocr_not_implemented' \
   "$ROOT/windows/runner/pythia_platform_channel.cpp" >/dev/null; then

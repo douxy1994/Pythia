@@ -1,24 +1,23 @@
+# This file controls Flutter-level build steps. It should not be edited.
 cmake_minimum_required(VERSION 3.14)
 
 set(EPHEMERAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ephemeral")
+include(${EPHEMERAL_DIR}/generated_config.cmake)
+
 set(WRAPPER_ROOT "${EPHEMERAL_DIR}/cpp_client_wrapper")
+if(NOT DEFINED FLUTTER_TARGET_PLATFORM)
+  set(FLUTTER_TARGET_PLATFORM "windows-x64")
+endif()
+
 set(FLUTTER_LIBRARY "${EPHEMERAL_DIR}/flutter_windows.dll")
-set(FLUTTER_ICU_DATA_FILE "${EPHEMERAL_DIR}/icudtl.dat")
-set(PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
-set(PROJECT_BUILD_DIR "${PROJECT_DIR}/build/")
+set(FLUTTER_LIBRARY ${FLUTTER_LIBRARY} PARENT_SCOPE)
+set(FLUTTER_ICU_DATA_FILE "${EPHEMERAL_DIR}/icudtl.dat" PARENT_SCOPE)
+set(PROJECT_BUILD_DIR "${PROJECT_DIR}/build/" PARENT_SCOPE)
+set(AOT_LIBRARY "${PROJECT_DIR}/build/windows/app.so" PARENT_SCOPE)
 
-include("${EPHEMERAL_DIR}/generated_config.cmake")
-
-function(apply_standard_settings TARGET)
-  target_compile_features(${TARGET} PUBLIC cxx_std_17)
-  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100")
-  target_compile_options(${TARGET} PRIVATE /EHsc)
-  target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
-  target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
-endfunction()
-
-set(FLUTTER_LIBRARY_HEADERS
+list(APPEND FLUTTER_LIBRARY_HEADERS
   "flutter_export.h"
+  "flutter_windows.h"
   "flutter_messenger.h"
   "flutter_plugin_registrar.h"
   "flutter_texture_registrar.h"
@@ -30,48 +29,58 @@ target_include_directories(flutter INTERFACE "${EPHEMERAL_DIR}")
 target_link_libraries(flutter INTERFACE "${FLUTTER_LIBRARY}.lib")
 add_dependencies(flutter flutter_assemble)
 
+list(APPEND CPP_WRAPPER_SOURCES_CORE
+  "core_implementations.cc"
+  "standard_codec.cc"
+)
+list(TRANSFORM CPP_WRAPPER_SOURCES_CORE PREPEND "${WRAPPER_ROOT}/")
+list(APPEND CPP_WRAPPER_SOURCES_PLUGIN "plugin_registrar.cc")
+list(TRANSFORM CPP_WRAPPER_SOURCES_PLUGIN PREPEND "${WRAPPER_ROOT}/")
+list(APPEND CPP_WRAPPER_SOURCES_APP
+  "flutter_engine.cc"
+  "flutter_view_controller.cc"
+)
+list(TRANSFORM CPP_WRAPPER_SOURCES_APP PREPEND "${WRAPPER_ROOT}/")
+
 add_library(flutter_wrapper_plugin STATIC
-  "${WRAPPER_ROOT}/core_implementations.cc"
-  "${WRAPPER_ROOT}/standard_codec.cc"
+  ${CPP_WRAPPER_SOURCES_CORE}
+  ${CPP_WRAPPER_SOURCES_PLUGIN}
 )
 apply_standard_settings(flutter_wrapper_plugin)
+set_target_properties(flutter_wrapper_plugin PROPERTIES
+  POSITION_INDEPENDENT_CODE ON
+  CXX_VISIBILITY_PRESET hidden)
 target_link_libraries(flutter_wrapper_plugin PUBLIC flutter)
 target_include_directories(flutter_wrapper_plugin PUBLIC "${WRAPPER_ROOT}/include")
 add_dependencies(flutter_wrapper_plugin flutter_assemble)
 
 add_library(flutter_wrapper_app STATIC
-  "${WRAPPER_ROOT}/flutter_engine.cc"
-  "${WRAPPER_ROOT}/flutter_view_controller.cc"
+  ${CPP_WRAPPER_SOURCES_CORE}
+  ${CPP_WRAPPER_SOURCES_APP}
 )
 apply_standard_settings(flutter_wrapper_app)
 target_link_libraries(flutter_wrapper_app PUBLIC flutter)
 target_include_directories(flutter_wrapper_app PUBLIC "${WRAPPER_ROOT}/include")
 add_dependencies(flutter_wrapper_app flutter_assemble)
 
-set(FLUTTER_TOOL_ENVIRONMENT
-  "FLUTTER_ROOT=${FLUTTER_ROOT}"
-  "PROJECT_DIR=${PROJECT_DIR}"
-  "DART_DEFINES=${DART_DEFINES}"
-  "DART_OBFUSCATION=${DART_OBFUSCATION}"
-  "TRACK_WIDGET_CREATION=${TRACK_WIDGET_CREATION}"
-  "TREE_SHAKE_ICONS=${TREE_SHAKE_ICONS}"
-  "PACKAGE_CONFIG=${PACKAGE_CONFIG}"
-)
-
+set(PHONY_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/_phony_")
+set_source_files_properties("${PHONY_OUTPUT}" PROPERTIES SYMBOLIC TRUE)
 add_custom_command(
   OUTPUT ${FLUTTER_LIBRARY} ${FLUTTER_LIBRARY_HEADERS}
-    ${FLUTTER_ICU_DATA_FILE}
-    "${PROJECT_BUILD_DIR}/flutter_assets"
-    "${PROJECT_BUILD_DIR}/app.so"
-  COMMAND ${CMAKE_COMMAND} -E env ${FLUTTER_TOOL_ENVIRONMENT}
+    ${CPP_WRAPPER_SOURCES_CORE} ${CPP_WRAPPER_SOURCES_PLUGIN}
+    ${CPP_WRAPPER_SOURCES_APP}
+    ${PHONY_OUTPUT}
+  COMMAND ${CMAKE_COMMAND} -E env
+    ${FLUTTER_TOOL_ENVIRONMENT}
     "${FLUTTER_ROOT}/packages/flutter_tools/bin/tool_backend.bat"
-      windows-x64 $<CONFIG>
+      ${FLUTTER_TARGET_PLATFORM} $<CONFIG>
   VERBATIM
 )
 add_custom_target(flutter_assemble DEPENDS
   "${FLUTTER_LIBRARY}"
   ${FLUTTER_LIBRARY_HEADERS}
-  "${FLUTTER_ICU_DATA_FILE}"
-  "${PROJECT_BUILD_DIR}/flutter_assets"
-  "${PROJECT_BUILD_DIR}/app.so"
+  ${CPP_WRAPPER_SOURCES_CORE}
+  ${CPP_WRAPPER_SOURCES_PLUGIN}
+  ${CPP_WRAPPER_SOURCES_APP}
+  ${PHONY_OUTPUT}
 )
