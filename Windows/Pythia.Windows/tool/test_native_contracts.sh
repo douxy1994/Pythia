@@ -35,6 +35,10 @@ grep -F 'add_subdirectory("runner")' \
   "$ROOT/windows/CMakeLists.txt" >/dev/null
 grep -F 'install(FILES "${AOT_LIBRARY}"' \
   "$ROOT/windows/CMakeLists.txt" >/dev/null
+grep -F '_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS' \
+  "$ROOT/windows/runner/CMakeLists.txt" >/dev/null
+grep -F '#include <winrt/Windows.Foundation.Collections.h>' \
+  "$ROOT/windows/runner/screenshot_ocr.cpp" >/dev/null
 if grep -F 'ocr_not_implemented' \
   "$ROOT/windows/runner/pythia_platform_channel.cpp" >/dev/null; then
   echo "Screenshot OCR channel still contains the unsupported placeholder." >&2
