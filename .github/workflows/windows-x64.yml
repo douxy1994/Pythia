@@ -1,0 +1,68 @@
+name: Windows x64
+
+on:
+  push:
+    paths:
+      - "Windows/Pythia.Windows/**"
+      - ".github/workflows/windows-x64.yml"
+  pull_request:
+    paths:
+      - "Windows/Pythia.Windows/**"
+      - ".github/workflows/windows-x64.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    defaults:
+      run:
+        working-directory: Windows/Pythia.Windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.5"
+          channel: stable
+          cache: true
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test
+      - name: Build x64 release
+        run: flutter build windows --release
+      - name: Verify release package
+        run: dart run tool/verify_release_package.dart build\windows\x64\runner\Release
+      - name: Build x64 installer and SHA-256
+        shell: pwsh
+        run: .\tool\build_windows_installer.ps1
+      - name: Verify installer checksum
+        shell: pwsh
+        run: |
+          $installer = "dist\Pythia-1.0.0-windows-x64.exe"
+          $sidecar = "$installer.sha256"
+          if (-not (Test-Path $installer)) { throw "Missing installer: $installer" }
+          if (-not (Test-Path $sidecar)) { throw "Missing checksum: $sidecar" }
+          $expected = ((Get-Content $sidecar -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+          $actual = (Get-FileHash -Algorithm SHA256 $installer).Hash.ToLowerInvariant()
+          if ($expected -ne $actual) {
+            throw "Installer checksum mismatch: expected $expected, got $actual"
+          }
+      - name: Upload verified candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pythia-1.0.0-windows-x64
+          path: |
+            Windows/Pythia.Windows/dist/Pythia-1.0.0-windows-x64.exe
+            Windows/Pythia.Windows/dist/Pythia-1.0.0-windows-x64.exe.sha256
+          if-no-files-found: error
+          retention-days: 14

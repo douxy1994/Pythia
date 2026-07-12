@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/douxy1994/Pythia/schemas/history-record.schema.json",
+  "title": "PythiaHistoryRecord",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "sourceText",
+    "translatedText",
+    "sourceLanguage",
+    "targetLanguage",
+    "service",
+    "createdAt",
+    "updatedAt",
+    "isFavorite",
+    "deviceId",
+    "syncStatus",
+    "schemaVersion"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sourceText": {
+      "type": "string"
+    },
+    "translatedText": {
+      "type": "string"
+    },
+    "sourceLanguage": {
+      "type": "string",
+      "minLength": 1
+    },
+    "targetLanguage": {
+      "type": "string",
+      "minLength": 1
+    },
+    "service": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model": {
+      "type": ["string", "null"]
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "isFavorite": {
+      "type": "boolean"
+    },
+    "deviceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "syncStatus": {
+      "type": "string",
+      "enum": ["local", "synced", "pendingUpload", "pendingDelete", "conflict"]
+    },
+    "deletedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}
