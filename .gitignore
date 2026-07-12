@@ -16,6 +16,7 @@ Core/PythiaCore/.build/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
+**/flutter/ephemeral/
 
 # Local release artifacts
 release/
