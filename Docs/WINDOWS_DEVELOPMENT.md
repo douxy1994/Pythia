@@ -1,6 +1,6 @@
 # Windows x64 Development Plan
 
-This repository contains a 64-bit x64 Flutter Windows client under `Windows/Pythia.Windows`, including the native Windows host/CMake files needed to register platform channels. The local macOS machine can run Flutter/Dart tests and native contract checks, but Windows compilation and runtime verification still require an x64 Windows machine with Visual Studio Build Tools.
+This repository contains a 64-bit x64 Flutter Windows client under `Windows/Pythia.Windows`, including the native Windows host/CMake files needed to register platform channels. Local macOS runs Flutter/Dart tests and native contract checks; the fork's GitHub Actions Windows runner now compiles and packages the AMD64 release. Interactive runtime verification still requires Windows x64.
 
 ## Architecture Requirement
 
@@ -91,8 +91,8 @@ Windows/Pythia.Windows/
 
 ## Next Milestone
 
-1. Run `flutter pub get` and `flutter test`; fix any SDK-version issues from the local Windows Flutter version.
-2. Run `flutter run -d windows` and verify the native Credential Manager, selected-text fallback, launch-at-startup, and always-on-top channels.
+1. Download the verified `Pythia-1.0.0-windows-x64` Actions artifact or build locally with the pinned Flutter version.
+2. Run the installer and verify startup, restart, uninstall, Credential Manager, UI Automation selection, screenshot OCR, launch-at-startup, tray, hotkeys, WebDAV, and always-on-top behavior.
 3. Verify screenshot OCR, global-hotkey conflicts, and the Authenticode-signed updater on a real Windows installation with Chinese/English language packs. The recorder UI, tray callbacks, hide-on-blur, secure download/install channel, and release check UI are implemented in code.
 4. Add the remaining macOS first-party provider presets beyond DeepL and LibreTranslate, including provider-specific settings and contract tests.
 5. Exercise WebDAV connection test/manual sync/automatic sync on a real Windows machine and with the same WebDAV account used by macOS.

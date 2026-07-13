@@ -2,8 +2,8 @@
 
 ## Cross-Platform
 
-- Windows has a Flutter scaffold but is not build-verified in this macOS workspace.
-- Flutter/Dart tests can run locally, but Windows executable build/runtime verification still requires Windows plus Visual Studio Build Tools.
+- Windows x64 compilation and installer packaging are verified by the fork's GitHub Actions Windows runner. This macOS workspace still cannot launch the executable, so interactive runtime verification remains outstanding.
+- Flutter/Dart tests and platform-independent native contracts run locally. Windows-only tray, hotkey, OCR, Credential Manager, WebDAV, startup, and installer behavior still require live Windows x64 checks.
 - WebDAV sync is implemented in both apps but is not yet end-to-end verified with one live account across macOS and Windows x64.
 - macOS history now writes the cross-platform `PythiaHistoryRecord` fields, can migrate older local `history.json` records, and has manual/startup/periodic/local-change-debounced/best-effort-exit WebDAV history sync. Conflict log UI and live Windows-side sync verification are still missing.
 - Portable settings backup is separated from device-specific and sensitive fields. Automatic settings synchronization remains intentionally disabled; users explicitly trigger local or WebDAV backup/restore.
@@ -19,5 +19,5 @@
 ## Release
 
 - macOS release packaging exists and excludes bundled plugins.
-- Windows x64 packaging and CI definitions exist, including Inno Setup output, SHA-256 sidecar generation, AMD64/package-content verification, and artifact upload. A successful run on the fork's Windows runner is still required before treating the installer as release-verified.
+- Windows x64 packaging and CI are build-verified, including Inno Setup output, SHA-256 sidecar generation/recalculation, AMD64/package-content verification, and artifact upload. The current Actions artifact is an unsigned CI candidate; production release still requires Authenticode signing and live install/uninstall/update checks.
 - The repository still contains compatibility strings referring to legacy Pot migration/plugin import. Product-facing release text should avoid presenting these as current branding.

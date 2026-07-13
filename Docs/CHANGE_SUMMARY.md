@@ -25,4 +25,4 @@
 - Port the WebDAV history sync implementation to Windows.
 - Add richer conflict log UI and cross-platform sync status views.
 - Implement platform-secure credential storage without repeated macOS prompts.
-- Run and close the existing Windows x64 packaging/release workflow on GitHub Actions, then perform live runtime checks on the produced installer.
+- Perform live Windows x64 runtime checks on the now CI-built installer, then Authenticode-sign the production installer from the Windows certificate store.

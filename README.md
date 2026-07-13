@@ -7,7 +7,7 @@ Pythia 1.0.0 is the current version target.
 ## Current State
 
 - macOS: native AppKit application, currently buildable and runnable on this machine.
-- Windows x64: Flutter client and native Win32 host are present under `Windows/Pythia.Windows`; executable builds still require an x64 Windows development environment with Flutter and Visual Studio Build Tools.
+- Windows x64: Flutter client and native Win32 host are present under `Windows/Pythia.Windows`; GitHub Actions now compiles the AMD64 app, verifies the release payload, and produces the Inno Setup installer plus SHA-256 sidecar. Live interactive verification still requires Windows x64.
 - Shared contracts: history sync schemas and a tested Swift `PythiaCore` merge model live under `Core/`.
 - Plugins: release packages must not bundle plugins. Legacy plugin compatibility is local user data only.
 
@@ -43,7 +43,7 @@ The local signing identity name is retained only to keep existing macOS Accessib
 
 ### Windows
 
-The Windows x64 client has Flutter/Dart logic tests that can run in this macOS workspace, but executable builds still require an x64 Windows runtime and Visual Studio Build Tools. CMake rejects non-x64 toolchains, and the release verifier checks that `Pythia.exe` uses PE machine `0x8664` (AMD64). On Windows, follow `Docs/WINDOWS_DEVELOPMENT.md` and `Windows/Pythia.Windows/README.md`.
+The Windows x64 client has Flutter/Dart logic tests that run in this macOS workspace and a GitHub Actions `windows-2025` build that compiles with Visual Studio, verifies `Pythia.exe` as PE machine `0x8664` (AMD64), rejects plugins/private material, and packages an installer. Live tray, hotkey, OCR, Credential Manager, WebDAV, and installer execution still require Windows x64. On Windows, follow `Docs/WINDOWS_DEVELOPMENT.md` and `Windows/Pythia.Windows/README.md`.
 
 ## Build
 

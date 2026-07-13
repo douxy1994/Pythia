@@ -1,6 +1,6 @@
 # Pythia Windows x64
 
-This is the 64-bit x64 Flutter Windows client scaffold for Pythia 1.0.0, including the native Windows host files required to build and register platform channels. The CMake project rejects non-x64 toolchains, and the release verifier requires `Pythia.exe` to use PE machine `0x8664` (AMD64).
+This is the 64-bit x64 Flutter Windows client for Pythia 1.0.0, including the native Windows host files required to build and register platform channels. The CMake project rejects non-x64 toolchains, the release verifier requires `Pythia.exe` to use PE machine `0x8664` (AMD64), and GitHub Actions now builds and packages the verified candidate.
 
 This macOS workspace can run Flutter/Dart logic tests, but cannot build or run the Windows executable because it lacks a Windows runtime and Visual Studio Build Tools. The files here are structured so a Windows development machine can run:
 
