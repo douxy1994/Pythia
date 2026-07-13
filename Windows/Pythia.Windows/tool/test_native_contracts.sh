@@ -67,5 +67,20 @@ grep -F '/DChineseLanguageFile=' \
   "$ROOT/tool/build_windows_installer.ps1" >/dev/null
 grep -F 'MessagesFile: "{#ChineseLanguageFile}"' \
   "$ROOT/installer/Pythia.iss" >/dev/null
+test -f "$ROOT/tool/smoke_windows_release.ps1"
+grep -F 'Assert-PythiaProcessHealthy' \
+  "$ROOT/tool/smoke_windows_release.ps1" >/dev/null
+grep -F 'Pythia raw release restart' \
+  "$ROOT/tool/smoke_windows_release.ps1" >/dev/null
+grep -F 'MainWindowHandle' \
+  "$ROOT/tool/smoke_windows_release.ps1" >/dev/null
+grep -F 'Start-Transcript' \
+  "$ROOT/tool/smoke_windows_release.ps1" >/dev/null
+grep -F '/VERYSILENT' \
+  "$ROOT/tool/smoke_windows_release.ps1" >/dev/null
+grep -F 'unins000.exe' \
+  "$ROOT/tool/smoke_windows_release.ps1" >/dev/null
+grep -F 'smoke_windows_release.ps1' \
+  "$ROOT/../../.github/workflows/windows-x64.yml" >/dev/null
 
 echo "Pythia native contracts passed (tray actions, notifications, screenshot geometry, updater, and Windows x64 guard)."
