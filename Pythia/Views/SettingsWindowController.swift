@@ -57,7 +57,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let dynamicTranslateCheckbox = NSButton(checkboxWithTitle: "动态翻译（输入时自动翻译）", target: nil, action: nil)
     private let incrementalTranslateCheckbox = NSButton(checkboxWithTitle: "增量翻译", target: nil, action: nil)
     // Appearance / general
-    private let transparentCheckbox = NSButton(checkboxWithTitle: "增强 Liquid Glass 层次", target: nil, action: nil)
     private let appFontField = NSTextField()
     private let appFontSizeField = NSTextField()
     private let appFallbackFontField = NSTextField()
@@ -280,8 +279,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         stack.addArrangedSubview(note("主界面翻译会同时请求此处勾选的服务，并按此处顺序在译文区分组显示。"))
         stack.addArrangedSubview(row("外观", themePopup))
         stack.addArrangedSubview(row("主题色", themeColorWell))
-        stack.addArrangedSubview(indented(transparentCheckbox))
-        stack.addArrangedSubview(note("增强后只调整窗口内部材质层次，不会把整个窗口背景变透明。"))
         stack.addArrangedSubview(row("界面字体", appFontField))
         stack.addArrangedSubview(row("界面字号", appFontSizeField))
         stack.addArrangedSubview(row("回退字体", appFallbackFontField))
@@ -1125,7 +1122,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         hideLanguageCheckbox.state = preferences.hideLanguage ? .on : .off
         dynamicTranslateCheckbox.state = preferences.dynamicTranslate ? .on : .off
         incrementalTranslateCheckbox.state = preferences.incrementalTranslate ? .on : .off
-        transparentCheckbox.state = preferences.transparent ? .on : .off
         appFontField.stringValue = preferences.appFont
         appFontSizeField.stringValue = "\(preferences.appFontSize)"
         appFallbackFontField.stringValue = preferences.appFallbackFont
@@ -1225,7 +1221,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         preferences.hideLanguage = hideLanguageCheckbox.state == .on
         preferences.dynamicTranslate = dynamicTranslateCheckbox.state == .on
         preferences.incrementalTranslate = incrementalTranslateCheckbox.state == .on
-        preferences.transparent = transparentCheckbox.state == .on
         let fontWarning = normalizeAndPersistFontSettings(preferences)
         preferences.trayClickEvent = selectedPopupValue(trayClickPopup, mapping: ["config": "显示设置", "translate": "显示翻译窗口", "history": "显示历史记录"])
         preferences.launchAtLogin = launchAtLoginCheckbox.state == .on
