@@ -1,0 +1,25 @@
+.DS_Store
+*.log
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdata/
+xcuserdata/
+
+# SwiftPM
+.build/
+Core/PythiaCore/.build/
+
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+**/flutter/ephemeral/
+
+# Local release artifacts
+release/
+
+# Local Codex environment
+.codex/

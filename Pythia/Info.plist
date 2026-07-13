@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>zh_CN</string>
+  <key>CFBundleDisplayName</key>
+  <string>Pythia</string>
+  <key>CFBundleExecutable</key>
+  <string>$(EXECUTABLE_NAME)</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
+  <key>CFBundleIdentifier</key>
+  <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>Pythia</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+  <key>CFBundleVersion</key>
+	<string>100</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Pythia uses automation-compatible shortcuts to read selected text for translation.</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright © 2026</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Reserved for future speech input.</string>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>Pythia captures the screen for OCR and screenshot translation.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Reserved for future speech recognition.</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+</dict>
+</plist>

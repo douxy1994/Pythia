@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/douxy1994/Pythia/schemas/portable-backup.schema.json",
+  "title": "PythiaPortableBackup",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "product", "createdAt", "sensitiveFieldsOmitted", "settings", "history"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "product": { "const": "Pythia" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "sensitiveFieldsOmitted": { "const": true },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sourceLanguage": { "type": "string" },
+        "targetLanguage": { "type": "string" },
+        "enabledTranslateServices": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "translateServiceOrder": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "openAICompatibleEnabled": { "type": "boolean" },
+        "openAICompatibleName": { "type": "string" },
+        "openAICompatibleBaseUrl": { "type": "string" },
+        "openAICompatibleModel": { "type": "string" },
+        "deepLEnabled": { "type": "boolean" },
+        "deepLBaseUrl": { "type": "string" },
+        "libreTranslateEnabled": { "type": "boolean" },
+        "libreTranslateBaseUrl": { "type": "string" },
+        "saveHistory": { "type": "boolean" },
+        "themeMode": { "type": "string", "enum": ["system", "light", "dark"] }
+      }
+    },
+    "history": {
+      "type": "array",
+      "items": { "$ref": "history-record.schema.json" }
+    }
+  }
+}

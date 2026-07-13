@@ -1,0 +1,484 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* Pythia.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* Pythia.swift */; };
+		A10000000000000000000002 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* AppIcon.icns */; };
+		A10000000000000000000003 /* PythiaStatusTemplate.png in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* PythiaStatusTemplate.png */; };
+		A10000000000000000000004 /* PythiaBaseIcon.png in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* PythiaBaseIcon.png */; };
+		A10000000000000000000005 /* PythiaModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017 /* PythiaModels.swift */; };
+		A10000000000000000000006 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000018 /* HistoryStore.swift */; };
+		A10000000000000000000007 /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000019 /* Preferences.swift */; };
+		A10000000000000000000008 /* MigrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A /* MigrationService.swift */; };
+		A10000000000000000000009 /* TranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* TranslationService.swift */; };
+			A1000000000000000000000A /* PluginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001C /* PluginManager.swift */; };
+				A1000000000000000000000B /* SelectionReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* SelectionReader.swift */; };
+				A1000000000000000000000C /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001E /* OCRService.swift */; };
+				A1000000000000000000000D /* PythiaHTTPServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001F /* PythiaHTTPServer.swift */; };
+				A1000000000000000000000E /* ClipboardMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* ClipboardMonitor.swift */; };
+				A10000000000000000000022 /* HotKeyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000023 /* HotKeyMonitor.swift */; };
+				A10000000000000000000024 /* HistoryWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* HistoryWindowController.swift */; };
+				A10000000000000000000026 /* Controls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000027 /* Controls.swift */; };
+				A10000000000000000000028 /* PythiaAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000029 /* PythiaAppDelegate.swift */; };
+				A10000000000000000000090 /* PythiaMenuBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000091 /* PythiaMenuBuilder.swift */; };
+				A1000000000000000000002A /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002B /* SettingsWindowController.swift */; };
+				A1000000000000000000002C /* TranslatorWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002D /* TranslatorWindowController.swift */; };
+				A1000000000000000000002E /* PythiaBackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002F /* PythiaBackupService.swift */; };
+				A10000000000000000000092 /* PythiaUpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000093 /* PythiaUpdateChecker.swift */; };
+				A10000000000000000000095 /* HistorySync.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000094 /* HistorySync.swift */; };
+				A10000000000000000000097 /* NodeRuntimeResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000096 /* NodeRuntimeResolver.swift */; };
+				A10000000000000000000099 /* TextSubmissionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000098 /* TextSubmissionPolicy.swift */; };
+				A1000000000000000000009B /* WebDAVSyncSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000009A /* WebDAVSyncSchedule.swift */; };
+				A1000000000000000000009D /* PortableBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000009C /* PortableBackup.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		102760DC2FF8F2AD00D0B9D5 /* Pythia.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = Pythia.xcodeproj; sourceTree = SOURCE_ROOT; };
+		A10000000000000000000010 /* Pythia.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Pythia.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000011 /* Pythia.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pythia.swift; sourceTree = "<group>"; };
+		A10000000000000000000012 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		A10000000000000000000013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A10000000000000000000014 /* Pythia.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Pythia.entitlements; sourceTree = "<group>"; };
+		A10000000000000000000015 /* PythiaStatusTemplate.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = PythiaStatusTemplate.png; sourceTree = "<group>"; };
+		A10000000000000000000016 /* PythiaBaseIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = PythiaBaseIcon.png; sourceTree = "<group>"; };
+		A10000000000000000000017 /* PythiaModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaModels.swift; sourceTree = "<group>"; };
+		A10000000000000000000018 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
+		A10000000000000000000019 /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
+		A1000000000000000000001A /* MigrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationService.swift; sourceTree = "<group>"; };
+		A1000000000000000000001B /* TranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationService.swift; sourceTree = "<group>"; };
+			A1000000000000000000001C /* PluginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginManager.swift; sourceTree = "<group>"; };
+				A1000000000000000000001D /* SelectionReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionReader.swift; sourceTree = "<group>"; };
+				A1000000000000000000001E /* OCRService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRService.swift; sourceTree = "<group>"; };
+				A1000000000000000000001F /* PythiaHTTPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaHTTPServer.swift; sourceTree = "<group>"; };
+				A10000000000000000000021 /* ClipboardMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardMonitor.swift; sourceTree = "<group>"; };
+				A10000000000000000000023 /* HotKeyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyMonitor.swift; sourceTree = "<group>"; };
+				A10000000000000000000025 /* HistoryWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryWindowController.swift; sourceTree = "<group>"; };
+				A10000000000000000000027 /* Controls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Controls.swift; sourceTree = "<group>"; };
+				A10000000000000000000029 /* PythiaAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaAppDelegate.swift; sourceTree = "<group>"; };
+				A10000000000000000000091 /* PythiaMenuBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaMenuBuilder.swift; sourceTree = "<group>"; };
+				A1000000000000000000002B /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
+				A1000000000000000000002D /* TranslatorWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslatorWindowController.swift; sourceTree = "<group>"; };
+				A1000000000000000000002F /* PythiaBackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaBackupService.swift; sourceTree = "<group>"; };
+				A10000000000000000000093 /* PythiaUpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaUpdateChecker.swift; sourceTree = "<group>"; };
+				A10000000000000000000094 /* HistorySync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/HistorySync.swift; sourceTree = SOURCE_ROOT; };
+				A10000000000000000000096 /* NodeRuntimeResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/NodeRuntimeResolver.swift; sourceTree = SOURCE_ROOT; };
+				A10000000000000000000098 /* TextSubmissionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/TextSubmissionPolicy.swift; sourceTree = SOURCE_ROOT; };
+				A1000000000000000000009A /* WebDAVSyncSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/WebDAVSyncSchedule.swift; sourceTree = SOURCE_ROOT; };
+				A1000000000000000000009C /* PortableBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/PortableBackup.swift; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000000000000000000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		102760DF2FF8F3B200D0B9D5 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000030 = {
+			isa = PBXGroup;
+			children = (
+				102760DC2FF8F2AD00D0B9D5 /* Pythia.xcodeproj */,
+				A10000000000000000000031 /* Pythia */,
+				A10000000000000000000032 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A10000000000000000000031 /* Pythia */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000011 /* Pythia.swift */,
+				A10000000000000000000038 /* App */,
+				A10000000000000000000034 /* Models */,
+				A10000000000000000000035 /* Stores */,
+				A10000000000000000000036 /* Services */,
+				A10000000000000000000037 /* Views */,
+				A10000000000000000000013 /* Info.plist */,
+				A10000000000000000000014 /* Pythia.entitlements */,
+				A10000000000000000000033 /* Resources */,
+			);
+			path = Pythia;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000032 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000010 /* Pythia.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000033 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000012 /* AppIcon.icns */,
+				A10000000000000000000015 /* PythiaStatusTemplate.png */,
+				A10000000000000000000016 /* PythiaBaseIcon.png */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000034 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000017 /* PythiaModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000035 /* Stores */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000019 /* Preferences.swift */,
+				A10000000000000000000018 /* HistoryStore.swift */,
+			);
+			path = Stores;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000036 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+						A1000000000000000000001C /* PluginManager.swift */,
+						A1000000000000000000001F /* PythiaHTTPServer.swift */,
+						A10000000000000000000021 /* ClipboardMonitor.swift */,
+						A10000000000000000000023 /* HotKeyMonitor.swift */,
+						A1000000000000000000001D /* SelectionReader.swift */,
+						A1000000000000000000001E /* OCRService.swift */,
+						A1000000000000000000002F /* PythiaBackupService.swift */,
+						A10000000000000000000093 /* PythiaUpdateChecker.swift */,
+				A1000000000000000000001A /* MigrationService.swift */,
+				A1000000000000000000001B /* TranslationService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000037 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000027 /* Controls.swift */,
+				A10000000000000000000025 /* HistoryWindowController.swift */,
+				A1000000000000000000002B /* SettingsWindowController.swift */,
+				A1000000000000000000002D /* TranslatorWindowController.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000038 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000029 /* PythiaAppDelegate.swift */,
+				A10000000000000000000091 /* PythiaMenuBuilder.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000000000000000000040 /* Pythia */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000070 /* Build configuration list for PBXNativeTarget "Pythia" */;
+			buildPhases = (
+				A10000000000000000000050 /* Sources */,
+				A10000000000000000000020 /* Frameworks */,
+				A10000000000000000000051 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Pythia;
+			productName = Pythia;
+			productReference = A10000000000000000000010 /* Pythia.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10000000000000000000060 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					A10000000000000000000040 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+				};
+			};
+			buildConfigurationList = A10000000000000000000061 /* Build configuration list for PBXProject "Pythia" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = zh_CN;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				zh_CN,
+				en,
+				Base,
+			);
+			mainGroup = A10000000000000000000030;
+			productRefGroup = A10000000000000000000032 /* Products */;
+			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = 102760DF2FF8F3B200D0B9D5 /* Products */;
+					ProjectRef = 102760DC2FF8F2AD00D0B9D5 /* Pythia.xcodeproj */;
+				},
+			);
+			projectRoot = "";
+			targets = (
+				A10000000000000000000040 /* Pythia */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000051 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000002 /* AppIcon.icns in Resources */,
+				A10000000000000000000003 /* PythiaStatusTemplate.png in Resources */,
+				A10000000000000000000004 /* PythiaBaseIcon.png in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000000000000000000050 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* Pythia.swift in Sources */,
+				A10000000000000000000005 /* PythiaModels.swift in Sources */,
+				A10000000000000000000006 /* HistoryStore.swift in Sources */,
+				A10000000000000000000007 /* Preferences.swift in Sources */,
+				A10000000000000000000008 /* MigrationService.swift in Sources */,
+				A10000000000000000000009 /* TranslationService.swift in Sources */,
+					A1000000000000000000000A /* PluginManager.swift in Sources */,
+						A1000000000000000000000B /* SelectionReader.swift in Sources */,
+						A1000000000000000000000C /* OCRService.swift in Sources */,
+						A1000000000000000000000D /* PythiaHTTPServer.swift in Sources */,
+						A1000000000000000000000E /* ClipboardMonitor.swift in Sources */,
+						A10000000000000000000022 /* HotKeyMonitor.swift in Sources */,
+						A10000000000000000000024 /* HistoryWindowController.swift in Sources */,
+						A10000000000000000000026 /* Controls.swift in Sources */,
+						A10000000000000000000028 /* PythiaAppDelegate.swift in Sources */,
+						A10000000000000000000090 /* PythiaMenuBuilder.swift in Sources */,
+						A1000000000000000000002A /* SettingsWindowController.swift in Sources */,
+						A1000000000000000000002C /* TranslatorWindowController.swift in Sources */,
+						A1000000000000000000002E /* PythiaBackupService.swift in Sources */,
+						A10000000000000000000092 /* PythiaUpdateChecker.swift in Sources */,
+						A10000000000000000000095 /* HistorySync.swift in Sources */,
+						A10000000000000000000097 /* NodeRuntimeResolver.swift in Sources */,
+						A10000000000000000000099 /* TextSubmissionPolicy.swift in Sources */,
+						A1000000000000000000009B /* WebDAVSyncSchedule.swift in Sources */,
+						A1000000000000000000009D /* PortableBackup.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A10000000000000000000080 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A10000000000000000000081 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		A10000000000000000000082 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CODE_SIGN_ENTITLEMENTS = Pythia/Pythia.entitlements;
+				CODE_SIGN_IDENTITY = "Pot Local Code Signing";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Pythia/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.douxy.pythia;
+				PRODUCT_NAME = Pythia;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A10000000000000000000083 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CODE_SIGN_ENTITLEMENTS = Pythia/Pythia.entitlements;
+				CODE_SIGN_IDENTITY = "Pot Local Code Signing";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Pythia/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.douxy.pythia;
+				PRODUCT_NAME = Pythia;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A10000000000000000000061 /* Build configuration list for PBXProject "Pythia" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000080 /* Debug */,
+				A10000000000000000000081 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000070 /* Build configuration list for PBXNativeTarget "Pythia" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000082 /* Debug */,
+				A10000000000000000000083 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A10000000000000000000060 /* Project object */;
+}
