@@ -318,16 +318,20 @@ final class TranslationService {
     static func resolvedLanguages(text: String, sourceLanguage: String, targetLanguage: String) -> LanguagePair {
         let source = normalizedLanguageCode(sourceLanguage, fallback: "auto")
         let target = normalizedLanguageCode(targetLanguage, fallback: "zh-CN")
-        guard isAutoLanguage(source), containsChineseAndEnglish(text) else {
+        guard isAutoLanguage(source) else {
             return LanguagePair(source: source, target: target)
         }
-        if isEnglishLanguage(target) {
-            return LanguagePair(source: "zh-CN", target: target)
+        let automaticTarget = AutomaticLanguagePolicy.targetLanguage(for: text, selectedTarget: target)
+        guard containsChineseAndEnglish(text) else {
+            return LanguagePair(source: source, target: automaticTarget)
         }
-        if isChineseLanguage(target) {
-            return LanguagePair(source: "en", target: target)
+        if isEnglishLanguage(automaticTarget) {
+            return LanguagePair(source: "zh-CN", target: automaticTarget)
         }
-        return LanguagePair(source: source, target: target)
+        if isChineseLanguage(automaticTarget) {
+            return LanguagePair(source: "en", target: automaticTarget)
+        }
+        return LanguagePair(source: source, target: automaticTarget)
     }
 
     static func containsChineseAndEnglish(_ text: String) -> Bool {

@@ -183,9 +183,8 @@ final class SubmitTextView: NSTextView {
 
     override var acceptsFirstResponder: Bool { true }
 
-    // Handle only the bare Return key as submit; forward everything else
-    // (including Cmd+V paste and normal typing) to the standard text view
-    // machinery via performKeyEquivalent/keyDown.
+    // Bare Return submits after IME composition has finished. Shift+Return and
+    // other modified Return events stay with NSTextView so they insert a line.
     override func keyDown(with event: NSEvent) {
         let isReturn = event.keyCode == 36 || event.keyCode == 76
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -195,7 +194,7 @@ final class SubmitTextView: NSTextView {
             && !flags.contains(.command)
             && !flags.contains(.control)
         let hadMarkedText = hasMarkedText()
-        let inputMethodHandledEvent = isBareReturn
+        let inputMethodHandledEvent = isBareReturn && hadMarkedText
             ? (inputContext?.handleEvent(event) ?? false)
             : false
 
@@ -502,10 +501,6 @@ final class GlassIconButton: NSButton {
 }
 
 final class LiquidGlassBackgroundView: NSVisualEffectView {
-    var enhancedGlass = false {
-        didSet { updateGlass() }
-    }
-
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         material = .windowBackground
@@ -525,9 +520,9 @@ final class LiquidGlassBackgroundView: NSVisualEffectView {
     }
 
     private func updateGlass() {
-        material = enhancedGlass ? .popover : .windowBackground
+        material = .windowBackground
         layer?.backgroundColor = NSColor.windowBackgroundColor
-            .withAlphaComponent(enhancedGlass ? 0.88 : 0.96)
+            .withAlphaComponent(0.96)
             .cgColor
     }
 }
@@ -1125,10 +1120,8 @@ final class PillButton: NSButton {
     private var trackingArea: NSTrackingArea?
     private var isHovering = false
     private var isPressing = false
-    private let emphasized: Bool
 
     init(_ title: String, target: AnyObject?, action: Selector?) {
-        emphasized = title == "翻译" || title == "保存"
         super.init(frame: .zero)
         self.title = title
         self.target = target
@@ -1142,7 +1135,7 @@ final class PillButton: NSButton {
         layer?.cornerRadius = 13
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = false
-        contentTintColor = emphasized ? PythiaDesign.themeColor() : .labelColor
+        contentTintColor = PythiaDesign.themeColor()
         heightAnchor.constraint(greaterThanOrEqualToConstant: 28).isActive = true
         widthAnchor.constraint(greaterThanOrEqualToConstant: 52).isActive = true
         updateGlass()
@@ -1194,7 +1187,14 @@ final class PillButton: NSButton {
     private func updateGlass() {
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let theme = PythiaDesign.themeColor()
-        contentTintColor = emphasized ? theme : (dark ? .white.withAlphaComponent(0.92) : .black.withAlphaComponent(0.74))
+        contentTintColor = theme
+        attributedTitle = NSAttributedString(
+            string: title,
+            attributes: [
+                .font: font ?? NSFont.systemFont(ofSize: 13, weight: .semibold),
+                .foregroundColor: theme,
+            ]
+        )
         let restingFill = dark ? NSColor.white.withAlphaComponent(0.075) : NSColor.black.withAlphaComponent(0.045)
         let hoverFill = dark ? NSColor.white.withAlphaComponent(0.15) : NSColor.black.withAlphaComponent(0.075)
         let pressFill = theme.withAlphaComponent(dark ? 0.26 : 0.18)

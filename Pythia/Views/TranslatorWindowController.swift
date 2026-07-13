@@ -222,20 +222,16 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         }
         let requestedSourceLanguage = Preferences.shared.sourceLanguage
         var requestedTargetLanguage = Preferences.shared.targetLanguage
-        // Smart target: when auto-detecting source, translate Chinese to the
-        // configured second target language; non-Chinese uses the primary target.
-        if Preferences.shared.smartTargetLanguage,
-           requestedSourceLanguage.lowercased() == "auto" {
-            let smartTarget = Self.smartTargetLanguage(
+        // Automatic direction: pure Chinese -> English, pure English -> Chinese;
+        // mixed Chinese/English keeps the target selected by the user.
+        if requestedSourceLanguage.lowercased() == "auto" {
+            let smartTarget = AutomaticLanguagePolicy.targetLanguage(
                 for: input,
-                primaryTarget: requestedTargetLanguage,
-                secondTarget: Preferences.shared.translateSecondLanguage
+                selectedTarget: requestedTargetLanguage
             )
-            if let smartTarget {
-                requestedTargetLanguage = smartTarget
-                selectLanguage(smartTarget, in: targetLanguagePopup)
-                updatePanelTitles()
-            }
+            requestedTargetLanguage = smartTarget
+            selectLanguage(smartTarget, in: targetLanguagePopup)
+            updatePanelTitles()
         }
         let services = activeTranslationServices()
         guard !services.isEmpty else {
@@ -985,7 +981,6 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         resultPanelTopToSourceConstraint?.isActive = !preferences.hideSource
         resultPanelTopToHeaderConstraint?.isActive = preferences.hideSource
         window?.alphaValue = 1.0
-        backgroundView?.enhancedGlass = preferences.transparent
         sourceView.applyFontPreferences()
         resultViews.values.forEach { $0.applyFontPreferences() }
         applyAlwaysOnTopPreference()
@@ -1031,29 +1026,6 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         text.components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
-    }
-
-    /// Smart target language for auto-detect. Pure Chinese text translates to
-    /// the configured second target language; non-Chinese text translates to
-    /// the configured primary target language. Mixed Chinese/English text
-    /// keeps the user's selected target language.
-    static func smartTargetLanguage(for text: String, primaryTarget: String, secondTarget: String) -> String? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        var cjk = 0
-        var latinLetters = 0
-        for s in trimmed.unicodeScalars {
-            let v = s.value
-            if (0x4E00...0x9FFF).contains(v) || (0x3400...0x4DBF).contains(v) {
-                cjk += 1
-            } else if (0x0041...0x005A).contains(v) || (0x0061...0x007A).contains(v) {
-                latinLetters += 1
-            }
-        }
-        if cjk > 0, latinLetters > 0 { return nil }
-        let fallbackPrimary = primaryTarget.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "zh-CN" : primaryTarget
-        let fallbackSecond = secondTarget.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "en" : secondTarget
-        return cjk > 0 ? fallbackSecond : fallbackPrimary
     }
 
     private func activeTranslationServices() -> [String] {
