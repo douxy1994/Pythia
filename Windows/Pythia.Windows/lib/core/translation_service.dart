@@ -549,14 +549,23 @@ class TranslationServiceRegistry {
   }) {
     final source = _normalizedLanguageCode(sourceLanguage, 'auto');
     final target = _normalizedLanguageCode(targetLanguage, 'zh-CN');
-    if (!_isAutoLanguage(source) || !_containsChineseAndEnglish(text)) {
+    if (!_isAutoLanguage(source)) {
       return PythiaLanguagePair(source: source, target: target);
     }
-    if (_isEnglishLanguage(target)) {
-      return PythiaLanguagePair(source: 'zh-CN', target: target);
+    final signals = _languageSignals(text);
+    if (signals.hasChinese && !signals.hasEnglish) {
+      return PythiaLanguagePair(source: source, target: 'en');
     }
-    if (_isChineseLanguage(target)) {
-      return PythiaLanguagePair(source: 'en', target: target);
+    if (signals.hasEnglish && !signals.hasChinese) {
+      return PythiaLanguagePair(source: source, target: 'zh-CN');
+    }
+    if (signals.hasChinese && signals.hasEnglish) {
+      if (_isEnglishLanguage(target)) {
+        return PythiaLanguagePair(source: 'zh-CN', target: target);
+      }
+      if (_isChineseLanguage(target)) {
+        return PythiaLanguagePair(source: 'en', target: target);
+      }
     }
     return PythiaLanguagePair(source: source, target: target);
   }
@@ -581,7 +590,7 @@ class TranslationServiceRegistry {
     return normalized == 'zh' || normalized.startsWith('zh-');
   }
 
-  static bool _containsChineseAndEnglish(String text) {
+  static ({bool hasChinese, bool hasEnglish}) _languageSignals(String text) {
     var hasChinese = false;
     var hasEnglish = false;
     for (final rune in text.runes) {
@@ -593,8 +602,7 @@ class TranslationServiceRegistry {
           (rune >= 0x0061 && rune <= 0x007A)) {
         hasEnglish = true;
       }
-      if (hasChinese && hasEnglish) return true;
     }
-    return false;
+    return (hasChinese: hasChinese, hasEnglish: hasEnglish);
   }
 }

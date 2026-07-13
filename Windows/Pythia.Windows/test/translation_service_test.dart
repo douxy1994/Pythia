@@ -66,6 +66,28 @@ void main() {
     expect(languages.target, 'en');
   });
 
+  test('pure Chinese auto source defaults to English target', () async {
+    final languages = TranslationServiceRegistry.resolvedLanguages(
+      text: '今天天气很好',
+      sourceLanguage: 'auto',
+      targetLanguage: 'zh-CN',
+    );
+
+    expect(languages.source, 'auto');
+    expect(languages.target, 'en');
+  });
+
+  test('pure English auto source defaults to Chinese target', () async {
+    final languages = TranslationServiceRegistry.resolvedLanguages(
+      text: 'The weather is good today.',
+      sourceLanguage: 'auto',
+      targetLanguage: 'en',
+    );
+
+    expect(languages.source, 'auto');
+    expect(languages.target, 'zh-CN');
+  });
+
   test('mixed Chinese and English source follows selected Chinese target',
       () async {
     final languages = TranslationServiceRegistry.resolvedLanguages(
