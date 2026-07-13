@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 
 const pythiaCurrentVersion = '1.0.0';
 const pythiaLatestReleaseApi =
-    'https://api.github.com/repos/douxy1994/Pythia/releases/latest';
+    'https://api.github.com/repos/douxy1994/Pythia/releases?per_page=20';
 const pythiaReleasesUrl = 'https://github.com/douxy1994/Pythia/releases';
 
 class PythiaUpdateInfo {
@@ -62,12 +62,35 @@ class PythiaUpdateChecker {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('更新检查失败（HTTP ${response.statusCode}）。');
     }
-    final payload = jsonDecode(response.body) as Map<String, Object?>;
-    final tag = payload['tag_name'] as String? ?? '';
-    final latest = normalizedVersion(tag);
-    if (latest.isEmpty) {
-      throw StateError('GitHub Release 没有有效版本号。');
+    final decoded = jsonDecode(response.body);
+    if (decoded is! List<Object?>) {
+      throw StateError('GitHub Release 发布信息格式无效。');
     }
+    Map<String, Object?>? payload;
+    String? latest;
+    for (final raw in decoded) {
+      if (raw is! Map<String, Object?> ||
+          raw['draft'] == true ||
+          raw['prerelease'] == true) {
+        continue;
+      }
+      final tag = raw['tag_name'] as String? ?? '';
+      final releaseName = raw['name'] as String? ?? '';
+      final candidate = _pythiaVersion(tag, releaseName);
+      if (candidate == null) continue;
+      payload = raw;
+      latest = candidate;
+      break;
+    }
+    if (payload == null || latest == null) {
+      return PythiaUpdateInfo(
+        currentVersion: normalizedVersion(currentVersion),
+        latestVersion: normalizedVersion(currentVersion),
+        releaseName: '暂无 Pythia 正式发布',
+        releaseUrl: Uri.parse(pythiaReleasesUrl),
+      );
+    }
+    final tag = payload['tag_name'] as String? ?? latest;
     final htmlUrl = Uri.tryParse(payload['html_url'] as String? ?? '') ??
         Uri.parse(pythiaReleasesUrl);
     final installer = _installerFromAssets(payload['assets']);
@@ -78,6 +101,19 @@ class PythiaUpdateChecker {
       releaseUrl: htmlUrl,
       installer: installer,
     );
+  }
+
+  static String? _pythiaVersion(String tag, String releaseName) {
+    final source = tag.toLowerCase().contains('pythia')
+        ? tag
+        : releaseName.toLowerCase().contains('pythia')
+            ? releaseName
+            : null;
+    if (source == null) return null;
+    final parts =
+        RegExp(r'\d+').allMatches(source).map((match) => match.group(0));
+    if (parts.isEmpty) return null;
+    return parts.join('.');
   }
 
   static PythiaInstallerAsset? _installerFromAssets(Object? rawAssets) {

@@ -13,29 +13,31 @@ void main() {
         expect(
           request.url,
           Uri.parse(
-              'https://api.github.com/repos/douxy1994/Pythia/releases/latest'),
+              'https://api.github.com/repos/douxy1994/Pythia/releases?per_page=20'),
         );
         return http.Response(
-          jsonEncode({
-            'tag_name': 'v1.0.1',
-            'name': 'Pythia 1.0.1',
-            'html_url':
-                'https://github.com/douxy1994/Pythia/releases/tag/v1.0.1',
-            'assets': [
-              {
-                'name': 'Pythia-1.0.1-windows-x64.exe',
-                'browser_download_url':
-                    'https://github.com/douxy1994/Pythia/releases/download/v1.0.1/Pythia-1.0.1-windows-x64.exe',
-                'size': 1024,
-              },
-              {
-                'name': 'Pythia-1.0.1-windows-x64.exe.sha256',
-                'browser_download_url':
-                    'https://github.com/douxy1994/Pythia/releases/download/v1.0.1/Pythia-1.0.1-windows-x64.exe.sha256',
-                'size': 96,
-              },
-            ],
-          }),
+          jsonEncode([
+            {
+              'tag_name': 'v1.0.1',
+              'name': 'Pythia 1.0.1',
+              'html_url':
+                  'https://github.com/douxy1994/Pythia/releases/tag/v1.0.1',
+              'assets': [
+                {
+                  'name': 'Pythia-1.0.1-windows-x64.exe',
+                  'browser_download_url':
+                      'https://github.com/douxy1994/Pythia/releases/download/v1.0.1/Pythia-1.0.1-windows-x64.exe',
+                  'size': 1024,
+                },
+                {
+                  'name': 'Pythia-1.0.1-windows-x64.exe.sha256',
+                  'browser_download_url':
+                      'https://github.com/douxy1994/Pythia/releases/download/v1.0.1/Pythia-1.0.1-windows-x64.exe.sha256',
+                  'size': 96,
+                },
+              ],
+            }
+          ]),
           200,
         );
       }),
@@ -59,24 +61,27 @@ void main() {
   test('does not offer installer without exact x64 checksum pair', () async {
     final checker = PythiaUpdateChecker(
       client: MockClient((_) async => http.Response(
-            jsonEncode({
-              'tag_name': 'v1.0.1',
-              'html_url': pythiaReleasesUrl,
-              'assets': [
-                {
-                  'name': 'Pythia-1.0.1-windows-arm64.exe',
-                  'browser_download_url':
-                      'https://github.com/Pythia-windows-arm64.exe',
-                  'size': 100,
-                },
-                {
-                  'name': 'Pythia-1.0.1-windows-x64.exe',
-                  'browser_download_url':
-                      'https://github.com/Pythia-windows-x64.exe',
-                  'size': 100,
-                },
-              ],
-            }),
+            jsonEncode([
+              {
+                'tag_name': 'v1.0.1',
+                'name': 'Pythia 1.0.1',
+                'html_url': pythiaReleasesUrl,
+                'assets': [
+                  {
+                    'name': 'Pythia-1.0.1-windows-arm64.exe',
+                    'browser_download_url':
+                        'https://github.com/Pythia-windows-arm64.exe',
+                    'size': 100,
+                  },
+                  {
+                    'name': 'Pythia-1.0.1-windows-x64.exe',
+                    'browser_download_url':
+                        'https://github.com/Pythia-windows-x64.exe',
+                    'size': 100,
+                  },
+                ],
+              }
+            ]),
             200,
           )),
     );
@@ -96,5 +101,25 @@ void main() {
     );
 
     expect(checker.check(), throwsA(isA<StateError>()));
+  });
+
+  test('ignores legacy release without Pythia product identity', () async {
+    final client = MockClient((_) async => http.Response(
+          jsonEncode([
+            {
+              'tag_name': '3.0.8',
+              'name': '3.0.8',
+              'html_url':
+                  'https://github.com/douxy1994/Pythia/releases/tag/3.0.8',
+              'assets': <Object?>[],
+            },
+          ]),
+          200,
+        ));
+
+    final info = await PythiaUpdateChecker(client: client).check();
+
+    expect(info.latestVersion, pythiaCurrentVersion);
+    expect(info.isNewer, isFalse);
   });
 }
