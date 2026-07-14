@@ -312,16 +312,18 @@ final class PluginManager {
                     FileManager.default.fileExists(atPath: pluginDirectory.appendingPathComponent("main.js").path)
                 else { return nil }
                 let pluginName = pluginDirectory.lastPathComponent
-                let display = aliases[pluginName]
-                    ?? (info["display"] as? String)
-                    ?? (info["name"] as? String)
-                    ?? pluginName
+                let display = PluginPackagePolicy.displayName(
+                    alias: aliases[pluginName],
+                    declaredDisplay: info["display"] as? String,
+                    declaredName: info["name"] as? String,
+                    fallback: pluginName
+                )
                 return CommandPlugin(
                     name: pluginName,
                     command: "",
                     legacyDirectory: pluginDirectory.path,
                     legacyType: pluginType,
-                    displayName: aliases[pluginName] == nil ? "\(display)（原版\(pluginType)插件）" : display
+                    displayName: display
                 )
             }
         }
@@ -345,31 +347,51 @@ final class PluginManager {
         return all.first
     }
 
-    /// Deletes a legacy plugin (its directory under translate/recognize/tts/
-    /// collection) and its stored config. `name` is the plugin directory name
-    /// (e.g. plugin.com.xiaomi.mimo). Optionally scans all legacy type folders.
-    func deletePlugin(name: String) {
+    /// Deletes an installed plugin and removes every service-list reference to it.
+    func deletePlugin(name: String) throws {
+        var removedFile = false
         for type in ["translate", "recognize", "tts", "collection"] {
             let dir = legacyPluginsDirectory.appendingPathComponent(type).appendingPathComponent(name)
-            try? FileManager.default.removeItem(at: dir)
+            if FileManager.default.fileExists(atPath: dir.path) {
+                try FileManager.default.removeItem(at: dir)
+                removedFile = true
+            }
         }
-        // Remove its stored config too.
+        if let files = try? FileManager.default.contentsOfDirectory(at: pluginsDirectory, includingPropertiesForKeys: nil) {
+            for file in files where ["json", "potplugin"].contains(file.pathExtension.lowercased()) {
+                guard
+                    let data = try? Data(contentsOf: file),
+                    let plugin = try? JSONDecoder().decode(CommandPlugin.self, from: data),
+                    plugin.name == name
+                else { continue }
+                try FileManager.default.removeItem(at: file)
+                removedFile = true
+            }
+        }
+        guard removedFile else {
+            throw TranslationError.requestFailed("找不到要删除的插件文件。")
+        }
         var configs = loadPluginConfigs()
         configs.removeValue(forKey: name)
         savePluginConfigs(configs)
         var aliases = loadPluginAliases()
         aliases.removeValue(forKey: name)
         savePluginAliases(aliases)
+
+        let serviceID = "plugin:\(name)"
+        let preferences = Preferences.shared
+        preferences.translateServiceList.removeAll { $0 == serviceID }
+        preferences.translateServiceOrder.removeAll { $0 == serviceID }
+        preferences.recognizeServiceList.removeAll { $0 == serviceID }
+        preferences.ttsServiceList.removeAll { $0 == serviceID }
+        preferences.collectionServiceList.removeAll { $0 == serviceID }
     }
 
     func installPotext(from url: URL) throws -> String {
-        guard url.pathExtension.lowercased() == "potext" else {
+        guard PluginPackagePolicy.accepts(fileName: url.lastPathComponent) else {
             throw TranslationError.requestFailed("请选择 .potext 原版插件文件。")
         }
         let pluginName = url.deletingPathExtension().lastPathComponent
-        guard pluginName.hasPrefix("plugin") else {
-            throw TranslationError.requestFailed("原版 Pot 插件文件名必须以 plugin 开头。")
-        }
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("potext-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }

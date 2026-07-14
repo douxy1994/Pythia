@@ -37,6 +37,7 @@
 				A1000000000000000000009D /* PortableBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000009C /* PortableBackup.swift */; };
 				A1000000000000000000009F /* ReleaseVersionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000009E /* ReleaseVersionPolicy.swift */; };
 				A100000000000000000000A1 /* AutomaticLanguagePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A0 /* AutomaticLanguagePolicy.swift */; };
+				A100000000000000000000A3 /* PluginPackagePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A2 /* PluginPackagePolicy.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -74,6 +75,7 @@
 				A1000000000000000000009C /* PortableBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/PortableBackup.swift; sourceTree = SOURCE_ROOT; };
 				A1000000000000000000009E /* ReleaseVersionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/ReleaseVersionPolicy.swift; sourceTree = SOURCE_ROOT; };
 				A100000000000000000000A0 /* AutomaticLanguagePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/AutomaticLanguagePolicy.swift; sourceTree = SOURCE_ROOT; };
+				A100000000000000000000A2 /* PluginPackagePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/PluginPackagePolicy.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -294,6 +296,7 @@
 						A1000000000000000000009D /* PortableBackup.swift in Sources */,
 						A1000000000000000000009F /* ReleaseVersionPolicy.swift in Sources */,
 						A100000000000000000000A1 /* AutomaticLanguagePolicy.swift in Sources */,
+						A100000000000000000000A3 /* PluginPackagePolicy.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -16,5 +16,8 @@ grep -q '/releases?per_page=' "$checker"
 grep -q 'PythiaReleaseVersionPolicy' "$checker"
 grep -q 'isBareReturn && hadMarkedText' "$controls"
 grep -q 'AutomaticLanguagePolicy.targetLanguage' "$translator"
+grep -q 'let contentSize = NSSize(width: 300' "$controls"
+grep -q 'controller.preferredContentSize = contentSize' "$controls"
+grep -q 'popover.contentSize = contentSize' "$controls"
 
 echo "macOS UI contracts passed"
