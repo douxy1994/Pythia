@@ -382,6 +382,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private func pluginsTab() -> NSView {
         let stack = formStack()
+
+        stack.addArrangedSubview(sectionHeader("安装新插件", detail: "选择任意名称的 .potext 插件包；安装后会自动出现在对应的翻译、OCR、TTS 或生词本服务中。"))
+        let installButtons = NSStackView()
+        installButtons.orientation = .horizontal
+        installButtons.spacing = 10
+        installButtons.addArrangedSubview(PillButton("安装 .potext 插件…", target: self, action: #selector(installPotextPlugin)))
+        stack.addArrangedSubview(leadingFullWidth(installButtons, minHeight: 0))
+
+        stack.addArrangedSubview(sectionHeader("已安装插件", detail: "选择插件后可查看位置、修改显示名称、刷新或彻底删除。"))
         rebuildPluginPopup()
         pluginPopup.target = self
         pluginPopup.action = #selector(pluginSelectionChanged)
@@ -389,20 +398,21 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         pluginPathLabel.lineBreakMode = .byTruncatingMiddle
         pluginPathLabel.textColor = .secondaryLabelColor
         stack.addArrangedSubview(row("插件目录", pluginPathLabel))
-        // Dynamic config fields for the selected plugin (apiKey/model/...).
+        let buttons = NSStackView()
+        buttons.orientation = .horizontal
+        buttons.spacing = 10
+        buttons.addArrangedSubview(PillButton("打开所在目录", target: self, action: #selector(openPluginFolder)))
+        buttons.addArrangedSubview(PillButton("重命名插件", target: self, action: #selector(renamePlugin)))
+        buttons.addArrangedSubview(PillButton("刷新插件", target: self, action: #selector(refreshPlugins)))
+        buttons.addArrangedSubview(PillButton("删除插件", target: self, action: #selector(deleteSelectedPlugin), tintColor: .systemRed))
+        stack.addArrangedSubview(leadingFullWidth(buttons, minHeight: 0))
+
+        stack.addArrangedSubview(sectionHeader("插件配置", detail: "配置项由所选插件提供。保存后可直接测试当前插件是否可用。"))
         pluginConfigStack.orientation = .vertical
         pluginConfigStack.alignment = .width
         pluginConfigStack.spacing = 8
         pluginConfigStack.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(pluginConfigStack)
-        let buttons = NSStackView()
-        buttons.orientation = .horizontal
-        buttons.spacing = 10
-        buttons.addArrangedSubview(PillButton("打开插件目录", target: self, action: #selector(openPluginFolder)))
-        buttons.addArrangedSubview(PillButton("安装 .potext 插件", target: self, action: #selector(installPotextPlugin)))
-        buttons.addArrangedSubview(PillButton("重命名插件", target: self, action: #selector(renamePlugin)))
-        buttons.addArrangedSubview(PillButton("刷新插件", target: self, action: #selector(refreshPlugins)))
-        stack.addArrangedSubview(leadingFullWidth(buttons, minHeight: 0))
         let configButtons = NSStackView()
         configButtons.orientation = .horizontal
         configButtons.spacing = 10
@@ -1083,6 +1093,24 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         return leadingFullWidth(label, minHeight: 0)
     }
 
+    private func sectionHeader(_ title: String, detail: String) -> NSView {
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        titleLabel.textColor = .labelColor
+        let detailLabel = AutoWrappingLabel(wrappingLabelWithString: detail)
+        detailLabel.font = .systemFont(ofSize: 12)
+        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.maximumNumberOfLines = 0
+        detailLabel.lineBreakMode = .byWordWrapping
+
+        let header = NSStackView(views: [titleLabel, detailLabel])
+        header.orientation = .vertical
+        header.alignment = .leading
+        header.spacing = 3
+        header.edgeInsets = NSEdgeInsets(top: 12, left: 0, bottom: 2, right: 0)
+        return leadingFullWidth(header, minHeight: 0)
+    }
+
     private func load() {
         let preferences = Preferences.shared
         selectLanguage(preferences.sourceLanguage, in: sourceLanguagePopup)
@@ -1424,7 +1452,37 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func openPluginFolder() {
-        NSWorkspace.shared.open(PluginManager.shared.pluginsDirectory)
+        if let name = currentPluginName,
+           let directory = PluginManager.shared.legacyPluginDirectory(named: name) {
+            NSWorkspace.shared.activateFileViewerSelecting([directory])
+        } else {
+            NSWorkspace.shared.open(PluginManager.shared.pluginsDirectory)
+        }
+    }
+
+    @objc private func deleteSelectedPlugin() {
+        guard let name = currentPluginName else {
+            showAlert("请先选择一个插件。")
+            return
+        }
+        let displayName = (pluginPopup.titleOfSelectedItem ?? name)
+            .components(separatedBy: " · ")
+            .first ?? name
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "删除「\(displayName)」？"
+        alert.informativeText = "插件文件、本机配置及其在翻译、OCR、TTS 和生词本服务中的引用都会被删除。此操作无法撤销。"
+        alert.addButton(withTitle: "删除插件")
+        alert.addButton(withTitle: "取消")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try PluginManager.shared.deletePlugin(name: name)
+            refreshPlugins()
+            NotificationCenter.default.post(name: .preferencesChanged, object: nil)
+            showAlert("已删除插件「\(displayName)」。")
+        } catch {
+            showAlert("删除插件失败：\(error.localizedDescription)")
+        }
     }
 
     @objc private func installPotextPlugin() {
