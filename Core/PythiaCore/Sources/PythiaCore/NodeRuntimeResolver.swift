@@ -4,6 +4,7 @@ public enum NodeRuntimeResolver {
     public static func resolve(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        preferredCandidates: [URL] = [],
         standardCandidates: [URL] = [
             URL(fileURLWithPath: "/opt/homebrew/bin/node"),
             URL(fileURLWithPath: "/usr/local/bin/node"),
@@ -12,6 +13,8 @@ public enum NodeRuntimeResolver {
         fileManager: FileManager = .default
     ) -> URL? {
         var candidates: [URL] = []
+
+        candidates.append(contentsOf: preferredCandidates)
 
         if let path = environment["PATH"] {
             candidates.append(contentsOf: path

@@ -11,9 +11,11 @@
 		A10000000000000000000002 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* AppIcon.icns */; };
 		A10000000000000000000003 /* PythiaStatusTemplate.png in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* PythiaStatusTemplate.png */; };
 		A10000000000000000000004 /* PythiaBaseIcon.png in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* PythiaBaseIcon.png */; };
+		A100000000000000000000A4 /* pythia-plugin-runner.cjs in Resources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A5 /* pythia-plugin-runner.cjs */; };
 		A10000000000000000000005 /* PythiaModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017 /* PythiaModels.swift */; };
 		A10000000000000000000006 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000018 /* HistoryStore.swift */; };
 		A10000000000000000000007 /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000019 /* Preferences.swift */; };
+		A100000000000000000000A7 /* LocalCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A8 /* LocalCredentialStore.swift */; };
 		A10000000000000000000008 /* MigrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A /* MigrationService.swift */; };
 		A10000000000000000000009 /* TranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* TranslationService.swift */; };
 			A1000000000000000000000A /* PluginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001C /* PluginManager.swift */; };
@@ -37,6 +39,7 @@
 				A1000000000000000000009D /* PortableBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000009C /* PortableBackup.swift */; };
 				A1000000000000000000009F /* ReleaseVersionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000009E /* ReleaseVersionPolicy.swift */; };
 				A100000000000000000000A1 /* AutomaticLanguagePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A0 /* AutomaticLanguagePolicy.swift */; };
+				A100000000000000000000A3 /* PluginPackagePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A2 /* PluginPackagePolicy.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -48,9 +51,11 @@
 		A10000000000000000000014 /* Pythia.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Pythia.entitlements; sourceTree = "<group>"; };
 		A10000000000000000000015 /* PythiaStatusTemplate.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = PythiaStatusTemplate.png; sourceTree = "<group>"; };
 		A10000000000000000000016 /* PythiaBaseIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = PythiaBaseIcon.png; sourceTree = "<group>"; };
+		A100000000000000000000A5 /* pythia-plugin-runner.cjs */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "pythia-plugin-runner.cjs"; sourceTree = "<group>"; };
 		A10000000000000000000017 /* PythiaModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaModels.swift; sourceTree = "<group>"; };
 		A10000000000000000000018 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
 		A10000000000000000000019 /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
+		A100000000000000000000A8 /* LocalCredentialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalCredentialStore.swift; sourceTree = "<group>"; };
 		A1000000000000000000001A /* MigrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationService.swift; sourceTree = "<group>"; };
 		A1000000000000000000001B /* TranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationService.swift; sourceTree = "<group>"; };
 			A1000000000000000000001C /* PluginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginManager.swift; sourceTree = "<group>"; };
@@ -74,6 +79,7 @@
 				A1000000000000000000009C /* PortableBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/PortableBackup.swift; sourceTree = SOURCE_ROOT; };
 				A1000000000000000000009E /* ReleaseVersionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/ReleaseVersionPolicy.swift; sourceTree = SOURCE_ROOT; };
 				A100000000000000000000A0 /* AutomaticLanguagePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/AutomaticLanguagePolicy.swift; sourceTree = SOURCE_ROOT; };
+				A100000000000000000000A2 /* PluginPackagePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/PluginPackagePolicy.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -131,6 +137,7 @@
 				A10000000000000000000012 /* AppIcon.icns */,
 				A10000000000000000000015 /* PythiaStatusTemplate.png */,
 				A10000000000000000000016 /* PythiaBaseIcon.png */,
+				A100000000000000000000A5 /* pythia-plugin-runner.cjs */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -147,6 +154,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000019 /* Preferences.swift */,
+				A100000000000000000000A8 /* LocalCredentialStore.swift */,
 				A10000000000000000000018 /* HistoryStore.swift */,
 			);
 			path = Stores;
@@ -199,6 +207,7 @@
 				A10000000000000000000050 /* Sources */,
 				A10000000000000000000020 /* Frameworks */,
 				A10000000000000000000051 /* Resources */,
+				A100000000000000000000A6 /* Embed Pythia Plugin Runtime */,
 			);
 			buildRules = (
 			);
@@ -257,10 +266,31 @@
 				A10000000000000000000002 /* AppIcon.icns in Resources */,
 				A10000000000000000000003 /* PythiaStatusTemplate.png in Resources */,
 				A10000000000000000000004 /* PythiaBaseIcon.png in Resources */,
+				A100000000000000000000A4 /* pythia-plugin-runner.cjs in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A100000000000000000000A6 /* Embed Pythia Plugin Runtime */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/script/embed_macos_plugin_runtime.sh",
+			);
+			name = "Embed Pythia Plugin Runtime";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/runtime/node",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/runtime/runtime.plist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/script/embed_macos_plugin_runtime.sh\" \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A10000000000000000000050 /* Sources */ = {
@@ -271,6 +301,7 @@
 				A10000000000000000000005 /* PythiaModels.swift in Sources */,
 				A10000000000000000000006 /* HistoryStore.swift in Sources */,
 				A10000000000000000000007 /* Preferences.swift in Sources */,
+				A100000000000000000000A7 /* LocalCredentialStore.swift in Sources */,
 				A10000000000000000000008 /* MigrationService.swift in Sources */,
 				A10000000000000000000009 /* TranslationService.swift in Sources */,
 					A1000000000000000000000A /* PluginManager.swift in Sources */,
@@ -294,6 +325,7 @@
 						A1000000000000000000009D /* PortableBackup.swift in Sources */,
 						A1000000000000000000009F /* ReleaseVersionPolicy.swift in Sources */,
 						A100000000000000000000A1 /* AutomaticLanguagePolicy.swift in Sources */,
+						A100000000000000000000A3 /* PluginPackagePolicy.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

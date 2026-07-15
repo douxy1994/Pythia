@@ -4,6 +4,8 @@ final class PluginManager {
     static let shared = PluginManager()
     let pluginsDirectory: URL
     let legacyPluginsDirectory: URL
+    private let credentialStore = LocalCredentialStore.shared
+    private let credentialNamespace = "plugins"
 
     private init() {
         pluginsDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -15,6 +17,10 @@ final class PluginManager {
         try? FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: legacyPluginsDirectory, withIntermediateDirectories: true)
         migrateLegacyPluginConfigs()
+        convertInstalledPotextPluginsIfNeeded()
+        migrateLegacyPluginCredentialsToLocalStorage()
+        migratePluginSecretsToLocalStorage()
+        restoreLegacyFalsePositiveSecrets()
     }
 
     // MARK: - Plugin configuration storage
@@ -27,16 +33,143 @@ final class PluginManager {
         pluginsDirectory.appendingPathComponent("plugin-aliases.json")
     }
 
+    private var legacyBackupsDirectory: URL {
+        pluginsDirectory.appendingPathComponent("Legacy Backups", isDirectory: true)
+    }
+
     /// Returns the stored configuration dictionary for a legacy plugin identified
     /// by its directory name (e.g. "plugin.com.xiaomi.mimo").
     func pluginConfig(forPluginName name: String) -> [String: String] {
-        loadPluginConfigs()[name] ?? [:]
+        var config = loadPluginConfigs()[name] ?? [:]
+        for key in secretConfigurationKeys(forPluginName: name) {
+            if let value = credentialStore.read(namespace: credentialNamespace, key: credentialKey(pluginID: name, key: key)) {
+                config[key] = value
+            }
+        }
+        return config
     }
 
-    func setPluginConfig(_ config: [String: String], forPluginName name: String) {
+    func setPluginConfig(_ config: [String: String], forPluginName name: String) throws {
+        let secretKeys = secretConfigurationKeys(forPluginName: name)
+        var publicConfig = config
+        for key in secretKeys {
+            publicConfig.removeValue(forKey: key)
+            let value = config[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if value.isEmpty {
+                try credentialStore.delete(namespace: credentialNamespace, key: credentialKey(pluginID: name, key: key))
+            } else {
+                try credentialStore.write(
+                    config[key] ?? value,
+                    namespace: credentialNamespace,
+                    key: credentialKey(pluginID: name, key: key)
+                )
+            }
+        }
         var all = loadPluginConfigs()
-        all[name] = config
+        all[name] = publicConfig
         savePluginConfigs(all)
+    }
+
+    private func secretConfigurationKeys(forPluginName name: String) -> Set<String> {
+        Set(pluginNeeds(forPluginName: name).compactMap { need in
+            guard let key = need["key"] as? String else { return nil }
+            if need["secret"] as? Bool == true { return key }
+            let type = (need["type"] as? String)?.lowercased() ?? ""
+            if type == "secret" { return key }
+            return PythiaPluginSecretPolicy.isLikelySecretKey(key) ? key : nil
+        })
+    }
+
+    private func credentialKey(pluginID: String, key: String) -> String {
+        "\(pluginID):\(key)"
+    }
+
+    private func migratePluginSecretsToLocalStorage() {
+        var all = loadPluginConfigs()
+        var changed = false
+        for pluginID in Array(all.keys) {
+            var config = all[pluginID] ?? [:]
+            for key in secretConfigurationKeys(forPluginName: pluginID) {
+                guard let value = config[key], !value.isEmpty else { continue }
+                do {
+                    try credentialStore.write(
+                        value,
+                        namespace: credentialNamespace,
+                        key: credentialKey(pluginID: pluginID, key: key)
+                    )
+                    config.removeValue(forKey: key)
+                    changed = true
+                } catch {
+                    NSLog("Pythia plugin credential migration failed for %@/%@: %@", pluginID, key, error.localizedDescription)
+                }
+            }
+            all[pluginID] = config
+        }
+        if changed { savePluginConfigs(all) }
+    }
+
+    /// Recovers credentials from the original Pot config without accessing
+    /// Keychain. This runs independently from the older config migration marker
+    /// so prerelease Pythia builds that already moved values can recover them.
+    private func migrateLegacyPluginCredentialsToLocalStorage() {
+        let source = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/com.pot-app.desktop/config.json")
+        guard
+            let data = try? Data(contentsOf: source),
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return }
+
+        for (instanceID, rawConfig) in object {
+            guard
+                instanceID.hasPrefix("plugin."),
+                let separator = instanceID.firstIndex(of: "@"),
+                let config = rawConfig as? [String: Any]
+            else { continue }
+
+            let pluginID = String(instanceID[..<separator])
+            let secretKeys = secretConfigurationKeys(forPluginName: pluginID)
+            for key in secretKeys {
+                guard
+                    credentialStore.read(
+                        namespace: credentialNamespace,
+                        key: credentialKey(pluginID: pluginID, key: key)
+                    ) == nil,
+                    let value = config[key] as? String,
+                    !value.isEmpty
+                else { continue }
+                try? credentialStore.write(
+                    value,
+                    namespace: credentialNamespace,
+                    key: credentialKey(pluginID: pluginID, key: key)
+                )
+            }
+        }
+    }
+
+    private func restoreLegacyFalsePositiveSecrets() {
+        var all = loadPluginConfigs()
+        var changed = false
+        for pluginID in plugins().map(\.name) {
+            let secureKeys = secretConfigurationKeys(forPluginName: pluginID)
+            for need in pluginNeeds(forPluginName: pluginID) {
+                guard let key = need["key"] as? String,
+                      !secureKeys.contains(key),
+                      key.range(of: "key|secret|token|password", options: [.regularExpression, .caseInsensitive]) != nil,
+                      let value = credentialStore.read(
+                        namespace: credentialNamespace,
+                        key: credentialKey(pluginID: pluginID, key: key)
+                      ),
+                      !value.isEmpty
+                else { continue }
+                all[pluginID, default: [:]][key] = value
+                try? credentialStore.delete(
+                    namespace: credentialNamespace,
+                    key: credentialKey(pluginID: pluginID, key: key)
+                )
+                changed = true
+            }
+        }
+        if changed { savePluginConfigs(all) }
     }
 
     private func loadPluginConfigs() -> [String: [String: String]] {
@@ -122,6 +255,19 @@ final class PluginManager {
 
     /// Reads config items declared in a legacy plugin's info.json (`needs`).
     func pluginNeeds(forPluginName name: String) -> [[String: Any]] {
+        if let manifest = pythiaManifest(forPluginID: name) {
+            return manifest.configuration.map { field in
+                var need: [String: Any] = [
+                    "key": field.key,
+                    "display": field.label,
+                    "type": field.type == "secret" ? "input" : field.type,
+                ]
+                if let defaultValue = field.defaultValue { need["default"] = defaultValue }
+                if let options = field.options { need["options"] = options }
+                if field.type == "secret" { need["secret"] = true }
+                return need
+            }
+        }
         guard let directory = legacyPluginDirectory(named: name) else { return [] }
         guard let infoData = try? Data(contentsOf: directory.appendingPathComponent("info.json")),
               let info = try? JSONSerialization.jsonObject(with: infoData) as? [String: Any],
@@ -133,6 +279,10 @@ final class PluginManager {
     }
 
     func legacyPluginDirectory(named name: String) -> URL? {
+        let nativeDirectory = pluginsDirectory.appendingPathComponent("\(name).pythia", isDirectory: true)
+        if FileManager.default.fileExists(atPath: nativeDirectory.appendingPathComponent("manifest.json").path) {
+            return nativeDirectory
+        }
         for type in ["translate", "recognize", "tts", "collection"] {
             let directory = legacyPluginsDirectory.appendingPathComponent(type).appendingPathComponent(name)
             if FileManager.default.fileExists(atPath: directory.appendingPathComponent("info.json").path) {
@@ -208,11 +358,87 @@ final class PluginManager {
                     environment: plugin.environment,
                     legacyDirectory: plugin.legacyDirectory,
                     legacyType: plugin.legacyType,
-                    displayName: aliases[plugin.name] ?? plugin.displayName
+                    displayName: aliases[plugin.name] ?? plugin.displayName,
+                    packageFormat: plugin.packageFormat,
+                    packageVersion: plugin.packageVersion,
+                    packageAuthor: plugin.packageAuthor,
+                    entry: plugin.entry
                 )
             }
-        return (commandPlugins + legacyPlugins())
+        let nativePlugins = pythiaPlugins(aliases: aliases)
+        let nativeIDs = Set(nativePlugins.map(\.name))
+        let compatiblePlugins = legacyPlugins().filter { !nativeIDs.contains($0.name) }
+        let compatibleCommands = commandPlugins.filter { !nativeIDs.contains($0.name) }
+        return (nativePlugins + compatibleCommands + compatiblePlugins)
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    private func pythiaPlugins(aliases: [String: String]) -> [CommandPlugin] {
+        guard let directories = try? FileManager.default.contentsOfDirectory(
+            at: pluginsDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+        return directories.compactMap { directory in
+            guard directory.pathExtension.lowercased() == PluginPackageFormat.pythia.rawValue,
+                  (try? directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
+                  let manifest = try? loadPythiaManifest(at: directory),
+                  FileManager.default.fileExists(atPath: directory.appendingPathComponent(manifest.entry).path)
+            else { return nil }
+            return CommandPlugin(
+                name: manifest.id,
+                command: "",
+                legacyDirectory: directory.path,
+                legacyType: "translate",
+                displayName: aliases[manifest.id] ?? manifest.name,
+                packageFormat: PluginPackageFormat.pythia.rawValue,
+                packageVersion: manifest.version,
+                packageAuthor: manifest.author,
+                entry: manifest.entry
+            )
+        }
+    }
+
+    private func pythiaManifest(forPluginID id: String) -> PythiaPluginManifest? {
+        let directory = pluginsDirectory.appendingPathComponent("\(id).pythia", isDirectory: true)
+        return try? loadPythiaManifest(at: directory)
+    }
+
+    func pluginDetails(forPluginName name: String) -> String {
+        guard let plugin = plugins().first(where: { $0.name == name }) else { return "" }
+        var details = ["格式：.\(plugin.packageFormat ?? "potext")"]
+        if let version = plugin.packageVersion, !version.isEmpty {
+            details.append("版本：\(version)")
+        }
+        if let author = plugin.packageAuthor, !author.isEmpty {
+            details.append("作者：\(author)")
+        }
+        if let manifest = pythiaManifest(forPluginID: name) {
+            let permissions = manifest.permissions.isEmpty ? "无" : manifest.permissions.joined(separator: "、")
+            details.append("权限：\(permissions)")
+        }
+
+        let directory = pluginsDirectory.appendingPathComponent("\(name).pythia", isDirectory: true)
+        let reportURL = directory.appendingPathComponent("conversion.json")
+        if let data = try? Data(contentsOf: reportURL),
+           let report = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            let status = (report["status"] as? String) ?? "converted"
+            details.append("转换：\(status)")
+            if let warnings = report["warnings"] as? [String], !warnings.isEmpty {
+                details.append("警告：\(warnings.joined(separator: "；"))")
+            }
+        } else if plugin.packageFormat == PluginPackageFormat.pythia.rawValue {
+            details.append("转换：原生 .pythia")
+        } else {
+            details.append("转换：兼容模式")
+        }
+        return details.joined(separator: "  ·  ")
+    }
+
+    private func loadPythiaManifest(at directory: URL) throws -> PythiaPluginManifest {
+        let manifestURL = directory.appendingPathComponent("manifest.json")
+        let data = try Data(contentsOf: manifestURL)
+        return try PluginPackagePolicy.decodeAndValidateManifest(data, platform: "macos")
     }
 
     func translatePlugins() -> [CommandPlugin] {
@@ -312,16 +538,19 @@ final class PluginManager {
                     FileManager.default.fileExists(atPath: pluginDirectory.appendingPathComponent("main.js").path)
                 else { return nil }
                 let pluginName = pluginDirectory.lastPathComponent
-                let display = aliases[pluginName]
-                    ?? (info["display"] as? String)
-                    ?? (info["name"] as? String)
-                    ?? pluginName
+                let display = PluginPackagePolicy.displayName(
+                    alias: aliases[pluginName],
+                    declaredDisplay: info["display"] as? String,
+                    declaredName: info["name"] as? String,
+                    fallback: pluginName
+                )
                 return CommandPlugin(
                     name: pluginName,
                     command: "",
                     legacyDirectory: pluginDirectory.path,
                     legacyType: pluginType,
-                    displayName: aliases[pluginName] == nil ? "\(display)（原版\(pluginType)插件）" : display
+                    displayName: display,
+                    packageFormat: PluginPackageFormat.potext.rawValue
                 )
             }
         }
@@ -345,45 +574,125 @@ final class PluginManager {
         return all.first
     }
 
-    /// Deletes a legacy plugin (its directory under translate/recognize/tts/
-    /// collection) and its stored config. `name` is the plugin directory name
-    /// (e.g. plugin.com.xiaomi.mimo). Optionally scans all legacy type folders.
-    func deletePlugin(name: String) {
+    /// Deletes an installed plugin and removes every service-list reference to it.
+    func deletePlugin(name: String) throws {
+        let secretKeys = secretConfigurationKeys(forPluginName: name)
+        var removedFile = false
         for type in ["translate", "recognize", "tts", "collection"] {
             let dir = legacyPluginsDirectory.appendingPathComponent(type).appendingPathComponent(name)
-            try? FileManager.default.removeItem(at: dir)
+            if FileManager.default.fileExists(atPath: dir.path) {
+                try FileManager.default.removeItem(at: dir)
+                removedFile = true
+            }
         }
-        // Remove its stored config too.
+        let nativeDirectory = pluginsDirectory.appendingPathComponent("\(name).pythia", isDirectory: true)
+        if FileManager.default.fileExists(atPath: nativeDirectory.path) {
+            try FileManager.default.removeItem(at: nativeDirectory)
+            removedFile = true
+        }
+        if let files = try? FileManager.default.contentsOfDirectory(at: pluginsDirectory, includingPropertiesForKeys: nil) {
+            for file in files where ["json", "potplugin"].contains(file.pathExtension.lowercased()) {
+                guard
+                    let data = try? Data(contentsOf: file),
+                    let plugin = try? JSONDecoder().decode(CommandPlugin.self, from: data),
+                    plugin.name == name
+                else { continue }
+                try FileManager.default.removeItem(at: file)
+                removedFile = true
+            }
+        }
+        guard removedFile else {
+            throw TranslationError.requestFailed("找不到要删除的插件文件。")
+        }
         var configs = loadPluginConfigs()
         configs.removeValue(forKey: name)
         savePluginConfigs(configs)
+        for key in secretKeys {
+            try? credentialStore.delete(
+                namespace: credentialNamespace,
+                key: credentialKey(pluginID: name, key: key)
+            )
+        }
         var aliases = loadPluginAliases()
         aliases.removeValue(forKey: name)
         savePluginAliases(aliases)
+
+        let serviceID = "plugin:\(name)"
+        let preferences = Preferences.shared
+        preferences.translateServiceList.removeAll { $0 == serviceID }
+        preferences.translateServiceOrder.removeAll { $0 == serviceID }
+        preferences.recognizeServiceList.removeAll { $0 == serviceID }
+        preferences.ttsServiceList.removeAll { $0 == serviceID }
+        preferences.collectionServiceList.removeAll { $0 == serviceID }
+    }
+
+    func installPlugin(from url: URL) throws -> String {
+        guard let format = PluginPackagePolicy.format(fileName: url.lastPathComponent) else {
+            throw TranslationError.requestFailed("请选择 .pythia 或 .potext 插件。")
+        }
+        switch format {
+        case .pythia:
+            return try installPythia(from: url)
+        case .potext:
+            return try installPotext(from: url)
+        }
+    }
+
+    func installPythia(from url: URL) throws -> String {
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("pythia-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            throw TranslationError.requestFailed("找不到所选插件。")
+        }
+        if isDirectory.boolValue {
+            let copied = temp.appendingPathComponent(url.lastPathComponent, isDirectory: true)
+            try FileManager.default.copyItem(at: url, to: copied)
+        } else {
+            try extractPluginArchive(url, to: temp)
+        }
+
+        let packageRoot = try locatePackageRoot(in: temp, manifestName: "manifest.json")
+        let manifest = try loadPythiaManifest(at: packageRoot)
+        let entryURL = packageRoot.appendingPathComponent(manifest.entry).standardizedFileURL
+        guard entryURL.path.hasPrefix(packageRoot.standardizedFileURL.path + "/"),
+              FileManager.default.fileExists(atPath: entryURL.path)
+        else {
+            throw TranslationError.requestFailed("插件入口不存在：\(manifest.entry)。")
+        }
+
+        let target = pluginsDirectory.appendingPathComponent("\(manifest.id).pythia", isDirectory: true)
+        let staging = pluginsDirectory.appendingPathComponent(".install-\(UUID().uuidString).pythia", isDirectory: true)
+        try FileManager.default.copyItem(at: packageRoot, to: staging)
+        do {
+            if FileManager.default.fileExists(atPath: target.path) {
+                _ = try FileManager.default.replaceItemAt(target, withItemAt: staging)
+            } else {
+                try FileManager.default.moveItem(at: staging, to: target)
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: staging)
+            throw error
+        }
+        registerLegacyPluginInstance(name: manifest.id, type: "translate")
+        return "已安装 \(manifest.name)（.pythia \(manifest.version)）。可在翻译服务中启用。"
     }
 
     func installPotext(from url: URL) throws -> String {
-        guard url.pathExtension.lowercased() == "potext" else {
-            throw TranslationError.requestFailed("请选择 .potext 原版插件文件。")
+        guard PluginPackagePolicy.format(fileName: url.lastPathComponent) == .potext else {
+            throw TranslationError.requestFailed("请选择 .potext 兼容插件文件。")
         }
         let pluginName = url.deletingPathExtension().lastPathComponent
-        guard pluginName.hasPrefix("plugin") else {
-            throw TranslationError.requestFailed("原版 Pot 插件文件名必须以 plugin 开头。")
-        }
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("potext-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }
 
-        let unzip = Process()
-        unzip.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        unzip.arguments = ["-q", url.path, "-d", temp.path]
-        try unzip.run()
-        unzip.waitUntilExit()
-        guard unzip.terminationStatus == 0 else {
-            throw TranslationError.requestFailed("无法解压 .potext 插件。")
-        }
-        let infoURL = temp.appendingPathComponent("info.json")
-        let mainURL = temp.appendingPathComponent("main.js")
+        try extractPluginArchive(url, to: temp)
+        let packageRoot = try locatePackageRoot(in: temp, manifestName: "info.json")
+        let infoURL = packageRoot.appendingPathComponent("info.json")
+        let mainURL = packageRoot.appendingPathComponent("main.js")
         guard FileManager.default.fileExists(atPath: infoURL.path) else {
             throw TranslationError.requestFailed("插件缺少 info.json。")
         }
@@ -403,13 +712,204 @@ final class PluginManager {
         if FileManager.default.fileExists(atPath: target.path) {
             try FileManager.default.removeItem(at: target)
         }
-        try FileManager.default.moveItem(at: temp, to: target)
+        try FileManager.default.copyItem(at: packageRoot, to: target)
         registerLegacyPluginInstance(name: pluginName, type: type)
         let display = (info["display"] as? String) ?? pluginName
-        if type == "translate" {
-            return "已安装 \(display)（translate）。可在翻译服务中选择使用。"
+        do {
+            let converted = try convertLegacyPluginDirectory(target, replaceExisting: true)
+            return "已安装并转换 \(display)：\(converted.lastPathComponent)。原 .potext 已保留为备份，默认使用 .pythia 版本。"
+        } catch {
+            let fallbackMessage = "自动转换失败，已保留并启用 .potext 兼容版本。原因：\(error.localizedDescription)"
+            if type == "translate" {
+                return "已安装 \(display)（translate）。\(fallbackMessage)"
+            }
+            return "已安装 \(display)（\(type)）。\(fallbackMessage)"
         }
-        return "已安装 \(display)（\(type)）。可在对应设置页启用和排序。"
+    }
+
+    @discardableResult
+    func convertAllInstalledPotextPlugins(replaceExisting: Bool = false) -> [String] {
+        var messages: [String] = []
+        for type in ["translate", "recognize", "tts", "collection"] {
+            let parent = legacyPluginsDirectory.appendingPathComponent(type, isDirectory: true)
+            guard let directories = try? FileManager.default.contentsOfDirectory(
+                at: parent,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) else { continue }
+            for directory in directories where (try? directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+                do {
+                    let target = try convertLegacyPluginDirectory(directory, replaceExisting: replaceExisting)
+                    messages.append("\(directory.lastPathComponent)：已转换为 \(target.lastPathComponent)")
+                } catch {
+                    messages.append("\(directory.lastPathComponent)：转换失败，继续使用 .potext 兼容层（\(error.localizedDescription)）")
+                }
+            }
+        }
+        return messages
+    }
+
+    @discardableResult
+    func convertLegacyPlugin(name: String, replaceExisting: Bool = true) throws -> URL {
+        let directory = ["translate", "recognize", "tts", "collection"]
+            .map { legacyPluginsDirectory.appendingPathComponent($0, isDirectory: true).appendingPathComponent(name, isDirectory: true) }
+            .first { FileManager.default.fileExists(atPath: $0.appendingPathComponent("info.json").path) }
+        guard let directory else {
+            throw TranslationError.requestFailed("找不到可转换的 .potext 插件：\(name)。")
+        }
+        return try convertLegacyPluginDirectory(directory, replaceExisting: replaceExisting)
+    }
+
+    private func convertInstalledPotextPluginsIfNeeded() {
+        let marker = pluginsDirectory.appendingPathComponent(".potext-conversion-v1")
+        guard !FileManager.default.fileExists(atPath: marker.path) else { return }
+        let messages = convertAllInstalledPotextPlugins(replaceExisting: false)
+        let report = messages.joined(separator: "\n")
+        try? report.write(to: marker, atomically: true, encoding: .utf8)
+    }
+
+    private func convertLegacyPluginDirectory(
+        _ source: URL,
+        replaceExisting: Bool,
+        preserveOriginalPackage: Bool = true
+    ) throws -> URL {
+        let infoURL = source.appendingPathComponent("info.json")
+        let mainURL = source.appendingPathComponent("main.js")
+        let infoData = try Data(contentsOf: infoURL)
+        let legacyMain = try String(contentsOf: mainURL, encoding: .utf8)
+        let conversion = try PotextPluginConverter.convert(
+            infoData: infoData,
+            mainJavaScript: legacyMain,
+            fallbackIdentifier: source.lastPathComponent
+        )
+        let target = pluginsDirectory.appendingPathComponent("\(conversion.manifest.id).pythia", isDirectory: true)
+        if FileManager.default.fileExists(atPath: target.path), !replaceExisting {
+            registerLegacyPluginInstance(name: conversion.manifest.id, type: "translate")
+            return target
+        }
+
+        let backup = legacyBackupsDirectory.appendingPathComponent("\(source.lastPathComponent).potext")
+        if preserveOriginalPackage {
+            try FileManager.default.createDirectory(at: legacyBackupsDirectory, withIntermediateDirectories: true)
+            if !FileManager.default.fileExists(atPath: backup.path) {
+                try createPotextBackup(from: source, at: backup)
+            }
+        }
+
+        let staging = pluginsDirectory.appendingPathComponent(".convert-\(UUID().uuidString).pythia", isDirectory: true)
+        try FileManager.default.copyItem(at: source, to: staging)
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            let manifestData = try encoder.encode(conversion.manifest)
+            try manifestData.write(to: staging.appendingPathComponent("manifest.json"), options: [.atomic])
+            if preserveOriginalPackage {
+                try legacyMain.write(to: staging.appendingPathComponent("legacy-main.js"), atomically: true, encoding: .utf8)
+            } else {
+                try? FileManager.default.removeItem(at: staging.appendingPathComponent("info.json"))
+                try? FileManager.default.removeItem(at: staging.appendingPathComponent("legacy-main.js"))
+            }
+            try conversion.mainJavaScript.write(to: staging.appendingPathComponent("main.js"), atomically: true, encoding: .utf8)
+            var report: [String: Any] = [
+                "schemaVersion": 1,
+                "sourceFormat": "potext",
+                "sourcePlugin": source.lastPathComponent,
+                "convertedAt": ISO8601DateFormatter().string(from: Date()),
+                "status": "converted",
+                "warnings": conversion.warnings,
+            ]
+            if preserveOriginalPackage {
+                report["originalBackup"] = backup.lastPathComponent
+            } else {
+                report["migrationPolicy"] = "legacy-package-not-retained"
+            }
+            let reportData = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+            try reportData.write(to: staging.appendingPathComponent("conversion.json"), options: [.atomic])
+
+            if FileManager.default.fileExists(atPath: target.path) {
+                _ = try FileManager.default.replaceItemAt(target, withItemAt: staging)
+            } else {
+                try FileManager.default.moveItem(at: staging, to: target)
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: staging)
+            throw error
+        }
+        registerLegacyPluginInstance(name: conversion.manifest.id, type: "translate")
+        return target
+    }
+
+    private func createPotextBackup(from directory: URL, at target: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = ["-c", "-k", "--keepParent", directory.path, target.path]
+        let errorOutput = Pipe()
+        process.standardError = errorOutput
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            let message = String(data: errorOutput.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            throw TranslationError.requestFailed(message.isEmpty ? "无法创建原始 .potext 备份。" : message)
+        }
+    }
+
+    private func extractPluginArchive(_ archive: URL, to destination: URL) throws {
+        let listProcess = Process()
+        listProcess.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        listProcess.arguments = ["-Z1", archive.path]
+        let listOutput = Pipe()
+        let listError = Pipe()
+        listProcess.standardOutput = listOutput
+        listProcess.standardError = listError
+        try listProcess.run()
+        listProcess.waitUntilExit()
+        let listData = listOutput.fileHandleForReading.readDataToEndOfFile()
+        guard listProcess.terminationStatus == 0,
+              let listing = String(data: listData, encoding: .utf8)
+        else {
+            let message = String(data: listError.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            throw TranslationError.requestFailed(message.isEmpty ? "无法读取插件压缩包。" : message)
+        }
+        let unsafePath = listing.split(whereSeparator: \.isNewline).first { rawPath in
+            let path = String(rawPath).replacingOccurrences(of: "\\", with: "/")
+            return path.hasPrefix("/") || path.split(separator: "/").contains("..")
+        }
+        guard unsafePath == nil else {
+            throw TranslationError.requestFailed("插件压缩包包含不安全路径：\(unsafePath!)。")
+        }
+
+        let unzip = Process()
+        unzip.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        unzip.arguments = ["-q", archive.path, "-d", destination.path]
+        let errorOutput = Pipe()
+        unzip.standardError = errorOutput
+        try unzip.run()
+        unzip.waitUntilExit()
+        guard unzip.terminationStatus == 0 else {
+            let message = String(data: errorOutput.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            throw TranslationError.requestFailed(message.isEmpty ? "无法解压插件。" : message)
+        }
+    }
+
+    private func locatePackageRoot(in directory: URL, manifestName: String) throws -> URL {
+        if FileManager.default.fileExists(atPath: directory.appendingPathComponent(manifestName).path) {
+            return directory
+        }
+        guard let children = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            throw TranslationError.requestFailed("插件包内容无效。")
+        }
+        let candidates = children.filter { child in
+            (try? child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+                && FileManager.default.fileExists(atPath: child.appendingPathComponent(manifestName).path)
+        }
+        guard candidates.count == 1, let root = candidates.first else {
+            throw TranslationError.requestFailed("插件包必须在根目录或唯一顶层目录中包含 \(manifestName)。")
+        }
+        return root
     }
 
     func importLegacyPluginsFromOldPot() -> String {
@@ -421,41 +921,48 @@ final class PluginManager {
             home.appendingPathComponent("Library/Application Support/com.douxy.pot/plugins", isDirectory: true),
         ]
         let types = ["translate", "recognize", "tts", "collection"]
-        var imported = 0
+        var converted = 0
+        var skipped = 0
         for root in roots where FileManager.default.fileExists(atPath: root.path) {
             for type in types {
                 let sourceParent = root.appendingPathComponent(type, isDirectory: true)
                 guard let pluginDirs = try? FileManager.default.contentsOfDirectory(at: sourceParent, includingPropertiesForKeys: [.isDirectoryKey]) else {
                     continue
                 }
-                let targetParent = legacyPluginsDirectory.appendingPathComponent(type, isDirectory: true)
-                try? FileManager.default.createDirectory(at: targetParent, withIntermediateDirectories: true)
                 for pluginDir in pluginDirs {
                     guard
                         (try? pluginDir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
                         FileManager.default.fileExists(atPath: pluginDir.appendingPathComponent("info.json").path),
                         FileManager.default.fileExists(atPath: pluginDir.appendingPathComponent("main.js").path)
                     else { continue }
-                    let target = targetParent.appendingPathComponent(pluginDir.lastPathComponent, isDirectory: true)
-                    if pluginDir.standardizedFileURL == target.standardizedFileURL {
-                        registerLegacyPluginInstance(name: pluginDir.lastPathComponent, type: type)
-                        imported += 1
-                        continue
-                    }
                     do {
-                        if FileManager.default.fileExists(atPath: target.path) {
-                            try FileManager.default.removeItem(at: target)
-                        }
-                        try FileManager.default.copyItem(at: pluginDir, to: target)
-                        registerLegacyPluginInstance(name: pluginDir.lastPathComponent, type: type)
-                        imported += 1
+                        _ = try convertLegacyPluginDirectory(
+                            pluginDir,
+                            replaceExisting: false,
+                            preserveOriginalPackage: false
+                        )
+                        let retainedLegacy = legacyPluginsDirectory
+                            .appendingPathComponent(type, isDirectory: true)
+                            .appendingPathComponent(pluginDir.lastPathComponent, isDirectory: true)
+                        let retainedBackup = legacyBackupsDirectory
+                            .appendingPathComponent("\(pluginDir.lastPathComponent).potext")
+                        try? FileManager.default.removeItem(at: retainedLegacy)
+                        try? FileManager.default.removeItem(at: retainedBackup)
+                        converted += 1
                     } catch {
-                        NSLog("Pythia legacy plugin import failed: \(error.localizedDescription)")
+                        skipped += 1
+                        NSLog("Pythia plugin conversion during migration failed: \(error.localizedDescription)")
                     }
                 }
             }
         }
-        return imported == 0 ? "没有找到可导入的旧版插件。" : "已导入 \(imported) 个旧版插件。"
+        guard converted > 0 else {
+            return skipped == 0
+                ? "没有找到可迁移的旧 Pot 插件。"
+                : "找到 \(skipped) 个旧插件，但均无法转换为 .pythia，因此未导入，也未在 Pythia 中保留旧插件。"
+        }
+        let skippedText = skipped > 0 ? "；另有 \(skipped) 个无法转换，未导入" : ""
+        return "已转换并导入 \(converted) 个 .pythia 插件，未在 Pythia 中保留旧插件或 .potext 备份\(skippedText)。"
     }
 
     private func registerLegacyPluginInstance(name: String, type: String) {
@@ -559,6 +1066,16 @@ final class PluginManager {
         targetLanguage: String,
         completion: @escaping (Result<String, Error>) -> Void
     ) {
+        if plugin.packageFormat == PluginPackageFormat.pythia.rawValue {
+            runPythiaPlugin(
+                plugin,
+                text: text,
+                sourceLanguage: sourceLanguage,
+                targetLanguage: targetLanguage,
+                completion: completion
+            )
+            return
+        }
         if plugin.legacyDirectory != nil {
             translateWithLegacyPlugin(plugin, text: text, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage, completion: completion)
             return
@@ -603,6 +1120,151 @@ final class PluginManager {
             } catch {
                 completion(.failure(error))
             }
+        }
+    }
+
+    private func runPythiaPlugin(
+        _ plugin: CommandPlugin,
+        text: String,
+        sourceLanguage: String,
+        targetLanguage: String,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
+        guard let directory = plugin.legacyDirectory, let entry = plugin.entry else {
+            completion(.failure(TranslationError.requestFailed(".pythia 插件缺少目录或入口信息。")))
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                guard let runner = Bundle.main.url(forResource: "pythia-plugin-runner", withExtension: "cjs") else {
+                    throw TranslationError.requestFailed("Pythia 插件运行时资源缺失。")
+                }
+                let bundledRuntime = Bundle.main.resourceURL?
+                    .appendingPathComponent("runtime", isDirectory: true)
+                    .appendingPathComponent("node")
+                guard let nodeRuntime = NodeRuntimeResolver.resolve(
+                    preferredCandidates: bundledRuntime.map { [$0] } ?? []
+                ) else {
+                    throw TranslationError.requestFailed("未找到 Node.js 运行环境，无法执行 .pythia JavaScript 插件。")
+                }
+                let requestID = UUID().uuidString
+                let request: [String: Any] = [
+                    "schemaVersion": "1.0",
+                    "requestId": requestID,
+                    "type": "translate",
+                    "input": [
+                        "text": text,
+                        "sourceLanguage": sourceLanguage,
+                        "targetLanguage": targetLanguage,
+                        "detectedLanguage": sourceLanguage,
+                    ],
+                    "context": [
+                        "platform": "macos",
+                        "pythiaVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0",
+                    ],
+                ]
+                let requestData = try JSONSerialization.data(withJSONObject: request)
+                guard let requestJSON = String(data: requestData, encoding: .utf8) else {
+                    throw TranslationError.requestFailed("无法编码插件请求。")
+                }
+                var config = self.pluginConfig(forPluginName: plugin.name)
+                if config["enable"] == nil { config["enable"] = "true" }
+                let configData = try JSONSerialization.data(withJSONObject: config)
+                guard let configJSON = String(data: configData, encoding: .utf8) else {
+                    throw TranslationError.requestFailed("无法编码插件配置。")
+                }
+
+                let process = Process()
+                process.executableURL = nodeRuntime
+                process.arguments = [runner.path, directory, entry]
+                var environment = ProcessInfo.processInfo.environment
+                let nodeDirectory = nodeRuntime.deletingLastPathComponent().path
+                let inheritedPath = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+                environment["PATH"] = "\(nodeDirectory):\(inheritedPath)"
+                environment["PYTHIA_PLUGIN_REQUEST"] = requestJSON
+                environment["PYTHIA_PLUGIN_CONFIG"] = configJSON
+                let timeoutMilliseconds = Self.legacyPluginTimeoutMilliseconds(for: text)
+                environment["PYTHIA_PLUGIN_TIMEOUT_MS"] = String(timeoutMilliseconds)
+                process.environment = environment
+
+                let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("pythia-plugin-\(UUID().uuidString).out")
+                let errorURL = FileManager.default.temporaryDirectory.appendingPathComponent("pythia-plugin-\(UUID().uuidString).err")
+                FileManager.default.createFile(atPath: outputURL.path, contents: nil)
+                FileManager.default.createFile(atPath: errorURL.path, contents: nil)
+                defer {
+                    try? FileManager.default.removeItem(at: outputURL)
+                    try? FileManager.default.removeItem(at: errorURL)
+                }
+                let outputHandle = try FileHandle(forWritingTo: outputURL)
+                let errorHandle = try FileHandle(forWritingTo: errorURL)
+                process.standardOutput = outputHandle
+                process.standardError = errorHandle
+                try process.run()
+
+                let stateLock = NSLock()
+                var timedOut = false
+                let timeoutTask = DispatchWorkItem {
+                    stateLock.lock()
+                    defer { stateLock.unlock() }
+                    guard process.isRunning else { return }
+                    timedOut = true
+                    process.terminate()
+                }
+                DispatchQueue.global(qos: .utility).asyncAfter(
+                    deadline: .now() + .milliseconds(timeoutMilliseconds + 2_000),
+                    execute: timeoutTask
+                )
+                process.waitUntilExit()
+                timeoutTask.cancel()
+                try outputHandle.close()
+                try errorHandle.close()
+                stateLock.lock()
+                let didTimeOut = timedOut
+                stateLock.unlock()
+                if didTimeOut {
+                    throw TranslationError.requestFailed("插件执行超时，已终止该插件进程。")
+                }
+
+                let outputData = try Data(contentsOf: outputURL)
+                let errorData = try Data(contentsOf: errorURL)
+                guard outputData.count <= 8 * 1024 * 1024 else {
+                    throw TranslationError.requestFailed("插件响应超过 8 MiB 限制。")
+                }
+                let stderr = String(data: errorData, encoding: .utf8) ?? ""
+                if process.terminationStatus != 0 {
+                    let message = Self.redactedPluginMessage(stderr.isEmpty ? "插件执行失败。" : stderr, config: config)
+                    throw TranslationError.requestFailed(message)
+                }
+                guard let response = try JSONSerialization.jsonObject(with: outputData) as? [String: Any],
+                      response["requestId"] as? String == requestID,
+                      let succeeded = response["success"] as? Bool
+                else {
+                    throw TranslationError.requestFailed("插件返回了无效或空的统一响应。")
+                }
+                if !succeeded {
+                    let pluginError = response["error"] as? [String: Any]
+                    let code = pluginError?["code"] as? String ?? "RUNTIME_ERROR"
+                    let message = pluginError?["message"] as? String ?? "插件报告执行失败。"
+                    throw TranslationError.requestFailed("\(code)：\(Self.redactedPluginMessage(message, config: config))")
+                }
+                guard let data = response["data"] as? [String: Any],
+                      let translatedText = data["text"] as? String,
+                      !translatedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                else {
+                    throw TranslationError.requestFailed("插件成功响应缺少非空 data.text。")
+                }
+                completion(.success(translatedText))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+
+    private static func redactedPluginMessage(_ message: String, config: [String: String]) -> String {
+        config.reduce(message) { result, pair in
+            let isSecret = pair.key.range(of: "key|secret|token|password", options: [.regularExpression, .caseInsensitive]) != nil
+            guard isSecret, pair.value.count >= 4 else { return result }
+            return result.replacingOccurrences(of: pair.value, with: "[REDACTED]")
         }
     }
 

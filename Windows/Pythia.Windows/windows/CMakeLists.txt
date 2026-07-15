@@ -77,3 +77,14 @@ install(FILES "${AOT_LIBRARY}"
   DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
+
+set(PYTHIA_PLUGIN_NODE_RUNTIME "${CMAKE_CURRENT_SOURCE_DIR}/../build/plugin_runtime/node.exe")
+set(PYTHIA_PLUGIN_RUNTIME_METADATA "${CMAKE_CURRENT_SOURCE_DIR}/../build/plugin_runtime/runtime.json")
+if(NOT EXISTS "${PYTHIA_PLUGIN_NODE_RUNTIME}" OR NOT EXISTS "${PYTHIA_PLUGIN_RUNTIME_METADATA}")
+  message(FATAL_ERROR "Pythia plugin runtime is missing. Run tool/prepare_plugin_runtime.ps1 before building Windows.")
+endif()
+install(FILES
+  "${PYTHIA_PLUGIN_NODE_RUNTIME}"
+  "${PYTHIA_PLUGIN_RUNTIME_METADATA}"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/runtime"
+  COMPONENT Runtime)

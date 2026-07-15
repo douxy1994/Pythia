@@ -13,6 +13,8 @@ dependencies:
   crypto: ^3.0.6
   path_provider: ^2.1.4
   file_selector: ^1.1.0
+  archive: ^3.6.1
+  path: ^1.9.1
 
 dev_dependencies:
   flutter_test:
@@ -21,3 +23,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/pythia-plugin-runner.cjs

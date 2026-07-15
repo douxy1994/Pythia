@@ -59,6 +59,21 @@ void main() {
         issues.map((issue) => issue.message).join('\n'), contains('.potext'));
   });
 
+  test('rejects bundled Pythia plugin packages', () async {
+    await writePackageFile(
+      packageDir,
+      'plugins/sample.pythia',
+      'plugin data',
+    );
+
+    final issues = await ReleasePackageVerifier().verify(packageDir);
+
+    expect(
+      issues.map((issue) => issue.message).join('\n'),
+      contains('third-party .pythia'),
+    );
+  });
+
   test('rejects legacy plugin runner and service source trees', () async {
     await writePackageFile(
       packageDir,
@@ -126,4 +141,7 @@ Future<void> writePeExecutable(
   bytes[0x41] = 0x45;
   data.setUint16(0x44, machine, Endian.little);
   await File('${packageDir.path}/Pythia.exe').writeAsBytes(bytes);
+  final runtime = Directory('${packageDir.path}/runtime');
+  await runtime.create(recursive: true);
+  await File('${runtime.path}/node.exe').writeAsBytes(bytes);
 }
