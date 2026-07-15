@@ -9,7 +9,7 @@ Pythia 1.0.0 is the current version target.
 - macOS: native AppKit application, currently buildable and runnable on this machine.
 - Windows x64: Flutter client and native Win32 host are present under `Windows/Pythia.Windows`; GitHub Actions now compiles the AMD64 app, verifies the release payload, and produces the Inno Setup installer plus SHA-256 sidecar. Live interactive verification still requires Windows x64.
 - Shared contracts: history sync schemas and a tested Swift `PythiaCore` merge model live under `Core/`.
-- Plugins: release packages must not bundle plugins. Legacy plugin compatibility is local user data only.
+- Plugins: native `.pythia` packages, automatic `.potext` conversion, compatibility fallback, isolated execution, and cross-platform management are implemented. Release packages contain the runtime and documentation but no third-party plugins.
 
 ## Features
 
@@ -29,6 +29,7 @@ Pythia 1.0.0 is the current version target.
 - Custom theme color.
 - Native macOS status-bar behavior and Windows notification-area tray behavior.
 - External HTTP endpoints for automation on macOS.
+- Cross-platform `.pythia` plugins with automatic `.potext` migration and original-package backups.
 
 ## Requirements
 
@@ -126,12 +127,12 @@ https://github.com/douxy1994/Pythia/releases
 - `Docs/WINDOWS_DEVELOPMENT.md`
 - `Docs/FEATURE_MATRIX.md`
 - `Docs/RELEASE_CHECKLIST.md`
+- `Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md`
 
 ## Known Limits
 
-- Windows has a Flutter scaffold but is not yet build-verified in this workspace.
 - macOS WebDAV history sync exists; live cross-device macOS/Windows sync still needs Windows build verification and a WebDAV test account.
-- macOS runtime credential storage was intentionally kept out of Keychain after repeated password prompts; this must be revisited carefully before cross-platform sync release.
+- macOS service, WebDAV, proxy, and plugin secrets use non-interactive Keychain access; Windows uses Credential Manager. Live Windows Credential Manager verification still requires Windows x64.
 - macOS Accessibility permission is required for selection translation.
 - Screen Recording permission is required for screenshot OCR and screenshot translation.
 - Release packages do not include plugins.

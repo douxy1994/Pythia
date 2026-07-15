@@ -31,6 +31,8 @@ jobs:
         run: flutter config --enable-windows-desktop
       - name: Resolve dependencies
         run: flutter pub get
+      - name: Validate Pythia plugin contract and examples
+        run: node ..\..\script\validate_pythia_plugins.mjs
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress -y
@@ -38,6 +40,9 @@ jobs:
         run: flutter analyze
       - name: Test
         run: flutter test
+      - name: Prepare verified plugin runtime
+        shell: pwsh
+        run: .\tool\prepare_plugin_runtime.ps1
       - name: Build x64 release
         run: flutter build windows --release
       - name: Verify release package

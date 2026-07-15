@@ -28,6 +28,10 @@ struct CommandPlugin: Codable {
     let legacyDirectory: String?
     let legacyType: String?
     let displayName: String?
+    let packageFormat: String?
+    let packageVersion: String?
+    let packageAuthor: String?
+    let entry: String?
 
     init(
         name: String,
@@ -36,7 +40,11 @@ struct CommandPlugin: Codable {
         environment: [String: String]? = nil,
         legacyDirectory: String? = nil,
         legacyType: String? = nil,
-        displayName: String? = nil
+        displayName: String? = nil,
+        packageFormat: String? = nil,
+        packageVersion: String? = nil,
+        packageAuthor: String? = nil,
+        entry: String? = nil
     ) {
         self.name = name
         self.command = command
@@ -45,6 +53,10 @@ struct CommandPlugin: Codable {
         self.legacyDirectory = legacyDirectory
         self.legacyType = legacyType
         self.displayName = displayName
+        self.packageFormat = packageFormat
+        self.packageVersion = packageVersion
+        self.packageAuthor = packageAuthor
+        self.entry = entry
     }
 
     var title: String {
