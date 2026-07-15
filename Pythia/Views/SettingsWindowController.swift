@@ -24,6 +24,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let libreKeyField = NSSecureTextField()
     private let pluginPopup = NSPopUpButton()
     private let pluginPathLabel = NSTextField(labelWithString: PluginManager.shared.pluginsDirectory.path)
+    private let pluginMetadataLabel = NSTextField(wrappingLabelWithString: "")
     private let pluginConfigStack = FullWidthStackView()
     private let pluginTestResultLabel = NSTextField(labelWithString: "")
     private let clipboardCheckbox = NSButton(checkboxWithTitle: "监听剪贴板", target: nil, action: nil)
@@ -383,14 +384,19 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private func pluginsTab() -> NSView {
         let stack = formStack()
 
-        stack.addArrangedSubview(sectionHeader("安装新插件", detail: "选择任意名称的 .potext 插件包；安装后会自动出现在对应的翻译、OCR、TTS 或生词本服务中。"))
+        stack.addArrangedSubview(sectionHeader(
+            "安装新插件",
+            detail: "支持 .pythia 和 .potext 格式，优先推荐 .pythia。.potext 会先自动转换，转换失败时再使用兼容模式运行。"
+        ))
         let installButtons = NSStackView()
         installButtons.orientation = .horizontal
         installButtons.spacing = 10
-        installButtons.addArrangedSubview(PillButton("安装 .potext 插件…", target: self, action: #selector(installPotextPlugin)))
+        installButtons.addArrangedSubview(PillButton("安装插件", target: self, action: #selector(installPlugin)))
+        installButtons.addArrangedSubview(PillButton("打开插件目录", target: self, action: #selector(openPluginFolder)))
+        installButtons.addArrangedSubview(PillButton("插件开发指南", target: self, action: #selector(openPluginDevelopmentGuide)))
         stack.addArrangedSubview(leadingFullWidth(installButtons, minHeight: 0))
 
-        stack.addArrangedSubview(sectionHeader("已安装插件", detail: "选择插件后可查看位置、修改显示名称、刷新或彻底删除。"))
+        stack.addArrangedSubview(sectionHeader("已安装插件", detail: "选择插件后可查看格式和位置、修改显示名称、刷新或彻底删除。"))
         rebuildPluginPopup()
         pluginPopup.target = self
         pluginPopup.action = #selector(pluginSelectionChanged)
@@ -398,12 +404,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         pluginPathLabel.lineBreakMode = .byTruncatingMiddle
         pluginPathLabel.textColor = .secondaryLabelColor
         stack.addArrangedSubview(row("插件目录", pluginPathLabel))
+        pluginMetadataLabel.textColor = .secondaryLabelColor
+        pluginMetadataLabel.maximumNumberOfLines = 3
+        stack.addArrangedSubview(row("插件信息", pluginMetadataLabel))
         let buttons = NSStackView()
         buttons.orientation = .horizontal
         buttons.spacing = 10
-        buttons.addArrangedSubview(PillButton("打开所在目录", target: self, action: #selector(openPluginFolder)))
         buttons.addArrangedSubview(PillButton("重命名插件", target: self, action: #selector(renamePlugin)))
         buttons.addArrangedSubview(PillButton("刷新插件", target: self, action: #selector(refreshPlugins)))
+        buttons.addArrangedSubview(PillButton("重新转换 .potext", target: self, action: #selector(reconvertSelectedPlugin)))
         buttons.addArrangedSubview(PillButton("删除插件", target: self, action: #selector(deleteSelectedPlugin), tintColor: .systemRed))
         stack.addArrangedSubview(leadingFullWidth(buttons, minHeight: 0))
 
@@ -433,7 +442,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         pluginResultBox.addArrangedSubview(pluginResultCaption)
         pluginResultBox.addArrangedSubview(pluginTestResultLabel)
         stack.addArrangedSubview(leadingFullWidth(pluginResultBox, minHeight: 0))
-        stack.addArrangedSubview(note("选中插件后会显示它需要的配置项（来自 info.json 的 needs），填好后点「保存插件配置」。插件配置值保存在本机配置文件中，不再访问 macOS 钥匙串。「测试连通性」会按插件类型执行：翻译 hello、OCR 识别测试图片、TTS 合成 hello、生词本保存 hello → 你好。"))
+        stack.addArrangedSubview(note("选中插件后会显示它需要的配置项。普通配置保存在 Pythia 配置文件中；Manifest 标记为 secret 的密钥安全存入 macOS 钥匙串，并以非交互方式读取，不会反复弹出密码框。点「测试连通性」可验证当前插件。"))
         stack.addArrangedSubview(note("原生命令插件：也可放入 JSON/.potplugin，包含 name、command、arguments、environment。待翻译文本会通过 stdin 和 POT_TEXT 环境变量传入。"))
         rebuildPluginConfigFields()
         updatePluginPathLabel()
@@ -453,8 +462,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     /// Rebuilds the plugin popup from current plugins, storing each
-    /// plugin's directory name on the item's representedObject. Keeps the
-    /// previously selected directory if it still exists.
+    /// plugin's stable id on the item's representedObject. Keeps the
+    /// previously selected id if it still exists.
     private func rebuildPluginPopup() {
         let previouslySelectedDir = (pluginPopup.selectedItem?.representedObject as? String)
         pluginPopup.removeAllItems()
@@ -466,10 +475,14 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             return
         }
         for plugin in plugins {
-            let dirName = (plugin.legacyDirectory as NSString?)?.lastPathComponent
-            let typeSuffix = plugin.legacyType.map { " · \($0)" } ?? " · command"
-            let item = NSMenuItem(title: "\(plugin.title)\(typeSuffix)", action: nil, keyEquivalent: "")
-            item.representedObject = dirName ?? plugin.name
+            let format = plugin.packageFormat ?? (plugin.legacyType == nil ? "command" : "potext")
+            let version = plugin.packageVersion.map { " \($0)" } ?? ""
+            let item = NSMenuItem(
+                title: "\(plugin.title) · \(format)\(version)",
+                action: nil,
+                keyEquivalent: ""
+            )
+            item.representedObject = plugin.name
             pluginPopup.menu?.addItem(item)
         }
         // Restore the previous selection by directory name (not title), else first.
@@ -497,8 +510,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             } else {
                 pluginPathLabel.stringValue = PluginManager.shared.pluginsDirectory.appendingPathComponent(name).path
             }
+            pluginMetadataLabel.stringValue = PluginManager.shared.pluginDetails(forPluginName: name)
         } else {
             pluginPathLabel.stringValue = ""
+            pluginMetadataLabel.stringValue = ""
         }
     }
 
@@ -510,7 +525,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let name = currentPluginName
         let needs = name.map { PluginManager.shared.pluginNeeds(forPluginName: $0) } ?? []
         guard let name else {
-            pluginConfigStack.addArrangedSubview(note("没有可配置的翻译插件。请先安装原版翻译插件（.potext），再到「插件」页刷新。"))
+            pluginConfigStack.addArrangedSubview(note("没有可配置的插件。请先安装 .pythia 或兼容 .potext 插件。"))
             return
         }
         guard !needs.isEmpty else {
@@ -544,7 +559,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
                 popup.identifier = NSUserInterfaceItemIdentifier(key)
                 pluginConfigStack.addArrangedSubview(row(display, popup))
             } else {
-                let field = (key.lowercased().contains("key") || key.lowercased().contains("secret"))
+                let field = ((need["secret"] as? Bool == true)
+                    || PythiaPluginSecretPolicy.isLikelySecretKey(key))
                     ? NSSecureTextField() : NSTextField()
                 field.stringValue = stored[key] ?? ((need["default"] as? String) ?? "")
                 field.identifier = NSUserInterfaceItemIdentifier(key)
@@ -582,9 +598,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     @objc private func savePluginConfig() {
         guard let name = currentPluginName else { return }
         let config = collectPluginConfig()
-        PluginManager.shared.setPluginConfig(config, forPluginName: name)
-        PythiaAppDelegate.shared?.setStatus("已保存 \(name) 的插件配置")
-        pluginTestResultLabel.stringValue = ""
+        do {
+            try PluginManager.shared.setPluginConfig(config, forPluginName: name)
+            PythiaAppDelegate.shared?.setStatus("已保存 \(name) 的插件配置")
+            pluginTestResultLabel.stringValue = "配置已安全保存"
+            pluginTestResultLabel.textColor = PythiaDesign.themeColor()
+        } catch {
+            pluginTestResultLabel.stringValue = "保存失败：\(error.localizedDescription)"
+            pluginTestResultLabel.textColor = .systemRed
+        }
     }
 
     /// Runs a real translation through the selected plugin to verify the saved
@@ -599,7 +621,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let config = collectPluginConfig()
         var cfg = config
         if cfg["enable"] == nil { cfg["enable"] = "true" }
-        PluginManager.shared.setPluginConfig(cfg, forPluginName: name)
+        do {
+            try PluginManager.shared.setPluginConfig(cfg, forPluginName: name)
+        } catch {
+            pluginTestResultLabel.stringValue = "保存失败：\(error.localizedDescription)"
+            pluginTestResultLabel.textColor = .systemRed
+            return
+        }
         let serviceID = "plugin:\(name)"
         if let plugin = PluginManager.shared.plugin(forServiceIdentifier: serviceID),
            let type = plugin.legacyType {
@@ -892,7 +920,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private func migrationTab() -> NSView {
         let stack = formStack()
-        stack.addArrangedSubview(note("迁移会扫描本机旧 Pot/Tauri 配置目录，导入可识别的语言和服务密钥字段。密钥只写入本机 UserDefaults，不会访问 macOS 钥匙串，也不会输出到日志。"))
+        stack.addArrangedSubview(note("迁移会扫描本机旧 Pot/Tauri 配置目录，导入可识别的语言和服务密钥字段。密钥安全写入 macOS 钥匙串，并以非交互方式读取；不会反复弹出密码框，也不会输出到日志。"))
         let buttons = NSStackView()
         buttons.orientation = .horizontal
         buttons.spacing = 10
@@ -1284,7 +1312,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         NotificationCenter.default.post(name: .preferencesChanged, object: nil)
         window?.title = "Pythia 设置 - 已保存"
         let portWarning = rawServerPort == normalizedServerPort ? nil : "外部服务端口无效，已恢复为 60828"
-        let warning = [duplicateHotkeyWarning, portWarning, fontWarning, runtimeWarning].compactMap { $0 }.joined(separator: "；")
+        let credentialWarning = preferences.consumeCredentialStorageError().map { "凭据未能安全保存：\($0)" }
+        let warning = [duplicateHotkeyWarning, portWarning, fontWarning, runtimeWarning, credentialWarning]
+            .compactMap { $0 }
+            .joined(separator: "；")
         saveStatusLabel.stringValue = warning.isEmpty ? "已保存" : "已保存，\(warning)"
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             self?.saveStatusLabel.stringValue = ""
@@ -1452,12 +1483,19 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func openPluginFolder() {
-        if let name = currentPluginName,
-           let directory = PluginManager.shared.legacyPluginDirectory(named: name) {
-            NSWorkspace.shared.activateFileViewerSelecting([directory])
-        } else {
-            NSWorkspace.shared.open(PluginManager.shared.pluginsDirectory)
+        try? FileManager.default.createDirectory(
+            at: PluginManager.shared.pluginsDirectory,
+            withIntermediateDirectories: true
+        )
+        NSWorkspace.shared.open(PluginManager.shared.pluginsDirectory)
+    }
+
+    @objc private func openPluginDevelopmentGuide() {
+        guard let url = URL(string: "https://github.com/douxy1994/Pythia/blob/master/Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md") else {
+            showAlert("插件开发指南地址无效。")
+            return
         }
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func deleteSelectedPlugin() {
@@ -1485,20 +1523,24 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    @objc private func installPotextPlugin() {
+    @objc private func installPlugin() {
         let panel = NSOpenPanel()
-        panel.title = "安装 Pot 原版插件"
+        panel.title = "安装 Pythia 插件"
+        panel.message = "优先选择 .pythia；也支持兼容 .potext。"
         panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
+        panel.canChooseDirectories = true
         panel.canChooseFiles = true
         if #available(macOS 11.0, *) {
-            panel.allowedContentTypes = [UTType(filenameExtension: "potext") ?? .data]
+            panel.allowedContentTypes = [
+                UTType(filenameExtension: "pythia") ?? .data,
+                UTType(filenameExtension: "potext") ?? .data,
+            ]
         } else {
-            panel.allowedFileTypes = ["potext"]
+            panel.allowedFileTypes = ["pythia", "potext"]
         }
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            let message = try PluginManager.shared.installPotext(from: url)
+            let message = try PluginManager.shared.installPlugin(from: url)
             refreshPlugins()
             load()
             NotificationCenter.default.post(name: .preferencesChanged, object: nil)
@@ -1514,6 +1556,25 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         updatePluginPathLabel()
         reloadServiceLists()
         pluginTestResultLabel.stringValue = ""
+    }
+
+    @objc private func reconvertSelectedPlugin() {
+        guard let name = currentPluginName else {
+            showAlert("请先选择一个插件。")
+            return
+        }
+        do {
+            let target = try PluginManager.shared.convertLegacyPlugin(name: name, replaceExisting: true)
+            refreshPlugins()
+            if let item = pluginPopup.itemArray.first(where: { ($0.representedObject as? String) == name }) {
+                pluginPopup.select(item)
+            }
+            updatePluginPathLabel()
+            NotificationCenter.default.post(name: .preferencesChanged, object: nil)
+            showAlert("已重新转换为 \(target.lastPathComponent)。原 .potext 备份保持不变。")
+        } catch {
+            showAlert("重新转换失败，插件继续使用当前可用版本：\(error.localizedDescription)")
+        }
     }
 
     @objc private func renamePlugin() {

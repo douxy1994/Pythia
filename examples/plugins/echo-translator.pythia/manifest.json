@@ -1,0 +1,20 @@
+{
+  "author": "Pythia Project",
+  "capabilities": [
+    "translate"
+  ],
+  "configuration": [],
+  "description": "Returns the source text with its language route for runtime testing.",
+  "entry": "main.js",
+  "id": "com.douxy.pythia.example.echo",
+  "minimumPythiaVersion": "1.0.0",
+  "name": "Echo Translator",
+  "permissions": [],
+  "schemaVersion": "1.0",
+  "supportedPlatforms": [
+    "macos",
+    "windows"
+  ],
+  "type": "translator",
+  "version": "1.0.0"
+}

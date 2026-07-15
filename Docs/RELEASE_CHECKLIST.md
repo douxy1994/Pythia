@@ -8,6 +8,8 @@
 - Release artifacts contain no bundled plugins.
 - README describes Pythia and does not link to the original project.
 - Sensitive values are not included in app bundles, archives, release notes, or generated logs.
+- `.pythia` examples and development guide pass `node script/validate_pythia_plugins.mjs`.
+- Importing `.potext` creates a validated `.pythia`, preserves the original backup, and retains a usable compatibility path after conversion failure.
 
 ## macOS
 
@@ -19,6 +21,7 @@
 - `./script/package_release.sh` produces `release/Pythia/Pythia.app` and `release/Pythia/Pythia.dmg`.
 - `hdiutil verify release/Pythia/Pythia.dmg` succeeds.
 - Accessibility selection translation does not prompt repeatedly after updates signed by the same identity.
+- Service, WebDAV, proxy, and plugin credentials migrate out of UserDefaults and remain readable without repeated Keychain authorization prompts.
 
 ## Windows
 
@@ -32,6 +35,7 @@
 - Global hotkeys work.
 - Screenshot translation has a real implementation or clear unavailable-state message.
 - Release package contains no plugins.
+- Bundled plugin runtime exists at `runtime/node.exe`; native `.pythia`, `.potext` conversion, compatibility fallback, configuration, disable, and delete tests pass.
 - `dart run tool/verify_release_package.dart build\windows\x64\runner\Release` succeeds before upload, including x64, plugin exclusion, and secret scans.
 - `powershell -File tool/build_windows_installer.ps1` creates `dist/Pythia-1.0.0-windows-x64.exe` and its same-name `.sha256` sidecar.
 - Production installer is Authenticode-signed by setting `PYTHIA_WINDOWS_CERT_SHA1` to a certificate already in the Windows certificate store before packaging.

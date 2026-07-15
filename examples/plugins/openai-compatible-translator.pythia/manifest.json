@@ -1,0 +1,43 @@
+{
+  "author": "Pythia Project",
+  "capabilities": [
+    "translate"
+  ],
+  "configuration": [
+    {
+      "defaultValue": "https://api.openai.com/v1",
+      "key": "baseURL",
+      "label": "API 地址",
+      "required": true,
+      "type": "text"
+    },
+    {
+      "key": "apiKey",
+      "label": "API Key",
+      "required": true,
+      "type": "secret"
+    },
+    {
+      "defaultValue": "gpt-4o-mini",
+      "key": "model",
+      "label": "模型",
+      "required": true,
+      "type": "text"
+    }
+  ],
+  "description": "Translates text through an OpenAI-compatible chat completions endpoint.",
+  "entry": "main.js",
+  "id": "com.douxy.pythia.example.openai-compatible",
+  "minimumPythiaVersion": "1.0.0",
+  "name": "OpenAI-compatible Translator",
+  "permissions": [
+    "network"
+  ],
+  "schemaVersion": "1.0",
+  "supportedPlatforms": [
+    "macos",
+    "windows"
+  ],
+  "type": "translator",
+  "version": "1.0.0"
+}

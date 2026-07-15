@@ -42,9 +42,17 @@ cp -R "$APP" "$DIST/Pythia.app"
 codesign --force --deep --timestamp=none --sign "$SIGN_IDENTITY" --entitlements "$ROOT/Pythia/Pythia.entitlements" "$DIST/Pythia.app"
 verify_stable_identity "$DIST/Pythia.app"
 
-if find "$DIST/Pythia.app" \( -iname "*.potext" -o -iname "*plugin*" -o -path "*/plugins/*" \) | grep -q .; then
-  echo "Release app must not include plugins." >&2
-  find "$DIST/Pythia.app" \( -iname "*.potext" -o -iname "*plugin*" -o -path "*/plugins/*" \) >&2
+if find "$DIST/Pythia.app" \( -iname "*.potext" -o -iname "*.pythia" -o -path "*/Plugins/*" \) | grep -q .; then
+  echo "Release app must not include third-party plugin packages." >&2
+  find "$DIST/Pythia.app" \( -iname "*.potext" -o -iname "*.pythia" -o -path "*/Plugins/*" \) >&2
+  exit 1
+fi
+
+if rg -Il \
+  --glob '*.{json,js,cjs,plist,txt,md,env,pem,key}' \
+  '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|gh[pousr]_[A-Za-z0-9]{20,})' \
+  "$DIST/Pythia.app" | grep -q .; then
+  echo "Release app contains material matching a private credential pattern." >&2
   exit 1
 fi
 

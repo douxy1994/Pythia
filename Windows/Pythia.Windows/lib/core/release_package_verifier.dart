@@ -51,6 +51,12 @@ class ReleasePackageVerifier {
       File('${root.path}${Platform.pathSeparator}Pythia.exe'),
       'Pythia.exe',
     ));
+    issues.addAll(await _verifyX64Executable(
+      File(
+        '${root.path}${Platform.pathSeparator}runtime${Platform.pathSeparator}node.exe',
+      ),
+      'runtime/node.exe',
+    ));
     await for (final entity in root.list(recursive: true, followLinks: false)) {
       if (entity is! File) {
         continue;
@@ -71,7 +77,7 @@ class ReleasePackageVerifier {
       return [
         ReleasePackageIssue(
           path: relativePath,
-          message: 'Pythia.exe is missing from the release package root',
+          message: '$relativePath is missing from the release package',
         ),
       ];
     }
@@ -81,7 +87,7 @@ class ReleasePackageVerifier {
       return [
         ReleasePackageIssue(
           path: relativePath,
-          message: 'Pythia.exe has an invalid DOS/PE header',
+          message: '$relativePath has an invalid DOS/PE header',
         ),
       ];
     }
@@ -96,7 +102,7 @@ class ReleasePackageVerifier {
       return [
         ReleasePackageIssue(
           path: relativePath,
-          message: 'Pythia.exe has an invalid PE signature',
+          message: '$relativePath has an invalid PE signature',
         ),
       ];
     }
@@ -108,7 +114,7 @@ class ReleasePackageVerifier {
         ReleasePackageIssue(
           path: relativePath,
           message:
-              'Pythia.exe must target x64 AMD64 (PE machine 0x8664); detected 0x$detected',
+              '$relativePath must target x64 AMD64 (PE machine 0x8664); detected 0x$detected',
         ),
       ];
     }
@@ -129,6 +135,15 @@ class ReleasePackageVerifier {
           path: relativePath,
           message:
               'bundled .potext plugins are not allowed in release packages',
+        ),
+      );
+    }
+    if (lowerFileName.endsWith('.pythia')) {
+      issues.add(
+        ReleasePackageIssue(
+          path: relativePath,
+          message:
+              'bundled third-party .pythia plugins are not allowed in release packages',
         ),
       );
     }
