@@ -920,7 +920,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private func migrationTab() -> NSView {
         let stack = formStack()
-        stack.addArrangedSubview(note("迁移会扫描本机旧 Pot/Tauri 配置目录，导入可识别的语言和服务密钥字段。密钥安全写入 macOS 钥匙串，并以非交互方式读取；不会反复弹出密码框，也不会输出到日志。"))
+        stack.addArrangedSubview(note("迁移会扫描本机旧 Pot/Tauri 配置目录，导入可识别的语言和服务密钥字段。旧 Pot 插件会直接转换为 .pythia；转换成功后，Pythia 不保留旧插件或 .potext 备份。密钥安全写入 macOS 钥匙串，并以非交互方式读取；不会反复弹出密码框，也不会输出到日志。"))
         let buttons = NSStackView()
         buttons.orientation = .horizontal
         buttons.spacing = 10

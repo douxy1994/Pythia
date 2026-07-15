@@ -777,7 +777,11 @@ final class PluginManager {
         try? report.write(to: marker, atomically: true, encoding: .utf8)
     }
 
-    private func convertLegacyPluginDirectory(_ source: URL, replaceExisting: Bool) throws -> URL {
+    private func convertLegacyPluginDirectory(
+        _ source: URL,
+        replaceExisting: Bool,
+        preserveOriginalPackage: Bool = true
+    ) throws -> URL {
         let infoURL = source.appendingPathComponent("info.json")
         let mainURL = source.appendingPathComponent("main.js")
         let infoData = try Data(contentsOf: infoURL)
@@ -789,13 +793,16 @@ final class PluginManager {
         )
         let target = pluginsDirectory.appendingPathComponent("\(conversion.manifest.id).pythia", isDirectory: true)
         if FileManager.default.fileExists(atPath: target.path), !replaceExisting {
+            registerLegacyPluginInstance(name: conversion.manifest.id, type: "translate")
             return target
         }
 
-        try FileManager.default.createDirectory(at: legacyBackupsDirectory, withIntermediateDirectories: true)
         let backup = legacyBackupsDirectory.appendingPathComponent("\(source.lastPathComponent).potext")
-        if !FileManager.default.fileExists(atPath: backup.path) {
-            try createPotextBackup(from: source, at: backup)
+        if preserveOriginalPackage {
+            try FileManager.default.createDirectory(at: legacyBackupsDirectory, withIntermediateDirectories: true)
+            if !FileManager.default.fileExists(atPath: backup.path) {
+                try createPotextBackup(from: source, at: backup)
+            }
         }
 
         let staging = pluginsDirectory.appendingPathComponent(".convert-\(UUID().uuidString).pythia", isDirectory: true)
@@ -805,17 +812,26 @@ final class PluginManager {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
             let manifestData = try encoder.encode(conversion.manifest)
             try manifestData.write(to: staging.appendingPathComponent("manifest.json"), options: [.atomic])
-            try legacyMain.write(to: staging.appendingPathComponent("legacy-main.js"), atomically: true, encoding: .utf8)
+            if preserveOriginalPackage {
+                try legacyMain.write(to: staging.appendingPathComponent("legacy-main.js"), atomically: true, encoding: .utf8)
+            } else {
+                try? FileManager.default.removeItem(at: staging.appendingPathComponent("info.json"))
+                try? FileManager.default.removeItem(at: staging.appendingPathComponent("legacy-main.js"))
+            }
             try conversion.mainJavaScript.write(to: staging.appendingPathComponent("main.js"), atomically: true, encoding: .utf8)
-            let report: [String: Any] = [
+            var report: [String: Any] = [
                 "schemaVersion": 1,
                 "sourceFormat": "potext",
                 "sourcePlugin": source.lastPathComponent,
                 "convertedAt": ISO8601DateFormatter().string(from: Date()),
                 "status": "converted",
                 "warnings": conversion.warnings,
-                "originalBackup": backup.lastPathComponent,
             ]
+            if preserveOriginalPackage {
+                report["originalBackup"] = backup.lastPathComponent
+            } else {
+                report["migrationPolicy"] = "legacy-package-not-retained"
+            }
             let reportData = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
             try reportData.write(to: staging.appendingPathComponent("conversion.json"), options: [.atomic])
 
@@ -914,41 +930,48 @@ final class PluginManager {
             home.appendingPathComponent("Library/Application Support/com.douxy.pot/plugins", isDirectory: true),
         ]
         let types = ["translate", "recognize", "tts", "collection"]
-        var imported = 0
+        var converted = 0
+        var skipped = 0
         for root in roots where FileManager.default.fileExists(atPath: root.path) {
             for type in types {
                 let sourceParent = root.appendingPathComponent(type, isDirectory: true)
                 guard let pluginDirs = try? FileManager.default.contentsOfDirectory(at: sourceParent, includingPropertiesForKeys: [.isDirectoryKey]) else {
                     continue
                 }
-                let targetParent = legacyPluginsDirectory.appendingPathComponent(type, isDirectory: true)
-                try? FileManager.default.createDirectory(at: targetParent, withIntermediateDirectories: true)
                 for pluginDir in pluginDirs {
                     guard
                         (try? pluginDir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
                         FileManager.default.fileExists(atPath: pluginDir.appendingPathComponent("info.json").path),
                         FileManager.default.fileExists(atPath: pluginDir.appendingPathComponent("main.js").path)
                     else { continue }
-                    let target = targetParent.appendingPathComponent(pluginDir.lastPathComponent, isDirectory: true)
-                    if pluginDir.standardizedFileURL == target.standardizedFileURL {
-                        registerLegacyPluginInstance(name: pluginDir.lastPathComponent, type: type)
-                        imported += 1
-                        continue
-                    }
                     do {
-                        if FileManager.default.fileExists(atPath: target.path) {
-                            try FileManager.default.removeItem(at: target)
-                        }
-                        try FileManager.default.copyItem(at: pluginDir, to: target)
-                        registerLegacyPluginInstance(name: pluginDir.lastPathComponent, type: type)
-                        imported += 1
+                        _ = try convertLegacyPluginDirectory(
+                            pluginDir,
+                            replaceExisting: false,
+                            preserveOriginalPackage: false
+                        )
+                        let retainedLegacy = legacyPluginsDirectory
+                            .appendingPathComponent(type, isDirectory: true)
+                            .appendingPathComponent(pluginDir.lastPathComponent, isDirectory: true)
+                        let retainedBackup = legacyBackupsDirectory
+                            .appendingPathComponent("\(pluginDir.lastPathComponent).potext")
+                        try? FileManager.default.removeItem(at: retainedLegacy)
+                        try? FileManager.default.removeItem(at: retainedBackup)
+                        converted += 1
                     } catch {
-                        NSLog("Pythia legacy plugin import failed: \(error.localizedDescription)")
+                        skipped += 1
+                        NSLog("Pythia plugin conversion during migration failed: \(error.localizedDescription)")
                     }
                 }
             }
         }
-        return imported == 0 ? "没有找到可导入的旧版插件。" : "已导入 \(imported) 个旧版插件。"
+        guard converted > 0 else {
+            return skipped == 0
+                ? "没有找到可迁移的旧 Pot 插件。"
+                : "找到 \(skipped) 个旧插件，但均无法转换为 .pythia，因此未导入，也未在 Pythia 中保留旧插件。"
+        }
+        let skippedText = skipped > 0 ? "；另有 \(skipped) 个无法转换，未导入" : ""
+        return "已转换并导入 \(converted) 个 .pythia 插件，未在 Pythia 中保留旧插件或 .potext 备份\(skippedText)。"
     }
 
     private func registerLegacyPluginInstance(name: String, type: String) {

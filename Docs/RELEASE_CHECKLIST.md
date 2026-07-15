@@ -9,7 +9,8 @@
 - README describes Pythia and does not link to the original project.
 - Sensitive values are not included in app bundles, archives, release notes, or generated logs.
 - `.pythia` examples and development guide pass `node script/validate_pythia_plugins.mjs`.
-- Importing `.potext` creates a validated `.pythia`, preserves the original backup, and retains a usable compatibility path after conversion failure.
+- Manual `.potext` installation creates a validated `.pythia`, preserves the original backup, and retains a usable compatibility path after conversion failure.
+- Settings migration converts old Pot plugins directly to `.pythia`; successful conversions leave no Pythia-side legacy copy or `.potext` backup, while failures are not imported.
 
 ## macOS
 

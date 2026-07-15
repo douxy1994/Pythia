@@ -22,7 +22,18 @@ void main() {
       'assets',
       'pythia-plugin-runner.cjs',
     )));
-    node = (await Process.run('which', ['node'])).stdout.toString().trim();
+    final nodeLookup = await Process.run(
+      Platform.isWindows ? 'where.exe' : 'which',
+      ['node'],
+    );
+    if (nodeLookup.exitCode != 0) {
+      throw StateError('Node.js is required for plugin runtime tests.');
+    }
+    node = nodeLookup.stdout
+        .toString()
+        .split(RegExp(r'\r?\n'))
+        .firstWhere((line) => line.trim().isNotEmpty)
+        .trim();
     credentials = MemoryCredentialStore();
   });
 
