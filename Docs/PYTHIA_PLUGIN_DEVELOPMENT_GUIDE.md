@@ -392,7 +392,7 @@ Rename-Item ..\echo-translator.zip echo-translator.pythia
 
 ## 14. `.potext` 自动转换
 
-导入 `.potext` 时，Pythia 执行以下步骤：
+从插件设置页手动安装 `.potext` 时，Pythia 执行以下步骤：
 
 1. 安全解压并拒绝路径穿越。
 2. 校验 `info.json`、`main.js` 和 `plugin_type`。
@@ -420,7 +420,9 @@ plugin.id.pythia/
 
 原始备份位于 `Plugins/Legacy Backups`。转换失败时 Pythia 保留旧插件并使用兼容层；失败不会阻止安装，也不会删除原文件。
 
-手动迁移时，推荐直接重写入口使用 `request` 和 `context`，然后删除兼容适配代码。不要机械替换变量名而不测试 HTTP 错误、流式响应、配置默认值和语言代码。
+从“设置 > 迁移”导入旧 Pot 插件时使用更严格的清理策略：Pythia 直接从旧 Pot 目录生成 `.pythia`，成功后不在 Pythia 的 `Legacy` 或 `Legacy Backups` 中保留旧插件、`info.json`、`legacy-main.js` 或 `.potext` 备份。转换失败的插件不会以兼容旧格式导入；旧 Pot 应用自己的源目录不会被 Pythia 删除或修改。
+
+开发者手动迁移插件源码时，推荐直接重写入口使用 `request` 和 `context`，然后删除兼容适配代码。不要机械替换变量名而不测试 HTTP 错误、流式响应、配置默认值和语言代码。
 
 ## 15. 安全要求
 
