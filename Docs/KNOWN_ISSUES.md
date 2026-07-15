@@ -11,7 +11,7 @@
 ## macOS
 
 - The macOS app is AppKit-based. The objective mentions SwiftUI, but the current real implementation uses AppKit windows and controls with Liquid Glass-inspired material views.
-- API keys and WebDAV passwords are stored locally outside Keychain because repeated Keychain prompts were unacceptable to the user. This conflicts with the ideal cross-platform security requirement and must be revisited with a no-repeat-prompt design before final sync release.
+- API keys and WebDAV passwords are intentionally stored in `~/Library/Application Support/Pythia/credentials.json` with `0600` permissions. This removes all runtime Keychain prompts, but it is local access control rather than encrypted-at-rest storage; anyone who fully compromises the macOS user account can read the file.
 - Some legacy plugin compatibility depends on local user plugin files and is best effort.
 - Original plugin APIs that require private binary execution remain unsupported.
 - Legacy macOS `/pot/pythia-config-backup.json` and `/pot/pot-config-backup.json` paths remain as read-only restore fallbacks. New backups use `/Pythia/settings/portable-backup.json`.

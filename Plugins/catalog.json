@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-15",
+  "pythiaVersion": "1.0.0",
+  "containsCredentials": false,
+  "packages": [
+    {
+      "id": "plugin.com.pot-app.aliyun-qwen3-5-35b-a3b",
+      "name": "阿里云 Qwen3.5-35B-A3B",
+      "version": "1.0.0",
+      "file": "aliyun-qwen3.5-35b-a3b-1.0.0.pythia",
+      "sha256": "da735708dec4ba75bb4edb28eb239a7ed28d699b68b8a37b32a8bb45ac0199cf",
+      "supportedPlatforms": ["macos", "windows"]
+    },
+    {
+      "id": "plugin.com.TzuLao.deepseek",
+      "name": "DeepSeek",
+      "version": "1.0.0",
+      "file": "deepseek-1.0.0.pythia",
+      "sha256": "827ae7c0ddf5621b45a5f9c0e2c35602f286f72fdc8da0c985f8bcfd99a20199",
+      "supportedPlatforms": ["macos", "windows"],
+      "source": "https://github.com/Tzulao55/pot-app-translate-plugin-deepseek"
+    },
+    {
+      "id": "plugin.com.pot-app.qiniu-glm-4-5-air-free",
+      "name": "七牛 GLM 4.5 Air (free)",
+      "version": "1.0.0",
+      "file": "qiniu-glm-4.5-air-free-1.0.0.pythia",
+      "sha256": "69d05ba2ee21ab2fbc0b059c6b4402d76b4092c647d50bd1c6ca74cb37238b36",
+      "supportedPlatforms": ["macos", "windows"]
+    },
+    {
+      "id": "plugin.com.pot-app.sensenova",
+      "name": "SenseNova",
+      "version": "1.0.0",
+      "file": "sensenova-1.0.0.pythia",
+      "sha256": "18218f923eedf35e66c0c059c8f1e3a9be89ae3af4abaec9bd4d5e9806cad967",
+      "supportedPlatforms": ["macos", "windows"],
+      "source": "https://platform.sensenova.cn"
+    },
+    {
+      "id": "plugin.com.xuabi.siliconflow",
+      "name": "SiliconFlow",
+      "version": "1.0.0",
+      "file": "siliconflow-1.0.0.pythia",
+      "sha256": "390a6cfb469a92a6d2cb6b3e98f0693a114b447926f46c24cd7f70f1db9e9307",
+      "supportedPlatforms": ["macos", "windows"],
+      "source": "https://github.com/xubai2001/pot-app-translate-plugin-siliconflow"
+    },
+    {
+      "id": "plugin.com.xiaomi.mimo",
+      "name": "Xiaomi MiMo",
+      "version": "1.0.0",
+      "file": "xiaomi-mimo-1.0.0.pythia",
+      "sha256": "21a42d0952ebd800868881fe8712aadbc451623bfbc297f855b8251aa145d193",
+      "supportedPlatforms": ["macos", "windows"],
+      "source": "https://platform.xiaomimimo.com/docs/zh-CN/api/chat/openai-api"
+    }
+  ]
+}

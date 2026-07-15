@@ -21,5 +21,9 @@ Core/PythiaCore/.build/
 # Local release artifacts
 release/
 
+# User credentials and plugin configuration
+**/credentials.json
+**/plugin-configs.json
+
 # Local Codex environment
 .codex/

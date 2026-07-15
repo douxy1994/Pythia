@@ -84,9 +84,9 @@ History records must match `Core/Schemas/history-record.schema.json`:
 
 ## Security
 
-macOS previously disabled runtime Keychain usage because repeated Keychain prompts were unacceptable. For cross-platform sync, credentials must be revisited carefully:
+macOS does not access Keychain at runtime because repeated authorization prompts are unacceptable:
 
-- macOS: use Keychain only if it can be accessed without repeated prompts; otherwise keep the current local-storage policy and clearly warn before sync release.
+- macOS: store WebDAV passwords in `~/Library/Application Support/Pythia/credentials.json`, enforce `0600`, and never include this file in portable backup/sync payloads.
 - Windows: use Credential Manager or DPAPI, never plain JSON for API keys or WebDAV passwords.
 - Exported sync settings must omit API keys, provider secrets, proxy passwords, and WebDAV passwords.
 

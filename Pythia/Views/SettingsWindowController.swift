@@ -3,7 +3,7 @@ import Foundation
 import UniformTypeIdentifiers
 
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
-    private let tabTitles = ["通用", "翻译", "服务", "OCR", "TTS", "生词本", "插件", "快捷键", "历史", "代理", "备份", "迁移"]
+    private let tabTitles = ["通用", "翻译", "服务", "OCR", "TTS", "生词本", "插件", "快捷键", "历史", "代理", "备份", "迁移", "关于"]
     private let sidebarStack = FlippedStackView()
     private var sidebarItems: [SettingsSidebarItemView] = []
     private var selectedSettingsIndex = 0
@@ -50,6 +50,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let alwaysOnTopCheckbox = NSButton(checkboxWithTitle: "翻译窗口总在最前", target: nil, action: nil)
     private let rememberWindowSizeCheckbox = NSButton(checkboxWithTitle: "记住翻译窗口尺寸", target: nil, action: nil)
     private let saveStatusLabel = NSTextField(labelWithString: "")
+    private let aboutUpdateStatusLabel = NSTextField(labelWithString: "")
     // Translate behavior (aligned with original Pot)
     private let translateDeleteNewlineCheckbox = NSButton(checkboxWithTitle: "翻译结果删除换行", target: nil, action: nil)
     private let smartTargetCheckbox = NSButton(checkboxWithTitle: "自动检测时智能选择目标语言", target: nil, action: nil)
@@ -237,7 +238,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func buildSidebarItems() {
-        sidebarItems.forEach { item in
+        sidebarStack.arrangedSubviews.forEach { item in
             sidebarStack.removeArrangedSubview(item)
             item.removeFromSuperview()
         }
@@ -293,11 +294,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         stack.addArrangedSubview(indented(launchAtLoginCheckbox))
         stack.addArrangedSubview(indented(checkUpdateCheckbox))
         stack.addArrangedSubview(note("开机启动使用 macOS 登录项注册。如果系统要求批准，请在「系统设置 > 通用 > 登录项」允许 Pythia。"))
-        let updateButtons = NSStackView()
-        updateButtons.orientation = .horizontal
-        updateButtons.spacing = 10
-        updateButtons.addArrangedSubview(PillButton("立即检查更新", target: self, action: #selector(checkForUpdates)))
-        stack.addArrangedSubview(leadingFullWidth(updateButtons, minHeight: 0))
         stack.addArrangedSubview(row("外部服务端口", serverPortField))
         // System permissions (辅助功能 / 屏幕录制) only need to be requested once;
         // keep the action here in 通用 instead of in the always-visible footer.
@@ -442,7 +438,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         pluginResultBox.addArrangedSubview(pluginResultCaption)
         pluginResultBox.addArrangedSubview(pluginTestResultLabel)
         stack.addArrangedSubview(leadingFullWidth(pluginResultBox, minHeight: 0))
-        stack.addArrangedSubview(note("选中插件后会显示它需要的配置项。普通配置保存在 Pythia 配置文件中；Manifest 标记为 secret 的密钥安全存入 macOS 钥匙串，并以非交互方式读取，不会反复弹出密码框。点「测试连通性」可验证当前插件。"))
+        stack.addArrangedSubview(note("选中插件后会显示它需要的配置项。Manifest 标记为 secret 的密钥保存在仅当前用户可读的 Pythia 本地凭据文件中，不访问 macOS 钥匙串，也不会弹出钥匙串密码框。点「测试连通性」可验证当前插件。"))
         stack.addArrangedSubview(note("原生命令插件：也可放入 JSON/.potplugin，包含 name、command、arguments、environment。待翻译文本会通过 stdin 和 POT_TEXT 环境变量传入。"))
         rebuildPluginConfigFields()
         updatePluginPathLabel()
@@ -920,7 +916,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private func migrationTab() -> NSView {
         let stack = formStack()
-        stack.addArrangedSubview(note("迁移会扫描本机旧 Pot/Tauri 配置目录，导入可识别的语言和服务密钥字段。旧 Pot 插件会直接转换为 .pythia；转换成功后，Pythia 不保留旧插件或 .potext 备份。密钥安全写入 macOS 钥匙串，并以非交互方式读取；不会反复弹出密码框，也不会输出到日志。"))
+        stack.addArrangedSubview(note("迁移会扫描本机旧 Pot/Tauri 配置目录，导入可识别的语言和服务密钥字段。旧 Pot 插件会直接转换为 .pythia；转换成功后，Pythia 不保留旧插件或 .potext 备份。密钥写入仅当前用户可读的 Pythia 本地凭据文件，不访问 macOS 钥匙串，也不会输出到日志。"))
         let buttons = NSStackView()
         buttons.orientation = .horizontal
         buttons.spacing = 10
@@ -929,6 +925,97 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         stack.addArrangedSubview(buttons)
         stack.addArrangedSubview(note("外部调用 API：127.0.0.1:60828，支持 /translate、/selection_translate、/input_translate、/ocr_recognize、/ocr_translate、/config。"))
         return stack
+    }
+
+    private func aboutTab() -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let icon = NSImageView()
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.image = NSApp.applicationIconImage
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        icon.wantsLayer = true
+        icon.layer?.shadowColor = NSColor.black.cgColor
+        icon.layer?.shadowOpacity = 0.16
+        icon.layer?.shadowRadius = 18
+        icon.layer?.shadowOffset = NSSize(width: 0, height: -6)
+
+        let nameLabel = NSTextField(labelWithString: "Pythia")
+        nameLabel.font = .systemFont(ofSize: 34, weight: .bold)
+        nameLabel.textColor = .labelColor
+        nameLabel.alignment = .center
+
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        let versionText = build.isEmpty ? "版本 \(version)" : "版本 \(version)（\(build)）"
+        let versionLabel = NSTextField(labelWithString: versionText)
+        versionLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        versionLabel.textColor = PythiaDesign.themeColor()
+        versionLabel.alignment = .center
+
+        let descriptionLabel = NSTextField(labelWithString: "多服务翻译与插件平台")
+        descriptionLabel.font = .systemFont(ofSize: 14)
+        descriptionLabel.textColor = .secondaryLabelColor
+        descriptionLabel.alignment = .center
+
+        let updateButton = PillButton("检查更新", target: self, action: #selector(checkForUpdates))
+        updateButton.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "检查更新")
+        updateButton.imagePosition = .imageLeading
+        updateButton.imageHugsTitle = true
+
+        let githubButton = PillButton("GitHub 项目", target: self, action: #selector(openGitHubProject))
+        githubButton.image = NSImage(systemSymbolName: "link", accessibilityDescription: "GitHub 项目")
+        githubButton.imagePosition = .imageLeading
+        githubButton.imageHugsTitle = true
+
+        let actionStack = NSStackView(views: [updateButton, githubButton])
+        actionStack.orientation = .horizontal
+        actionStack.alignment = .centerY
+        actionStack.spacing = 10
+
+        aboutUpdateStatusLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        aboutUpdateStatusLabel.textColor = .secondaryLabelColor
+        aboutUpdateStatusLabel.alignment = .center
+        aboutUpdateStatusLabel.maximumNumberOfLines = 1
+
+        let copyrightLabel = NSTextField(labelWithString: "© 2026 Pythia Contributors · GPL-3.0")
+        copyrightLabel.font = .systemFont(ofSize: 11)
+        copyrightLabel.textColor = .tertiaryLabelColor
+        copyrightLabel.alignment = .center
+
+        let hero = NSStackView(views: [
+            icon,
+            nameLabel,
+            versionLabel,
+            descriptionLabel,
+            actionStack,
+            aboutUpdateStatusLabel,
+            copyrightLabel,
+        ])
+        hero.translatesAutoresizingMaskIntoConstraints = false
+        hero.orientation = .vertical
+        hero.alignment = .centerX
+        hero.spacing = 9
+        hero.setCustomSpacing(16, after: icon)
+        hero.setCustomSpacing(3, after: nameLabel)
+        hero.setCustomSpacing(18, after: descriptionLabel)
+        hero.setCustomSpacing(6, after: actionStack)
+        hero.setCustomSpacing(18, after: aboutUpdateStatusLabel)
+        container.addSubview(hero)
+
+        NSLayoutConstraint.activate([
+            icon.widthAnchor.constraint(equalToConstant: 124),
+            icon.heightAnchor.constraint(equalToConstant: 124),
+            hero.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            hero.centerYAnchor.constraint(equalTo: container.centerYAnchor, constant: -6),
+            hero.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 24),
+            hero.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -24),
+            hero.topAnchor.constraint(greaterThanOrEqualTo: container.topAnchor, constant: 20),
+            hero.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -20),
+            aboutUpdateStatusLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 260),
+        ])
+        return container
     }
 
     private func scrollTab(_ document: NSView) -> NSView {
@@ -999,6 +1086,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         case 9: content = scrollTab(proxyTab())
         case 10: content = scrollTab(backupTab())
         case 11: content = scrollTab(migrationTab())
+        case 12: content = aboutTab()
         default: content = scrollTab(generalTab())
         }
         activeTabView = content
@@ -1312,7 +1400,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         NotificationCenter.default.post(name: .preferencesChanged, object: nil)
         window?.title = "Pythia 设置 - 已保存"
         let portWarning = rawServerPort == normalizedServerPort ? nil : "外部服务端口无效，已恢复为 60828"
-        let credentialWarning = preferences.consumeCredentialStorageError().map { "凭据未能安全保存：\($0)" }
+        let credentialWarning = preferences.consumeCredentialStorageError().map { "凭据未能保存到本地：\($0)" }
         let warning = [duplicateHotkeyWarning, portWarning, fontWarning, runtimeWarning, credentialWarning]
             .compactMap { $0 }
             .joined(separator: "；")
@@ -1444,6 +1532,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     @objc private func checkForUpdates() {
         saveStatusLabel.textColor = .secondaryLabelColor
         saveStatusLabel.stringValue = "正在检查更新..."
+        aboutUpdateStatusLabel.textColor = .secondaryLabelColor
+        aboutUpdateStatusLabel.stringValue = "正在检查更新..."
         PythiaUpdateChecker.shared.check { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -1451,10 +1541,14 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
                 case .success(let info):
                     self.saveStatusLabel.textColor = PythiaDesign.themeColor()
                     self.saveStatusLabel.stringValue = info.isNewer ? "发现新版本 \(info.latestVersion)" : "当前已是最新版本"
+                    self.aboutUpdateStatusLabel.textColor = PythiaDesign.themeColor()
+                    self.aboutUpdateStatusLabel.stringValue = self.saveStatusLabel.stringValue
                     self.showUpdateResult(info)
                 case .failure(let error):
                     self.saveStatusLabel.textColor = .systemRed
                     self.saveStatusLabel.stringValue = "更新检查失败"
+                    self.aboutUpdateStatusLabel.textColor = .systemRed
+                    self.aboutUpdateStatusLabel.stringValue = "更新检查失败"
                     let alert = NSAlert()
                     alert.messageText = "更新检查失败"
                     alert.informativeText = error.localizedDescription
@@ -1493,6 +1587,14 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     @objc private func openPluginDevelopmentGuide() {
         guard let url = URL(string: "https://github.com/douxy1994/Pythia/blob/master/Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md") else {
             showAlert("插件开发指南地址无效。")
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func openGitHubProject() {
+        guard let url = URL(string: "https://github.com/douxy1994/Pythia") else {
+            showAlert("GitHub 项目地址无效。")
             return
         }
         NSWorkspace.shared.open(url)

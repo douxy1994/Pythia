@@ -36,6 +36,9 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private var resultPanelTopToHeaderConstraint: NSLayoutConstraint?
     private weak var backgroundView: LiquidGlassBackgroundView?
     private var dynamicTranslateWorkItem: DispatchWorkItem?
+    private var resultHeightRefreshWorkItem: DispatchWorkItem?
+    private var hasPresentedWindow = false
+    private var isApplyingWindowPlacement = false
     private var contentMode: ContentMode = .translation
 
     init() {
@@ -91,6 +94,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         }
         updateSourceHeight()
         applyWindowPlacementForPresentation()
+        hasPresentedWindow = true
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         window?.orderFrontRegardless()
@@ -106,6 +110,8 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
 
     private func applyWindowPlacementForPresentation() {
         guard let window else { return }
+        isApplyingWindowPlacement = true
+        defer { isApplyingWindowPlacement = false }
         let preferences = Preferences.shared
         let savedFrame = savedWindowFrame()
         var frame = window.frame
@@ -170,7 +176,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     }
 
     private func persistWindowFrame() {
-        guard let window else { return }
+        guard hasPresentedWindow, !isApplyingWindowPlacement, let window else { return }
         Preferences.shared.translateWindowFrame = NSStringFromRect(window.frame)
     }
 
@@ -180,6 +186,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
 
     func windowDidResize(_ notification: Notification) {
         updateSourceHeight()
+        scheduleResultHeightRefresh()
         persistWindowFrame()
     }
 
@@ -957,6 +964,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         sourceView.applyFontPreferences()
         resultViews.values.forEach { $0.applyTextAppearance() }
         resultViews.values.forEach { $0.applyFontPreferences() }
+        scheduleResultHeightRefresh()
 
         // Re-apply title colors by walking the result stack.
         resultStack.arrangedSubviews.forEach { section in
@@ -983,6 +991,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         window?.alphaValue = 1.0
         sourceView.applyFontPreferences()
         resultViews.values.forEach { $0.applyFontPreferences() }
+        scheduleResultHeightRefresh()
         applyAlwaysOnTopPreference()
         updatePinWindowButton()
         updateSourceHeight()
@@ -1056,7 +1065,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
             makeResultSection(key: service, title: displayName, textView: textView)
             resultViews[service] = textView
             resultOrder.append(service)
-            DispatchQueue.main.async { [weak self] in self?.updateResultHeight(for: service) }
+            scheduleResultHeightRefresh()
         }
         scrollResultsToTop()
     }
@@ -1156,6 +1165,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         guard let textView = resultViews[provider] else { return }
         textView.setPlainText(text)
         updateResultHeight(for: provider)
+        scheduleResultHeightRefresh()
     }
 
     private func showSingleResult(title: String, text: String) {
@@ -1170,8 +1180,21 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         makeResultSection(key: title, title: title, textView: textView)
         resultViews[title] = textView
         resultOrder.append(title)
-        DispatchQueue.main.async { [weak self] in self?.updateResultHeight(for: title) }
+        scheduleResultHeightRefresh()
         scrollResultsToTop()
+    }
+
+    private func scheduleResultHeightRefresh() {
+        resultHeightRefreshWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.window?.contentView?.layoutSubtreeIfNeeded()
+            self.resultStack.layoutSubtreeIfNeeded()
+            self.resultOrder.forEach { self.updateResultHeight(for: $0) }
+            self.resultStack.layoutSubtreeIfNeeded()
+        }
+        resultHeightRefreshWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03, execute: workItem)
     }
 
     private func updateResultHeight(for key: String) {
@@ -1188,6 +1211,8 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         resultHeightConstraints.removeAll()
         resultCollapseButtons.removeAll()
         collapsedResultKeys.removeAll()
+        resultHeightRefreshWorkItem?.cancel()
+        resultHeightRefreshWorkItem = nil
         resultViews.removeAll()
         resultOrder.removeAll()
         failedResultKeys.removeAll()

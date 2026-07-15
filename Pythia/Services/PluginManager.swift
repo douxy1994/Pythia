@@ -1,80 +1,11 @@
 import Foundation
-import LocalAuthentication
-import Security
-
-private struct PluginSecretStore {
-    private let service = "com.douxy.pythia.plugin-configuration"
-
-    func read(pluginID: String, key: String) -> String? {
-        let authenticationContext = LAContext()
-        authenticationContext.interactionNotAllowed = true
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account(pluginID: pluginID, key: key),
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-            // Never trigger an authentication dialog. Pythia-created items do not
-            // require user presence, and inaccessible legacy items are ignored.
-            kSecUseAuthenticationContext as String: authenticationContext,
-        ]
-        var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data
-        else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    func write(_ value: String, pluginID: String, key: String) throws {
-        let account = account(pluginID: pluginID, key: key)
-        let attributes: [String: Any] = [
-            kSecValueData as String: Data(value.utf8),
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
-        ]
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if status == errSecItemNotFound {
-            var item = query
-            attributes.forEach { item[$0.key] = $0.value }
-            try check(SecItemAdd(item as CFDictionary, nil))
-        } else {
-            try check(status)
-        }
-    }
-
-    func delete(pluginID: String, key: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account(pluginID: pluginID, key: key),
-        ]
-        SecItemDelete(query as CFDictionary)
-    }
-
-    private func account(pluginID: String, key: String) -> String {
-        "\(pluginID):\(key)"
-    }
-
-    private func check(_ status: OSStatus) throws {
-        guard status == errSecSuccess else {
-            throw NSError(
-                domain: NSOSStatusErrorDomain,
-                code: Int(status),
-                userInfo: [NSLocalizedDescriptionKey: SecCopyErrorMessageString(status, nil) as String? ?? "无法保存插件密钥。"]
-            )
-        }
-    }
-}
 
 final class PluginManager {
     static let shared = PluginManager()
     let pluginsDirectory: URL
     let legacyPluginsDirectory: URL
-    private let pluginSecretStore = PluginSecretStore()
+    private let credentialStore = LocalCredentialStore.shared
+    private let credentialNamespace = "plugins"
 
     private init() {
         pluginsDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -87,7 +18,8 @@ final class PluginManager {
         try? FileManager.default.createDirectory(at: legacyPluginsDirectory, withIntermediateDirectories: true)
         migrateLegacyPluginConfigs()
         convertInstalledPotextPluginsIfNeeded()
-        migratePluginSecretsToSecureStorage()
+        migrateLegacyPluginCredentialsToLocalStorage()
+        migratePluginSecretsToLocalStorage()
         restoreLegacyFalsePositiveSecrets()
     }
 
@@ -110,7 +42,7 @@ final class PluginManager {
     func pluginConfig(forPluginName name: String) -> [String: String] {
         var config = loadPluginConfigs()[name] ?? [:]
         for key in secretConfigurationKeys(forPluginName: name) {
-            if let value = pluginSecretStore.read(pluginID: name, key: key) {
+            if let value = credentialStore.read(namespace: credentialNamespace, key: credentialKey(pluginID: name, key: key)) {
                 config[key] = value
             }
         }
@@ -124,9 +56,13 @@ final class PluginManager {
             publicConfig.removeValue(forKey: key)
             let value = config[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if value.isEmpty {
-                pluginSecretStore.delete(pluginID: name, key: key)
+                try credentialStore.delete(namespace: credentialNamespace, key: credentialKey(pluginID: name, key: key))
             } else {
-                try pluginSecretStore.write(config[key] ?? value, pluginID: name, key: key)
+                try credentialStore.write(
+                    config[key] ?? value,
+                    namespace: credentialNamespace,
+                    key: credentialKey(pluginID: name, key: key)
+                )
             }
         }
         var all = loadPluginConfigs()
@@ -144,7 +80,11 @@ final class PluginManager {
         })
     }
 
-    private func migratePluginSecretsToSecureStorage() {
+    private func credentialKey(pluginID: String, key: String) -> String {
+        "\(pluginID):\(key)"
+    }
+
+    private func migratePluginSecretsToLocalStorage() {
         var all = loadPluginConfigs()
         var changed = false
         for pluginID in Array(all.keys) {
@@ -152,16 +92,58 @@ final class PluginManager {
             for key in secretConfigurationKeys(forPluginName: pluginID) {
                 guard let value = config[key], !value.isEmpty else { continue }
                 do {
-                    try pluginSecretStore.write(value, pluginID: pluginID, key: key)
+                    try credentialStore.write(
+                        value,
+                        namespace: credentialNamespace,
+                        key: credentialKey(pluginID: pluginID, key: key)
+                    )
                     config.removeValue(forKey: key)
                     changed = true
                 } catch {
-                    NSLog("Pythia plugin secret migration failed for %@/%@: %@", pluginID, key, error.localizedDescription)
+                    NSLog("Pythia plugin credential migration failed for %@/%@: %@", pluginID, key, error.localizedDescription)
                 }
             }
             all[pluginID] = config
         }
         if changed { savePluginConfigs(all) }
+    }
+
+    /// Recovers credentials from the original Pot config without accessing
+    /// Keychain. This runs independently from the older config migration marker
+    /// so prerelease Pythia builds that already moved values can recover them.
+    private func migrateLegacyPluginCredentialsToLocalStorage() {
+        let source = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/com.pot-app.desktop/config.json")
+        guard
+            let data = try? Data(contentsOf: source),
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return }
+
+        for (instanceID, rawConfig) in object {
+            guard
+                instanceID.hasPrefix("plugin."),
+                let separator = instanceID.firstIndex(of: "@"),
+                let config = rawConfig as? [String: Any]
+            else { continue }
+
+            let pluginID = String(instanceID[..<separator])
+            let secretKeys = secretConfigurationKeys(forPluginName: pluginID)
+            for key in secretKeys {
+                guard
+                    credentialStore.read(
+                        namespace: credentialNamespace,
+                        key: credentialKey(pluginID: pluginID, key: key)
+                    ) == nil,
+                    let value = config[key] as? String,
+                    !value.isEmpty
+                else { continue }
+                try? credentialStore.write(
+                    value,
+                    namespace: credentialNamespace,
+                    key: credentialKey(pluginID: pluginID, key: key)
+                )
+            }
+        }
     }
 
     private func restoreLegacyFalsePositiveSecrets() {
@@ -173,11 +155,17 @@ final class PluginManager {
                 guard let key = need["key"] as? String,
                       !secureKeys.contains(key),
                       key.range(of: "key|secret|token|password", options: [.regularExpression, .caseInsensitive]) != nil,
-                      let value = pluginSecretStore.read(pluginID: pluginID, key: key),
+                      let value = credentialStore.read(
+                        namespace: credentialNamespace,
+                        key: credentialKey(pluginID: pluginID, key: key)
+                      ),
                       !value.isEmpty
                 else { continue }
                 all[pluginID, default: [:]][key] = value
-                pluginSecretStore.delete(pluginID: pluginID, key: key)
+                try? credentialStore.delete(
+                    namespace: credentialNamespace,
+                    key: credentialKey(pluginID: pluginID, key: key)
+                )
                 changed = true
             }
         }
@@ -620,7 +608,10 @@ final class PluginManager {
         configs.removeValue(forKey: name)
         savePluginConfigs(configs)
         for key in secretKeys {
-            pluginSecretStore.delete(pluginID: name, key: key)
+            try? credentialStore.delete(
+                namespace: credentialNamespace,
+                key: credentialKey(pluginID: name, key: key)
+            )
         }
         var aliases = loadPluginAliases()
         aliases.removeValue(forKey: name)
