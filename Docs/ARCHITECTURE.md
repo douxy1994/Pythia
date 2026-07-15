@@ -32,6 +32,10 @@ Alternatives considered:
 - React Native Windows: viable, but smaller ecosystem for desktop-specific OCR/tray/hotkey details than Flutter/WinUI.
 - Rust core plus native UIs: strong long-term option, but a larger migration than is justified before the Windows UI exists.
 
-## Current Gap
+## Current Cross-Platform State
 
-The existing macOS app has a WebDAV backup/restore feature, not the full bidirectional history sync required by the cross-platform objective. `Core/PythiaCore` now contains the first shared history record model and merge algorithm; macOS still needs to migrate its current `TranslationRecord` persistence to the cross-platform record format.
+Both clients now implement the shared history record and merge behavior. macOS and Windows use `/Pythia/history/history.json` for bidirectional history synchronization and `/Pythia/settings/portable-backup.json` for portable settings/history backups. The current remaining work is real cross-device Windows validation, not a missing macOS sync implementation.
+
+The Windows source, x64 native host, automated tests, release verifier, Inno Setup packaging, and CI runtime/install/uninstall smoke tests are present. The remaining Windows work and acceptance criteria are maintained in [`../WINDOWS_CODEX_HANDOFF.md`](../WINDOWS_CODEX_HANDOFF.md).
+
+Native `.pythia` plugins use one Manifest/request/response contract and byte-identical JavaScript runners on macOS and Windows. Public plugin downloads live in [`../Plugins`](../Plugins/README.md) but are intentionally excluded from application release packages.

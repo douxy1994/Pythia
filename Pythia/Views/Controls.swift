@@ -68,7 +68,9 @@ final class PythiaTextView: NSScrollView {
         textView.textContainerInset = NSSize(width: 12, height: 8)
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
-        textView.autoresizingMask = [.width]
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = scrollable
+        textView.autoresizingMask = scrollable ? [.width] : [.width, .height]
         textView.string = placeholder
         documentView = textView
         applyTextAppearance()
@@ -89,9 +91,27 @@ final class PythiaTextView: NSScrollView {
         applyTextAppearance()
     }
 
+    override func layout() {
+        super.layout()
+        guard !isScrollable else { return }
+        let viewport = contentView.bounds.size
+        guard viewport.width > 0, viewport.height > 0 else { return }
+        let expectedFrame = NSRect(origin: .zero, size: viewport)
+        if !NSEqualRects(textView.frame, expectedFrame) {
+            textView.frame = expectedFrame
+        }
+        // A result card is intentionally non-scrollable. Width changes must
+        // never leave the clip view at an old vertical offset and hide line 1.
+        if contentView.bounds.origin != .zero {
+            contentView.scroll(to: .zero)
+            reflectScrolledClipView(contentView)
+        }
+    }
+
     func setPlainText(_ value: String) {
         textView.string = value
         applyTextAppearance()
+        needsLayout = true
     }
 
     func applyTextAppearance() {
@@ -162,18 +182,30 @@ final class PythiaTextView: NSScrollView {
 
     func fittingHeight(for width: CGFloat) -> CGFloat {
         guard let container = textView.textContainer, let lm = textView.layoutManager else { return 44 }
-        let contentWidth = max(240, width - 8)
-        // Force a fresh measurement layout against the given width: stop width
-        // tracking, set the container to the desired width, invalidate the
-        // whole glyph range, then ensure layout completes synchronously.
+        // NSTextView lays text out inside its horizontal text-container insets.
+        // Measuring against the whole scroll-view width makes a paragraph look
+        // one line shorter than it really is and clips the final line.
+        let contentWidth = max(1, width - textView.textContainerInset.width * 2)
+        let originalTracksWidth = container.widthTracksTextView
         container.widthTracksTextView = false
-        container.size = NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
-        container.layoutManager?.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textView.string.count), actualCharacterRange: nil)
+        container.containerSize = NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
+        let characterCount = textView.textStorage?.length ?? 0
+        lm.invalidateLayout(
+            forCharacterRange: NSRange(location: 0, length: characterCount),
+            actualCharacterRange: nil
+        )
         lm.ensureLayout(for: container)
-        let glyphRange = lm.glyphRange(for: container)
-        let used = lm.boundingRect(forGlyphRange: glyphRange, in: container).height
-        container.widthTracksTextView = true
-        return max(44, ceil(used + textView.textContainerInset.height * 2 + 6))
+        // usedRect includes complete line fragments (leading and descenders),
+        // unlike a glyph bounding box, which can underestimate the last line.
+        let usedHeight = lm.usedRect(for: container).maxY
+        let font = textView.font ?? NSFont.systemFont(ofSize: 15)
+        let trailingLineHeight = textView.string.hasSuffix("\n") ? lm.defaultLineHeight(for: font) : 0
+        container.widthTracksTextView = originalTracksWidth
+        container.containerSize = NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
+        return max(
+            44,
+            ceil(usedHeight + trailingLineHeight + textView.textContainerInset.height * 2 + 4)
+        )
     }
 }
 
@@ -586,6 +618,7 @@ final class ServiceOrderListView: NSView, NSTableViewDataSource, NSTableViewDele
     /// Called whenever the enabled set or the order changes; receives the
     /// current ordered list of ENABLED service IDs (display order).
     var onChange: (([String]) -> Void)?
+    var allowsRemoval = true
     var optionProvider: () -> [(id: String, title: String)] = {
         PluginManager.shared.translationServiceOptions()
     }
@@ -717,7 +750,7 @@ final class ServiceOrderListView: NSView, NSTableViewDataSource, NSTableViewDele
                 if isOn { self.enabled.insert(item.id) } else { self.enabled.remove(item.id) }
                 self.fireChange()
             },
-            onDelete: { [weak self] in
+            onDelete: !allowsRemoval || item.id.lowercased().hasPrefix("plugin:") ? nil : { [weak self] in
                 self?.removeService(id: item.id)
             }
         )
@@ -726,37 +759,17 @@ final class ServiceOrderListView: NSView, NSTableViewDataSource, NSTableViewDele
 
     func tableView(_ tableView: NSTableView, rowHeight row: Int) -> CGFloat { 30 }
 
-    /// Removes a service from the list. For plugin services (id starts with
-    /// "plugin:"), offers to also delete the plugin's files; for built-in or
-    /// custom IDs, just removes from the list (built-ins can be restored via
-    /// "重置为内置服务").
+    /// Removes a built-in or custom service from this list. Installed plugins
+    /// are enabled/disabled here and managed from the dedicated plugin page.
     private func removeService(id: String) {
-        let isPlugin = id.lowercased().hasPrefix("plugin:")
-        let pluginDirName: String? = isPlugin ? String(id.dropFirst("plugin:".count)) : nil
         let title = items.first(where: { $0.id == id })?.title ?? id
 
         let alert = NSAlert()
         alert.messageText = "移除「\(title)」"
-        if let dir = pluginDirName {
-            alert.informativeText = "从服务列表移除此插件。是否同时删除插件文件（无法撤销）？"
-            alert.addButton(withTitle: "移除并删除文件")
-            alert.addButton(withTitle: "仅从列表移除")
-            alert.addButton(withTitle: "取消")
-            let choice = alert.runModal()
-            switch choice {
-            case .alertFirstButtonReturn:
-                PluginManager.shared.deletePlugin(name: dir)
-            case .alertSecondButtonReturn:
-                break
-            default:
-                return
-            }
-        } else {
-            alert.informativeText = "从服务列表移除「\(title)」。内置服务可稍后用「重置为内置服务」恢复。"
-            alert.addButton(withTitle: "移除")
-            alert.addButton(withTitle: "取消")
-            guard alert.runModal() == .alertFirstButtonReturn else { return }
-        }
+        alert.informativeText = "从服务列表移除「\(title)」。内置服务可稍后用「重置为内置服务」恢复。"
+        alert.addButton(withTitle: "移除")
+        alert.addButton(withTitle: "取消")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
         items.removeAll { $0.id == id }
         enabled.remove(id)
         tableView.reloadData()
@@ -856,11 +869,12 @@ private final class ServiceOrderRowCell: NSTableCellView {
 
     func configure(title: String, enabled: Bool,
                    onChange: @escaping (Bool) -> Void,
-                   onDelete: @escaping () -> Void) {
+                   onDelete: (() -> Void)?) {
         checkbox.title = title
         checkbox.state = enabled ? .on : .off
         onToggle = onChange
         self.onDelete = onDelete
+        deleteButton.isHidden = onDelete == nil
     }
 
     @objc private func toggle() {
@@ -982,33 +996,43 @@ final class TranslationServicePickerButton: NSButton {
             popover.performClose(nil)
             return
         }
-        let checklist = ServiceChecklistView()
-        checklist.reloadOptions()
-        checklist.selectedServices = selectedIDs
-        checklist.onChange = { [weak self] services in
+        let serviceList = ServiceOrderListView()
+        serviceList.allowsRemoval = false
+        serviceList.load(
+            orderedServices: Preferences.shared.translateServiceOrder,
+            enabledServices: selectedIDs,
+            customIDs: []
+        )
+        serviceList.onChange = { [weak self] services in
             guard let self else { return }
             self.selectedIDs = services
             if self.selectedIDs.isEmpty, let first = self.options.first?.id {
                 self.selectedIDs = [first]
-                checklist.selectedServices = self.selectedIDs
+                serviceList.load(
+                    orderedServices: serviceList.orderedServices,
+                    enabledServices: self.selectedIDs,
+                    customIDs: []
+                )
             }
             self.updateTitle()
             self.onChange?(self.selectedIDs)
         }
         let controller = NSViewController()
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-        checklist.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(checklist)
+        let contentSize = NSSize(width: 300, height: min(440, max(210, 44 + options.count * 34)))
+        let container = NSView(frame: NSRect(origin: .zero, size: contentSize))
+        container.autoresizingMask = [.width, .height]
+        serviceList.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(serviceList)
         NSLayoutConstraint.activate([
-            checklist.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
-            checklist.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
-            checklist.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
-            checklist.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+            serviceList.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 10),
+            serviceList.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -10),
+            serviceList.topAnchor.constraint(equalTo: container.topAnchor, constant: 10),
+            serviceList.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
         ])
         controller.view = container
+        controller.preferredContentSize = contentSize
         popover.contentViewController = controller
-        popover.contentSize = NSSize(width: 260, height: min(420, max(180, 32 + options.count * 26)))
+        popover.contentSize = contentSize
         popover.show(relativeTo: bounds, of: self, preferredEdge: .maxY)
     }
 
@@ -1120,8 +1144,10 @@ final class PillButton: NSButton {
     private var trackingArea: NSTrackingArea?
     private var isHovering = false
     private var isPressing = false
+    private let fixedTintColor: NSColor?
 
-    init(_ title: String, target: AnyObject?, action: Selector?) {
+    init(_ title: String, target: AnyObject?, action: Selector?, tintColor: NSColor? = nil) {
+        fixedTintColor = tintColor
         super.init(frame: .zero)
         self.title = title
         self.target = target
@@ -1135,7 +1161,7 @@ final class PillButton: NSButton {
         layer?.cornerRadius = 13
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = false
-        contentTintColor = PythiaDesign.themeColor()
+        contentTintColor = tintColor ?? PythiaDesign.themeColor()
         heightAnchor.constraint(greaterThanOrEqualToConstant: 28).isActive = true
         widthAnchor.constraint(greaterThanOrEqualToConstant: 52).isActive = true
         updateGlass()
@@ -1186,7 +1212,7 @@ final class PillButton: NSButton {
 
     private func updateGlass() {
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let theme = PythiaDesign.themeColor()
+        let theme = fixedTintColor ?? PythiaDesign.themeColor()
         contentTintColor = theme
         attributedTitle = NSAttributedString(
             string: title,

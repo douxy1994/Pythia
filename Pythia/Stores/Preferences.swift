@@ -3,6 +3,15 @@ import Foundation
 final class Preferences {
     static let shared = Preferences()
     private let defaults = UserDefaults.standard
+    private let credentialStore = LocalCredentialStore.shared
+    private let credentialNamespace = "preferences"
+    private var volatileCredentials: [String: String] = [:]
+    private var credentialStorageError: String?
+    private let credentialLock = NSLock()
+
+    private init() {
+        migrateLegacyCredentials()
+    }
 
     private func localString(forKey key: String) -> String {
         defaults.string(forKey: key) ?? ""
@@ -14,6 +23,93 @@ final class Preferences {
         } else {
             defaults.set(value, forKey: key)
         }
+    }
+
+    private static let credentialKeys = [
+        "openAIKey",
+        "deepLKey",
+        "baiduAppID",
+        "baiduSecret",
+        "youdaoAppKey",
+        "youdaoSecret",
+        "libreTranslateKey",
+        "proxyPassword",
+        "webdavPassword",
+    ]
+
+    private func credentialString(forKey key: String) -> String {
+        if let value = credentialStore.read(namespace: credentialNamespace, key: key) { return value }
+        credentialLock.lock()
+        let volatile = volatileCredentials[key]
+        credentialLock.unlock()
+        if let volatile { return volatile }
+        guard let legacy = defaults.string(forKey: key), !legacy.isEmpty else { return "" }
+        do {
+            try credentialStore.write(legacy, namespace: credentialNamespace, key: key)
+            defaults.removeObject(forKey: key)
+        } catch {
+            recordCredentialStorageError(error)
+        }
+        return legacy
+    }
+
+    private func setCredentialString(_ value: String, forKey key: String) {
+        if value.isEmpty {
+            do {
+                try credentialStore.delete(namespace: credentialNamespace, key: key)
+            } catch {
+                recordCredentialStorageError(error)
+            }
+            defaults.removeObject(forKey: key)
+            credentialLock.lock()
+            volatileCredentials.removeValue(forKey: key)
+            credentialLock.unlock()
+            return
+        }
+        do {
+            try credentialStore.write(value, namespace: credentialNamespace, key: key)
+            defaults.removeObject(forKey: key)
+            credentialLock.lock()
+            volatileCredentials.removeValue(forKey: key)
+            credentialLock.unlock()
+        } catch {
+            credentialLock.lock()
+            volatileCredentials[key] = value
+            credentialLock.unlock()
+            recordCredentialStorageError(error)
+        }
+    }
+
+    private func migrateLegacyCredentials() {
+        for key in Self.credentialKeys {
+            guard credentialStore.read(namespace: credentialNamespace, key: key) == nil else { continue }
+            let currentValue = defaults.string(forKey: key)
+            let legacyValue = UserDefaults(suiteName: "com.douxy.pot")?.string(forKey: key)
+            guard let value = [currentValue, legacyValue].compactMap({ $0 }).first(where: { !$0.isEmpty }) else {
+                continue
+            }
+            do {
+                try credentialStore.write(value, namespace: credentialNamespace, key: key)
+                defaults.removeObject(forKey: key)
+            } catch {
+                recordCredentialStorageError(error)
+            }
+        }
+    }
+
+    private func recordCredentialStorageError(_ error: Error) {
+        credentialLock.lock()
+        credentialStorageError = error.localizedDescription
+        credentialLock.unlock()
+        NSLog("Pythia local credential storage failed: %@", error.localizedDescription)
+    }
+
+    func consumeCredentialStorageError() -> String? {
+        credentialLock.lock()
+        defer { credentialLock.unlock() }
+        let error = credentialStorageError
+        credentialStorageError = nil
+        return error
     }
 
     private func uniqueStrings(_ values: [String]) -> [String] {
@@ -78,8 +174,8 @@ final class Preferences {
     }
 
     var openAIKey: String {
-        get { localString(forKey: "openAIKey") }
-        set { setLocalString(newValue, forKey: "openAIKey") }
+        get { credentialString(forKey: "openAIKey") }
+        set { setCredentialString(newValue, forKey: "openAIKey") }
     }
 
     var openAIModel: String {
@@ -88,28 +184,28 @@ final class Preferences {
     }
 
     var deepLKey: String {
-        get { localString(forKey: "deepLKey") }
-        set { setLocalString(newValue, forKey: "deepLKey") }
+        get { credentialString(forKey: "deepLKey") }
+        set { setCredentialString(newValue, forKey: "deepLKey") }
     }
 
     var baiduAppID: String {
-        get { localString(forKey: "baiduAppID") }
-        set { setLocalString(newValue, forKey: "baiduAppID") }
+        get { credentialString(forKey: "baiduAppID") }
+        set { setCredentialString(newValue, forKey: "baiduAppID") }
     }
 
     var baiduSecret: String {
-        get { localString(forKey: "baiduSecret") }
-        set { setLocalString(newValue, forKey: "baiduSecret") }
+        get { credentialString(forKey: "baiduSecret") }
+        set { setCredentialString(newValue, forKey: "baiduSecret") }
     }
 
     var youdaoAppKey: String {
-        get { localString(forKey: "youdaoAppKey") }
-        set { setLocalString(newValue, forKey: "youdaoAppKey") }
+        get { credentialString(forKey: "youdaoAppKey") }
+        set { setCredentialString(newValue, forKey: "youdaoAppKey") }
     }
 
     var youdaoSecret: String {
-        get { localString(forKey: "youdaoSecret") }
-        set { setLocalString(newValue, forKey: "youdaoSecret") }
+        get { credentialString(forKey: "youdaoSecret") }
+        set { setCredentialString(newValue, forKey: "youdaoSecret") }
     }
 
     var libreTranslateURL: String {
@@ -118,8 +214,8 @@ final class Preferences {
     }
 
     var libreTranslateKey: String {
-        get { localString(forKey: "libreTranslateKey") }
-        set { setLocalString(newValue, forKey: "libreTranslateKey") }
+        get { credentialString(forKey: "libreTranslateKey") }
+        set { setCredentialString(newValue, forKey: "libreTranslateKey") }
     }
 
     var pluginName: String {
@@ -412,8 +508,8 @@ final class Preferences {
     }
 
     var proxyPassword: String {
-        get { localString(forKey: "proxyPassword") }
-        set { setLocalString(newValue, forKey: "proxyPassword") }
+        get { credentialString(forKey: "proxyPassword") }
+        set { setCredentialString(newValue, forKey: "proxyPassword") }
     }
 
     var noProxy: String {
@@ -452,8 +548,8 @@ final class Preferences {
     }
 
     var webdavPassword: String {
-        get { localString(forKey: "webdavPassword") }
-        set { setLocalString(newValue, forKey: "webdavPassword") }
+        get { credentialString(forKey: "webdavPassword") }
+        set { setCredentialString(newValue, forKey: "webdavPassword") }
     }
 
     var webdavHistoryAutoSync: Bool {

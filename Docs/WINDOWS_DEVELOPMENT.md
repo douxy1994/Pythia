@@ -2,12 +2,14 @@
 
 This repository contains a 64-bit x64 Flutter Windows client under `Windows/Pythia.Windows`, including the native Windows host/CMake files needed to register platform channels. Local macOS runs Flutter/Dart tests and native contract checks; the fork's GitHub Actions Windows runner now compiles and packages the AMD64 release. Interactive runtime verification still requires Windows x64.
 
+The authoritative, detailed continuation document is [`../WINDOWS_CODEX_HANDOFF.md`](../WINDOWS_CODEX_HANDOFF.md). A Windows Codex agent must read it before changing the client. This file remains a shorter architecture and command reference.
+
 ## Architecture Requirement
 
 - Supported release architecture: x64/AMD64 only.
 - `cmake/PythiaWindowsArchitecture.cmake` stops configuration unless the toolchain is 64-bit and reports `x64`, `AMD64`, or `x86_64`.
 - `tool/verify_release_package.dart` parses the PE header and requires `Pythia.exe` machine `0x8664` before upload.
-- `tool/test_native_contracts.sh` verifies the architecture guard and tray command mapping from macOS or Linux.
+- `tool/test_native_contracts.sh` verifies the architecture guard and tray command mapping from the macOS development host.
 
 ## Recommended Stack
 
@@ -109,3 +111,5 @@ dart run tool/verify_release_package.dart build\windows\x64\runner\Release
 ```
 
 Then verify the feature matrix in `Docs/FEATURE_MATRIX.md` and the release gates in `Docs/RELEASE_CHECKLIST.md`.
+
+For public plugin downloads, use `Plugins/README.md`. For the package/runtime contract, use `Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md`. Public plugins must remain outside the Windows release payload.

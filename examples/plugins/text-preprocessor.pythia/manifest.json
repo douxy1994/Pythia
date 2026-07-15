@@ -1,0 +1,44 @@
+{
+  "author": "Pythia Project",
+  "capabilities": [
+    "translate",
+    "preprocess"
+  ],
+  "configuration": [
+    {
+      "defaultValue": "true",
+      "key": "collapseWhitespace",
+      "label": "合并连续空白",
+      "options": {
+        "false": "关闭",
+        "true": "开启"
+      },
+      "required": false,
+      "type": "select"
+    },
+    {
+      "defaultValue": "true",
+      "key": "trimLines",
+      "label": "清理每行首尾空白",
+      "options": {
+        "false": "关闭",
+        "true": "开启"
+      },
+      "required": false,
+      "type": "select"
+    }
+  ],
+  "description": "Normalizes whitespace and returns the processed text without network access.",
+  "entry": "main.js",
+  "id": "com.douxy.pythia.example.text-preprocessor",
+  "minimumPythiaVersion": "1.0.0",
+  "name": "Text Preprocessor",
+  "permissions": [],
+  "schemaVersion": "1.0",
+  "supportedPlatforms": [
+    "macos",
+    "windows"
+  ],
+  "type": "translator",
+  "version": "1.0.0"
+}

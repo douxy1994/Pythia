@@ -2,6 +2,8 @@
 
 This is the 64-bit x64 Flutter Windows client for Pythia 1.0.0, including the native Windows host files required to build and register platform channels. The CMake project rejects non-x64 toolchains, the release verifier requires `Pythia.exe` to use PE machine `0x8664` (AMD64), and GitHub Actions now builds and packages the verified candidate.
 
+Before continuing Windows work, read the repository-level [Windows Codex handoff](../../WINDOWS_CODEX_HANDOFF.md). It is the authoritative continuation document and includes the correct branch baseline, exact toolchain, source map, platform-channel contract, known UI/IME gaps, manual Windows acceptance matrix, release rules, and definition of done.
+
 This macOS workspace can run Flutter/Dart logic tests, but cannot build or run the Windows executable because it lacks a Windows runtime and Visual Studio Build Tools. The files here are structured so a Windows development machine can run:
 
 ```powershell
@@ -11,6 +13,8 @@ flutter run -d windows
 flutter build windows --release
 dart run tool/verify_release_package.dart build\windows\x64\runner\Release
 ```
+
+The current published `.pythia` packages are under [`../../Plugins`](../../Plugins/README.md). The complete plugin contract is documented in [`../../Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md`](../../Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md). Public plugin downloads are for interactive testing and must never be copied into the application release directory.
 
 ## Implemented In This Scaffold
 
@@ -43,6 +47,6 @@ dart run tool/verify_release_package.dart build\windows\x64\runner\Release
 - Verify Google, Baidu, Youdao, OpenAI-compatible, DeepL, and LibreTranslate against live Windows networking and Credential Manager.
 - Run `dart run tool/verify_release_package.dart build\windows\x64\runner\Release` against the real release directory after `flutter build windows --release`. Update checks already point to `https://github.com/douxy1994/Pythia/releases`, but need live Windows verification.
 
-Do not bundle plugins in the Windows release package.
+Do not bundle plugins in the Windows release package. Public plugins remain separate downloads in the repository `Plugins/` directory.
 
 Build the release installer on Windows with `powershell -File tool/build_windows_installer.ps1`. It produces `dist/Pythia-1.0.0-windows-x64.exe` and the required `.sha256` sidecar. Set `PYTHIA_WINDOWS_CERT_SHA1` to a certificate already installed in the Windows certificate store for a production Authenticode-signed build; no certificate or private key belongs in this repository.

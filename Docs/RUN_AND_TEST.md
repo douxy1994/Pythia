@@ -41,7 +41,7 @@ flutter build windows --release
 dart run tool/verify_release_package.dart build\windows\x64\runner\Release
 ```
 
-The platform-independent native tray action map and Windows x64 CMake guard can be checked from macOS or Linux:
+The platform-independent native tray action map and Windows x64 CMake guard can be checked from the macOS development host:
 
 ```sh
 cd Windows/Pythia.Windows

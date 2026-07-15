@@ -12,6 +12,7 @@ import 'core/history_record.dart';
 import 'core/history_change_sync_scheduler.dart';
 import 'core/hotkey_accelerator.dart';
 import 'core/local_storage.dart';
+import 'core/plugin_system.dart';
 import 'core/portable_backup.dart';
 import 'core/settings_model.dart';
 import 'core/translation_service.dart';
@@ -26,6 +27,7 @@ import 'platform/credential_store.dart';
 import 'platform/platform_services.dart';
 import 'platform/tray_action_dispatcher.dart';
 import 'ui/hotkey_recorder_field.dart';
+import 'ui/plugin_settings_panel.dart';
 
 const webdavPasswordSecretKey = 'webdav.password';
 const openAICompatibleApiKeySecretKey = 'provider.openai-compatible.apiKey';
@@ -128,6 +130,8 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
   final credentialStore = const MethodChannelCredentialStore();
   final platformService = const MethodChannelWindowsPlatformService();
   final translationHttpClient = http.Client();
+  PythiaPluginManager? pluginManager;
+  List<InstalledPythiaPlugin> installedPlugins = const [];
   late final TrayActionDispatcher trayActionDispatcher;
   List<PythiaTranslationResult> results = const [];
   List<PythiaHistoryRecord> history = const [];
@@ -150,6 +154,7 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
       onQuit: _quitFromTray,
     );
     _loadHistory();
+    _loadPlugins();
     _configureWebDavAutoSync();
     _configurePlatformIntegrations();
     if (widget.settings.webdavHistoryAutoSync &&
@@ -216,6 +221,21 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
       historySearchController.text,
     );
     if (mounted) setState(() => history = records);
+  }
+
+  Future<void> _loadPlugins() async {
+    try {
+      final manager = pluginManager ??
+          await PythiaPluginManager.create(credentialStore: credentialStore);
+      final plugins = await manager.listInstalled();
+      if (!mounted) return;
+      setState(() {
+        pluginManager = manager;
+        installedPlugins = plugins;
+      });
+    } catch (error) {
+      if (mounted) setState(() => status = '插件运行时初始化失败：$error');
+    }
   }
 
   Future<void> _translate() async {
@@ -669,6 +689,12 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
           credentialStore: credentialStore,
           httpClient: translationHttpClient,
         ),
+      if (pluginManager != null)
+        for (final plugin in installedPlugins.where((item) => item.enabled))
+          PythiaPluginTranslationProvider(
+            manager: pluginManager!,
+            plugin: plugin,
+          ),
     ];
     return TranslationServiceRegistry(providers);
   }
@@ -693,6 +719,8 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
         const (PythiaSettings.deepLServiceId, 'DeepL'),
       if (widget.settings.libreTranslateEnabled)
         const (PythiaSettings.libreTranslateServiceId, 'LibreTranslate'),
+      for (final plugin in installedPlugins.where((item) => item.enabled))
+        (plugin.serviceId, plugin.manifest.name),
     ];
   }
 
@@ -706,7 +734,10 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
     }
     if (enabled.isEmpty) enabled.add('local');
     widget.onSettingsChanged(
-      widget.settings.copyWith(enabledTranslateServices: enabled),
+      widget.settings.copyWith(
+        enabledTranslateServices: enabled,
+        translateServiceOrder: enabled,
+      ),
     );
   }
 
@@ -1019,14 +1050,18 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
   }
 
   Future<void> _openSettings(BuildContext context) async {
+    if (pluginManager == null) await _loadPlugins();
+    if (!context.mounted) return;
     final next = await showDialog<PythiaSettings>(
       context: context,
       builder: (context) => SettingsDialog(
         settings: widget.settings,
         credentialStore: credentialStore,
         historyRepository: widget.store,
+        pluginManager: pluginManager,
       ),
     );
+    await _loadPlugins();
     if (next != null) {
       await widget.onSettingsChanged(next);
       await _loadHistory();
@@ -1039,12 +1074,14 @@ class SettingsDialog extends StatefulWidget {
   final PythiaSettings settings;
   final CredentialStore credentialStore;
   final HistoryRepository historyRepository;
+  final PythiaPluginManager? pluginManager;
 
   const SettingsDialog({
     super.key,
     required this.settings,
     required this.credentialStore,
     required this.historyRepository,
+    required this.pluginManager,
   });
 
   @override
@@ -1068,6 +1105,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late bool openAICompatibleEnabled = widget.settings.openAICompatibleEnabled;
   late bool deepLEnabled = widget.settings.deepLEnabled;
   late bool libreTranslateEnabled = widget.settings.libreTranslateEnabled;
+  late List<String> enabledTranslateServices =
+      widget.settings.enabledTranslateServices.toList();
   late final showWindowHotkey = TextEditingController(
     text: widget.settings.showWindowHotkey,
   );
@@ -1229,6 +1268,25 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     ),
                   ),
                 ),
+              const Divider(),
+              PluginSettingsPanel(
+                manager: widget.pluginManager,
+                onChanged: (selectedServiceId) async {
+                  final plugins = await widget.pluginManager?.listInstalled() ??
+                      const <InstalledPythiaPlugin>[];
+                  final available = plugins
+                      .where((plugin) => plugin.enabled)
+                      .map((plugin) => plugin.serviceId)
+                      .toSet();
+                  enabledTranslateServices.removeWhere(
+                    (id) => id.startsWith('plugin:') && !available.contains(id),
+                  );
+                  if (selectedServiceId != null) {
+                    enabledTranslateServices.remove(selectedServiceId);
+                    enabledTranslateServices.insert(0, selectedServiceId);
+                  }
+                },
+              ),
               const Divider(),
               SwitchListTile(
                 value: googleEnabled,
@@ -1629,8 +1687,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
               }
             }
             if (!context.mounted) return;
-            final enabledServices =
-                widget.settings.enabledTranslateServices.toList();
+            final enabledServices = enabledTranslateServices.toList();
             _updateNewProviderSelection(
               enabledServices,
               id: PythiaSettings.googleServiceId,
@@ -1694,6 +1751,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         ? 'Ctrl+Alt+S'
                         : screenshotTranslateHotkey.text.trim(),
                 enabledTranslateServices: enabledServices,
+                translateServiceOrder: enabledServices,
                 googleEnabled: googleEnabled,
                 baiduEnabled: baiduEnabled,
                 youdaoEnabled: youdaoEnabled,
