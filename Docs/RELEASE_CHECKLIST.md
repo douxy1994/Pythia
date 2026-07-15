@@ -9,6 +9,7 @@
 - README describes Pythia and does not link to the original project.
 - Sensitive values are not included in app bundles, archives, release notes, or generated logs.
 - `.pythia` examples and development guide pass `node script/validate_pythia_plugins.mjs`.
+- Public packages in `Plugins/` contain only their Manifest, JavaScript entry, optional icon, and GPL license; checksums match `Plugins/catalog.json` and no user configuration or secret is present.
 - Manual `.potext` installation creates a validated `.pythia`, preserves the original backup, and retains a usable compatibility path after conversion failure.
 - Settings migration converts old Pot plugins directly to `.pythia`; successful conversions leave no Pythia-side legacy copy or `.potext` backup, while failures are not imported.
 
@@ -22,9 +23,11 @@
 - `./script/package_release.sh` produces `release/Pythia/Pythia.app` and `release/Pythia/Pythia.dmg`.
 - `hdiutil verify release/Pythia/Pythia.dmg` succeeds.
 - Accessibility selection translation does not prompt repeatedly after updates signed by the same identity.
-- Service, WebDAV, proxy, and plugin credentials migrate out of UserDefaults and remain readable without repeated Keychain authorization prompts.
+- Service, WebDAV, proxy, and plugin credentials migrate out of UserDefaults into `credentials.json`; the file is `0600`, portable backups omit it, and the app contains no `SecItem` runtime calls.
 
 ## Windows
+
+- The Windows agent has completed the tasks and manual acceptance matrix in `WINDOWS_CODEX_HANDOFF.md`.
 
 - Windows project builds with an x64 Visual Studio toolchain; non-x64 CMake configuration is rejected.
 - `Pythia.exe` is AMD64 (`PE machine 0x8664`), verified by the release package gate.

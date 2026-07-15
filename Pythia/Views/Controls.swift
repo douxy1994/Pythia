@@ -68,7 +68,9 @@ final class PythiaTextView: NSScrollView {
         textView.textContainerInset = NSSize(width: 12, height: 8)
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
-        textView.autoresizingMask = [.width]
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = scrollable
+        textView.autoresizingMask = scrollable ? [.width] : [.width, .height]
         textView.string = placeholder
         documentView = textView
         applyTextAppearance()
@@ -89,9 +91,27 @@ final class PythiaTextView: NSScrollView {
         applyTextAppearance()
     }
 
+    override func layout() {
+        super.layout()
+        guard !isScrollable else { return }
+        let viewport = contentView.bounds.size
+        guard viewport.width > 0, viewport.height > 0 else { return }
+        let expectedFrame = NSRect(origin: .zero, size: viewport)
+        if !NSEqualRects(textView.frame, expectedFrame) {
+            textView.frame = expectedFrame
+        }
+        // A result card is intentionally non-scrollable. Width changes must
+        // never leave the clip view at an old vertical offset and hide line 1.
+        if contentView.bounds.origin != .zero {
+            contentView.scroll(to: .zero)
+            reflectScrolledClipView(contentView)
+        }
+    }
+
     func setPlainText(_ value: String) {
         textView.string = value
         applyTextAppearance()
+        needsLayout = true
     }
 
     func applyTextAppearance() {
@@ -162,18 +182,30 @@ final class PythiaTextView: NSScrollView {
 
     func fittingHeight(for width: CGFloat) -> CGFloat {
         guard let container = textView.textContainer, let lm = textView.layoutManager else { return 44 }
-        let contentWidth = max(240, width - 8)
-        // Force a fresh measurement layout against the given width: stop width
-        // tracking, set the container to the desired width, invalidate the
-        // whole glyph range, then ensure layout completes synchronously.
+        // NSTextView lays text out inside its horizontal text-container insets.
+        // Measuring against the whole scroll-view width makes a paragraph look
+        // one line shorter than it really is and clips the final line.
+        let contentWidth = max(1, width - textView.textContainerInset.width * 2)
+        let originalTracksWidth = container.widthTracksTextView
         container.widthTracksTextView = false
-        container.size = NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
-        container.layoutManager?.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textView.string.count), actualCharacterRange: nil)
+        container.containerSize = NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
+        let characterCount = textView.textStorage?.length ?? 0
+        lm.invalidateLayout(
+            forCharacterRange: NSRange(location: 0, length: characterCount),
+            actualCharacterRange: nil
+        )
         lm.ensureLayout(for: container)
-        let glyphRange = lm.glyphRange(for: container)
-        let used = lm.boundingRect(forGlyphRange: glyphRange, in: container).height
-        container.widthTracksTextView = true
-        return max(44, ceil(used + textView.textContainerInset.height * 2 + 6))
+        // usedRect includes complete line fragments (leading and descenders),
+        // unlike a glyph bounding box, which can underestimate the last line.
+        let usedHeight = lm.usedRect(for: container).maxY
+        let font = textView.font ?? NSFont.systemFont(ofSize: 15)
+        let trailingLineHeight = textView.string.hasSuffix("\n") ? lm.defaultLineHeight(for: font) : 0
+        container.widthTracksTextView = originalTracksWidth
+        container.containerSize = NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
+        return max(
+            44,
+            ceil(usedHeight + trailingLineHeight + textView.textContainerInset.height * 2 + 4)
+        )
     }
 }
 

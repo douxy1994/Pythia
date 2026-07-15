@@ -42,7 +42,12 @@ cp -R "$APP" "$DIST/Pythia.app"
 codesign --force --deep --timestamp=none --sign "$SIGN_IDENTITY" --entitlements "$ROOT/Pythia/Pythia.entitlements" "$DIST/Pythia.app"
 verify_stable_identity "$DIST/Pythia.app"
 
-if find "$DIST/Pythia.app" \( -iname "*.potext" -o -iname "*.pythia" -o -path "*/Plugins/*" \) | grep -q .; then
+if nm -u "$DIST/Pythia.app/Contents/MacOS/Pythia" | grep -Eq '_(SecItemCopyMatching|SecItemAdd|SecItemUpdate|SecItemDelete)'; then
+  echo "Release app contains direct macOS Keychain item access." >&2
+  exit 1
+fi
+
+if find "$DIST/Pythia.app" \( -iname "*.potext" -o -iname "*.pythia" -o -iname "credentials.json" -o -iname "plugin-configs.json" -o -path "*/Plugins/*" \) | grep -q .; then
   echo "Release app must not include third-party plugin packages." >&2
   find "$DIST/Pythia.app" \( -iname "*.potext" -o -iname "*.pythia" -o -path "*/Plugins/*" \) >&2
   exit 1

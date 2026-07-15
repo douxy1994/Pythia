@@ -2,6 +2,8 @@
 
 本文档适用于 Pythia 1.0.0 的 `.pythia` 插件。读者不需要阅读 Pythia 主工程源码，只要具备基础 JavaScript 和 JSON 知识，就可以创建、测试和分发翻译插件。
 
+可以直接下载并安装的公开插件位于 [`../Plugins`](../Plugins/README.md)，完整源码级示例位于 [`../examples/plugins`](../examples/plugins/README.md)。公开下载包和应用发布包相互独立：Pythia 应用本身不捆绑第三方插件。
+
 Pythia 同时接受 `.pythia` 与旧版 `.potext`，但新插件应优先使用 `.pythia`。`.potext` 仅用于兼容：安装时 Pythia 会先尝试转换为 `.pythia`，转换失败才使用兼容适配层运行原插件。
 
 ## 1. 最小可运行插件
@@ -113,7 +115,7 @@ Pythia 1.0.0 要求以下字段全部存在。
 | 类型 | 用途 |
 | --- | --- |
 | `text` | 普通文本、URL、模型名、数值字符串。 |
-| `secret` | API Key、Token、密码。Pythia 使用 macOS Keychain 或 Windows Credential Manager/DPAPI 保存，不写入普通设置、备份或日志。 |
+| `secret` | API Key、Token、密码。macOS 使用仅当前用户可读写的 Pythia 本地凭据文件，且不访问系统钥匙串；Windows 使用 Credential Manager/DPAPI。两端都不会把密钥写入普通设置、可移植备份或日志。 |
 | `select` | 固定选项；`options` 为值到显示名称的对象。 |
 
 `defaultValue` 只能用于非敏感默认值。严禁给 `secret` 提供真实默认值。
@@ -388,7 +390,7 @@ Rename-Item ..\echo-translator.zip echo-translator.pythia
 - macOS：`~/Library/Application Support/Pythia/Plugins`
 - Windows：`%APPDATA%\Pythia\Plugins`
 
-不要直接修改 `plugin-configs.json` 或系统凭据。开发调试也应通过设置页写入配置。
+不要直接修改 `plugin-configs.json`、macOS 的 `credentials.json` 或 Windows 系统凭据。开发调试也应通过设置页写入配置。
 
 ## 14. `.potext` 自动转换
 

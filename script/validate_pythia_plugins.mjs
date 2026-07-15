@@ -113,3 +113,7 @@ assert.notEqual(openAIWithoutSecret.status, 0);
 assert.match(openAIWithoutSecret.stderr, /AUTHENTICATION_FAILED/);
 
 console.log(`Validated ${packages.length} Pythia plugin examples and both bundled runners.`);
+
+execFileSync(process.execPath, [join(repository, "script", "validate_public_plugins.mjs")], {
+  stdio: "inherit",
+});
