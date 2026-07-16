@@ -4,10 +4,16 @@ on:
   push:
     paths:
       - "Windows/Pythia.Windows/**"
+      - "Pythia/Resources/pythia-plugin-runner.cjs"
+      - "Plugins/**"
+      - "script/*plugin*.mjs"
       - ".github/workflows/windows-x64.yml"
   pull_request:
     paths:
       - "Windows/Pythia.Windows/**"
+      - "Pythia/Resources/pythia-plugin-runner.cjs"
+      - "Plugins/**"
+      - "script/*plugin*.mjs"
       - ".github/workflows/windows-x64.yml"
   workflow_dispatch:
 
@@ -33,6 +39,12 @@ jobs:
         run: flutter pub get
       - name: Validate Pythia plugin contract and examples
         run: node ..\..\script\validate_pythia_plugins.mjs
+      - name: Validate public plugin packages
+        run: node ..\..\script\validate_public_plugins.mjs
+      - name: Test public plugin long-text handling
+        run: node ..\..\script\test_public_plugin_long_text.mjs
+      - name: Test plugin runner network fallback
+        run: node ..\..\script\test_plugin_runner_network.mjs
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress -y
