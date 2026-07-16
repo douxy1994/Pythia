@@ -1,0 +1,82 @@
+{
+  "author" : "pot-app",
+  "capabilities" : [
+    "translate"
+  ],
+  "configuration" : [
+    {
+      "key" : "apiKey",
+      "label" : "百炼 API Key",
+      "required" : true,
+      "type" : "secret"
+    },
+    {
+      "defaultValue" : "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "key" : "baseURL",
+      "label" : "API 地址",
+      "required" : false,
+      "type" : "text"
+    },
+    {
+      "defaultValue" : "qwen3.5-35b-a3b",
+      "key" : "model",
+      "label" : "模型 ID",
+      "required" : false,
+      "type" : "text"
+    },
+    {
+      "defaultValue" : "false",
+      "key" : "enableThinking",
+      "label" : "思考模式",
+      "options" : {
+        "false" : "关闭",
+        "true" : "开启"
+      },
+      "required" : false,
+      "type" : "select"
+    },
+    {
+      "defaultValue" : "",
+      "key" : "thinkingBudget",
+      "label" : "思考 tokens 上限",
+      "required" : false,
+      "type" : "text"
+    },
+    {
+      "defaultValue" : "0.1",
+      "key" : "temperature",
+      "label" : "Temperature",
+      "required" : false,
+      "type" : "text"
+    },
+    {
+      "defaultValue" : "0.8",
+      "key" : "topP",
+      "label" : "Top P",
+      "required" : false,
+      "type" : "text"
+    },
+    {
+      "defaultValue" : "4096",
+      "key" : "maxTokens",
+      "label" : "最大输出 tokens",
+      "required" : false,
+      "type" : "text"
+    }
+  ],
+  "description" : "由 Pythia 从 Pot 插件自动转换。",
+  "entry" : "main.js",
+  "id" : "plugin.com.pot-app.aliyun-qwen3-5-35b-a3b",
+  "minimumPythiaVersion" : "1.0.0",
+  "name" : "阿里云 Qwen3.5-35B-A3B",
+  "permissions" : [
+    "network"
+  ],
+  "schemaVersion" : "1.0",
+  "supportedPlatforms" : [
+    "macos",
+    "windows"
+  ],
+  "type" : "translator",
+  "version" : "1.1.0"
+}

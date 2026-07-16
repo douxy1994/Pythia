@@ -1,0 +1,36 @@
+{
+  "author" : "tzulao55",
+  "capabilities" : [
+    "translate"
+  ],
+  "configuration" : [
+    {
+      "defaultValue" : "deepseek-chat",
+      "key" : "model",
+      "label" : "模型选择",
+      "required" : false,
+      "type" : "text"
+    },
+    {
+      "key" : "apiKey",
+      "label" : "API密钥",
+      "required" : true,
+      "type" : "secret"
+    }
+  ],
+  "description" : "由 Pythia 从 Pot 插件自动转换。",
+  "entry" : "main.js",
+  "id" : "plugin.com.TzuLao.deepseek",
+  "minimumPythiaVersion" : "1.0.0",
+  "name" : "deepseek",
+  "permissions" : [
+    "network"
+  ],
+  "schemaVersion" : "1.0",
+  "supportedPlatforms" : [
+    "macos",
+    "windows"
+  ],
+  "type" : "translator",
+  "version" : "1.1.0"
+}
