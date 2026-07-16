@@ -25,13 +25,30 @@ class PythiaTranslationResult {
   final String serviceName;
   final String text;
   final String? model;
+  final String? errorMessage;
 
   const PythiaTranslationResult({
     required this.serviceId,
     required this.serviceName,
     required this.text,
     this.model,
+    this.errorMessage,
   });
+
+  factory PythiaTranslationResult.failure({
+    required String serviceId,
+    required String serviceName,
+    required String errorMessage,
+  }) {
+    return PythiaTranslationResult(
+      serviceId: serviceId,
+      serviceName: serviceName,
+      text: '',
+      errorMessage: errorMessage,
+    );
+  }
+
+  bool get isSuccess => errorMessage == null;
 }
 
 class PythiaLanguagePair {
@@ -534,9 +551,14 @@ class TranslationServiceRegistry {
         )));
       } catch (error) {
         errors.add('${provider.displayName}: $error');
+        results.add(PythiaTranslationResult.failure(
+          serviceId: provider.id,
+          serviceName: provider.displayName,
+          errorMessage: error.toString(),
+        ));
       }
     }
-    if (results.isEmpty) {
+    if (!results.any((result) => result.isSuccess)) {
       throw StateError(errors.join('\n'));
     }
     return results;

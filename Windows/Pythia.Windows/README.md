@@ -4,7 +4,7 @@ This is the 64-bit x64 Flutter Windows client for Pythia 1.0.0, including the na
 
 Before continuing Windows work, read the repository-level [Windows Codex handoff](../../WINDOWS_CODEX_HANDOFF.md). It is the authoritative continuation document and includes the correct branch baseline, exact toolchain, source map, platform-channel contract, known UI/IME gaps, manual Windows acceptance matrix, release rules, and definition of done.
 
-This macOS workspace can run Flutter/Dart logic tests, but cannot build or run the Windows executable because it lacks a Windows runtime and Visual Studio Build Tools. The files here are structured so a Windows development machine can run:
+The Windows project can be developed and packaged directly with the pinned Flutter 3.44.5 toolchain. The latest local Windows acceptance run is recorded in [`../../Docs/WINDOWS_ACCEPTANCE_2026-07-16.md`](../../Docs/WINDOWS_ACCEPTANCE_2026-07-16.md). A Windows development machine can run:
 
 ```powershell
 flutter pub get
@@ -41,7 +41,8 @@ The current published `.pythia` packages are under [`../../Plugins`](../../Plugi
 
 ## Still Required On Windows
 
-- Verify the included native host on a real Windows Flutter environment with Visual Studio Build Tools.
+- Continue interactive verification of the included native host on representative Windows applications and display configurations. Local x64 build, raw start/restart, installer build, silent install/start/uninstall, and a persistent current-user installation now pass on Windows 11 build 26200 at 150% scaling.
+- Enter submission, Shift+Enter line breaks, IME composing protection, fixed source height, vertically growing results, persistent multi-service selection/order, expandable result cards, and per-service failure cards are implemented and covered by automated tests. Chinese IME candidate behavior still needs user-driven checks with the input methods listed in the handoff.
 - Verify screenshot OCR, global hotkeys, and signed update installation on Windows. The settings page has a real hotkey recorder and the updater downloads only paired x64 installer/SHA-256 assets, verifies them, checks Authenticode natively, and launches the installer.
 - Verify UI Automation selected-text reading and its clipboard fallback across representative Windows applications.
 - Verify Google, Baidu, Youdao, OpenAI-compatible, DeepL, and LibreTranslate against live Windows networking and Credential Manager.

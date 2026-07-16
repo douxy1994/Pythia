@@ -7,9 +7,16 @@ $installer = Join-Path $dist "Pythia-1.0.0-windows-x64.exe"
 $checksum = "$installer.sha256"
 $isccCandidates = @(
     "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-    "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+    "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
 )
 $iscc = $isccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $iscc) {
+    $isccCommand = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
+    if ($isccCommand) {
+        $iscc = $isccCommand.Source
+    }
+}
 $chineseLanguageCommit = "eafc69c06f3b23bdccbf22d3fde83b499ddc4901"
 $chineseLanguageSha256 = "6753be2c5e2740d859900fd902824db2ec568da5c5b52486524c9762d778b0b0"
 $chineseLanguageFile = Join-Path $env:TEMP "Pythia-ChineseSimplified-$chineseLanguageCommit.isl"

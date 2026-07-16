@@ -2,8 +2,8 @@
 
 ## Cross-Platform
 
-- Windows x64 compilation and installer packaging are verified by the fork's GitHub Actions Windows runner. This macOS workspace still cannot launch the executable, so interactive runtime verification remains outstanding.
-- Flutter/Dart tests and platform-independent native contracts run locally. Windows-only tray, hotkey, OCR, Credential Manager, WebDAV, startup, and installer behavior still require live Windows x64 checks.
+- Windows x64 compilation and installer packaging are verified by GitHub Actions and by a local Windows 11 build/install smoke run. User-driven interaction verification remains outstanding for IME candidate windows, mixed-DPI displays, representative third-party applications, and credentialed network services.
+- Flutter/Dart tests, the release package gate, raw start/restart, and silent install/start/uninstall pass locally. Windows-only tray, hotkey conflicts, OCR language packs, Credential Manager persistence, WebDAV cross-device sync, startup-after-login, and signed updates still require live scenario checks.
 - WebDAV sync is implemented in both apps but is not yet end-to-end verified with one live account across macOS and Windows x64.
 - macOS history now writes the cross-platform `PythiaHistoryRecord` fields, can migrate older local `history.json` records, and has manual/startup/periodic/local-change-debounced/best-effort-exit WebDAV history sync. Conflict log UI and live Windows-side sync verification are still missing.
 - Portable settings backup is separated from device-specific and sensitive fields. Automatic settings synchronization remains intentionally disabled; users explicitly trigger local or WebDAV backup/restore.

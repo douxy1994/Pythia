@@ -28,6 +28,9 @@ import 'platform/platform_services.dart';
 import 'platform/tray_action_dispatcher.dart';
 import 'ui/hotkey_recorder_field.dart';
 import 'ui/plugin_settings_panel.dart';
+import 'ui/service_picker_button.dart';
+import 'ui/translation_workspace.dart';
+import 'ui/windows_theme.dart';
 
 const webdavPasswordSecretKey = 'webdav.password';
 const openAICompatibleApiKeySecretKey = 'provider.openai-compatible.apiKey';
@@ -85,16 +88,8 @@ class _PythiaWindowsAppState extends State<PythiaWindowsApp> {
       debugShowCheckedModeBanner: false,
       title: 'Pythia',
       themeMode: themeMode,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF80B847),
-        brightness: Brightness.light,
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF80B847),
-        brightness: Brightness.dark,
-      ),
+      theme: pythiaWindowsTheme(Brightness.light),
+      darkTheme: pythiaWindowsTheme(Brightness.dark),
       home: loaded
           ? PythiaHomePage(
               store: store,
@@ -258,17 +253,21 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
         text: text,
         sourceLanguage: widget.settings.sourceLanguage,
         targetLanguage: widget.settings.targetLanguage,
-        serviceIds: widget.settings.enabledTranslateServices,
+        serviceIds: [
+          for (final id in widget.settings.translateServiceOrder)
+            if (widget.settings.enabledTranslateServices.contains(id)) id,
+        ],
       );
+      final successful = translated.where((item) => item.isSuccess).toList();
       if (widget.settings.saveHistory) {
         final now = DateTime.now().toUtc();
         await widget.store.addHistory(PythiaHistoryRecord(
           id: now.microsecondsSinceEpoch.toString(),
           sourceText: text,
-          translatedText: translated.map((item) => item.text).join('\n\n'),
+          translatedText: successful.map((item) => item.text).join('\n\n'),
           sourceLanguage: languages.source,
           targetLanguage: languages.target,
-          service: translated.map((item) => item.serviceName).join(', '),
+          service: successful.map((item) => item.serviceName).join(', '),
           createdAt: now,
           updatedAt: now,
           deviceId: await widget.store.deviceId(),
@@ -278,7 +277,8 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
       await _loadHistory();
       setState(() {
         results = translated;
-        status = '翻译完成';
+        final failedCount = translated.length - successful.length;
+        status = failedCount == 0 ? '翻译完成' : '翻译完成，$failedCount 个服务失败';
       });
     } catch (error) {
       setState(() => status = '翻译失败：$error');
@@ -699,46 +699,71 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
     return TranslationServiceRegistry(providers);
   }
 
-  List<(String, String)> _availableTranslateServices() {
+  List<PythiaServiceOption> _availableTranslateServices() {
     return [
-      const ('local', 'Local'),
+      const PythiaServiceOption('local', 'Local'),
       if (widget.settings.googleEnabled)
-        const (PythiaSettings.googleServiceId, 'Google'),
+        const PythiaServiceOption(PythiaSettings.googleServiceId, 'Google'),
       if (widget.settings.baiduEnabled)
-        const (PythiaSettings.baiduServiceId, '百度翻译'),
+        const PythiaServiceOption(PythiaSettings.baiduServiceId, '百度翻译'),
       if (widget.settings.youdaoEnabled)
-        const (PythiaSettings.youdaoServiceId, '有道翻译'),
+        const PythiaServiceOption(PythiaSettings.youdaoServiceId, '有道翻译'),
       if (widget.settings.openAICompatibleEnabled)
-        (
+        PythiaServiceOption(
           PythiaSettings.openAICompatibleServiceId,
           widget.settings.openAICompatibleName.trim().isEmpty
               ? 'OpenAI Compatible'
               : widget.settings.openAICompatibleName.trim(),
         ),
       if (widget.settings.deepLEnabled)
-        const (PythiaSettings.deepLServiceId, 'DeepL'),
+        const PythiaServiceOption(PythiaSettings.deepLServiceId, 'DeepL'),
       if (widget.settings.libreTranslateEnabled)
-        const (PythiaSettings.libreTranslateServiceId, 'LibreTranslate'),
+        const PythiaServiceOption(
+          PythiaSettings.libreTranslateServiceId,
+          'LibreTranslate',
+        ),
       for (final plugin in installedPlugins.where((item) => item.enabled))
-        (plugin.serviceId, plugin.manifest.name),
+        PythiaServiceOption(plugin.serviceId, plugin.manifest.name),
     ];
   }
 
-  void _toggleTranslateService(String id, bool selected) {
-    final enabled = widget.settings.enabledTranslateServices.toList();
-    if (selected) {
-      enabled.remove(id);
-      enabled.insert(0, id);
-    } else {
-      enabled.remove(id);
-    }
+  void _setTranslateServiceSelection(List<String> selected) {
+    final available =
+        _availableTranslateServices().map((option) => option.id).toSet();
+    final enabled = [
+      for (final id in selected)
+        if (available.contains(id)) id,
+    ];
     if (enabled.isEmpty) enabled.add('local');
-    widget.onSettingsChanged(
+    unawaited(widget.onSettingsChanged(
       widget.settings.copyWith(
         enabledTranslateServices: enabled,
         translateServiceOrder: enabled,
       ),
-    );
+    ));
+  }
+
+  String _languageLabel(String code) {
+    return switch (code) {
+      'auto' => '自动检测',
+      'zh-CN' => '简体中文',
+      'zh-TW' => '繁體中文',
+      'en' => 'English',
+      'ja' => '日本語',
+      'ko' => '한국어',
+      _ => code,
+    };
+  }
+
+  void _swapLanguages() {
+    final source = widget.settings.sourceLanguage;
+    final target = widget.settings.targetLanguage;
+    final nextTarget =
+        source == 'auto' ? (target.startsWith('zh') ? 'en' : 'zh-CN') : source;
+    unawaited(widget.onSettingsChanged(widget.settings.copyWith(
+      sourceLanguage: target,
+      targetLanguage: nextTarget,
+    )));
   }
 
   Future<void> _toggleFavorite(PythiaHistoryRecord record) async {
@@ -792,7 +817,10 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       DropdownButton<String>(
                         value: widget.settings.sourceLanguage,
@@ -809,9 +837,10 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
                           );
                         },
                       ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12),
-                        child: Icon(Icons.arrow_forward),
+                      IconButton(
+                        tooltip: '交换源语言和目标语言',
+                        onPressed: _swapLanguages,
+                        icon: const Icon(Icons.swap_horiz),
                       ),
                       DropdownButton<String>(
                         value: widget.settings.targetLanguage,
@@ -827,7 +856,6 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
                           );
                         },
                       ),
-                      const Spacer(),
                       IconButton(
                         tooltip: '划词翻译',
                         onPressed: translating ? null : _translateSelection,
@@ -846,63 +874,29 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final service in _availableTranslateServices())
-                        FilterChip(
-                          label: Text(service.$2),
-                          selected: widget.settings.enabledTranslateServices
-                              .contains(service.$1),
-                          onSelected: (selected) =>
-                              _toggleTranslateService(service.$1, selected),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: TextField(
-                      controller: sourceController,
-                      focusNode: sourceFocusNode,
-                      expands: true,
-                      minLines: null,
-                      maxLines: null,
-                      textAlignVertical: TextAlignVertical.top,
-                      decoration: const InputDecoration(
-                        labelText: '原文',
-                        border: OutlineInputBorder(),
-                      ),
-                      onSubmitted: (_) => _translate(),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: PythiaServicePickerButton(
+                      options: _availableTranslateServices(),
+                      selectedServiceIds: widget.settings.translateServiceOrder
+                          .where(
+                              widget.settings.enabledTranslateServices.contains)
+                          .toList(),
+                      onSelectionChanged: _setTranslateServiceSelection,
                     ),
                   ),
                   const SizedBox(height: 16),
                   Expanded(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        border:
-                            Border.all(color: Theme.of(context).dividerColor),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          for (final result in results)
-                            Card(
-                              child: ListTile(
-                                title: Text(result.serviceName),
-                                subtitle: SelectableText(result.text),
-                                trailing: IconButton(
-                                  tooltip: '复制译文',
-                                  icon: const Icon(Icons.copy),
-                                  onPressed: () => Clipboard.setData(
-                                    ClipboardData(text: result.text),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+                    child: PythiaTranslationWorkspace(
+                      sourceController: sourceController,
+                      sourceFocusNode: sourceFocusNode,
+                      onSubmit:
+                          translating ? null : () => unawaited(_translate()),
+                      sourceLanguageLabel:
+                          _languageLabel(widget.settings.sourceLanguage),
+                      targetLanguageLabel:
+                          _languageLabel(widget.settings.targetLanguage),
+                      results: results,
                     ),
                   ),
                   const SizedBox(height: 12),

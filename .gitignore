@@ -20,6 +20,7 @@ Core/PythiaCore/.build/
 
 # Local release artifacts
 release/
+Windows/Pythia.Windows/dist/
 
 # User credentials and plugin configuration
 **/credentials.json

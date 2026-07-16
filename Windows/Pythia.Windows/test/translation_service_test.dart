@@ -138,6 +138,25 @@ void main() {
     expect(system['content'], contains('from zh-CN to en'));
   });
 
+  test('registry keeps provider order and surfaces partial failures', () async {
+    final registry = TranslationServiceRegistry([
+      const _FailingProvider('first', 'First'),
+      const _SuccessProvider('second', 'Second', 'translated'),
+    ]);
+
+    final results = await registry.translateAll(
+      text: 'hello',
+      sourceLanguage: 'en',
+      targetLanguage: 'zh-CN',
+      serviceIds: const ['first', 'second'],
+    );
+
+    expect(results.map((result) => result.serviceId), ['first', 'second']);
+    expect(results.first.isSuccess, isFalse);
+    expect(results.first.errorMessage, contains('provider failed'));
+    expect(results.last.text, 'translated');
+  });
+
   test('OpenAI-compatible provider reports missing API key', () async {
     final provider = OpenAICompatibleTranslationProvider(
       id: 'openai-compatible',
@@ -391,5 +410,42 @@ class MemoryCredentialStore implements CredentialStore {
   @override
   Future<void> writeSecret(String key, String value) async {
     values[key] = value;
+  }
+}
+
+class _SuccessProvider implements TranslationProvider {
+  @override
+  final String id;
+  @override
+  final String displayName;
+  final String translatedText;
+
+  const _SuccessProvider(this.id, this.displayName, this.translatedText);
+
+  @override
+  Future<PythiaTranslationResult> translate(
+    PythiaTranslationRequest request,
+  ) async {
+    return PythiaTranslationResult(
+      serviceId: id,
+      serviceName: displayName,
+      text: translatedText,
+    );
+  }
+}
+
+class _FailingProvider implements TranslationProvider {
+  @override
+  final String id;
+  @override
+  final String displayName;
+
+  const _FailingProvider(this.id, this.displayName);
+
+  @override
+  Future<PythiaTranslationResult> translate(
+    PythiaTranslationRequest request,
+  ) {
+    throw StateError('provider failed');
   }
 }
