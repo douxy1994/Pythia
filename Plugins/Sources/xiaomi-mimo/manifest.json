@@ -1,0 +1,82 @@
+{
+  "author" : "platform.xiaomimimo.com",
+  "capabilities" : [
+    "translate"
+  ],
+  "configuration" : [
+    {
+      "defaultValue" : "openai",
+      "key" : "protocol",
+      "label" : "接口协议",
+      "options" : {
+        "anthropic" : "Anthropic 兼容",
+        "openai" : "OpenAI 兼容"
+      },
+      "required" : false,
+      "type" : "select"
+    },
+    {
+      "defaultValue" : "https://token-plan-cn.xiaomimimo.com/v1",
+      "key" : "baseUrl",
+      "label" : "Base URL",
+      "required" : false,
+      "type" : "text"
+    },
+    {
+      "key" : "apiKey",
+      "label" : "API Key",
+      "required" : true,
+      "type" : "secret"
+    },
+    {
+      "defaultValue" : "api-key",
+      "key" : "authMode",
+      "label" : "鉴权方式",
+      "options" : {
+        "api-key" : "api-key",
+        "bearer" : "Bearer"
+      },
+      "required" : false,
+      "type" : "select"
+    },
+    {
+      "defaultValue" : "mimo-v2.5-pro",
+      "key" : "model",
+      "label" : "模型",
+      "options" : {
+        "mimo-v2-omni" : "mimo-v2-omni（V2 旧模型）",
+        "mimo-v2-pro" : "mimo-v2-pro（V2 旧模型）",
+        "mimo-v2-tts" : "mimo-v2-tts",
+        "mimo-v2.5" : "mimo-v2.5",
+        "mimo-v2.5-pro" : "mimo-v2.5-pro",
+        "mimo-v2.5-tts" : "mimo-v2.5-tts",
+        "mimo-v2.5-tts-voiceclone" : "mimo-v2.5-tts-voiceclone",
+        "mimo-v2.5-tts-voicedesign" : "mimo-v2.5-tts-voicedesign"
+      },
+      "required" : false,
+      "type" : "select"
+    },
+    {
+      "defaultValue" : "2048",
+      "key" : "maxTokens",
+      "label" : "最大输出 Token",
+      "required" : false,
+      "type" : "text"
+    }
+  ],
+  "description" : "由 Pythia 从 Pot 插件自动转换。",
+  "entry" : "main.js",
+  "id" : "plugin.com.xiaomi.mimo",
+  "minimumPythiaVersion" : "1.0.0",
+  "name" : "Xiaomi MiMo",
+  "permissions" : [
+    "network"
+  ],
+  "schemaVersion" : "1.0",
+  "supportedPlatforms" : [
+    "macos",
+    "windows"
+  ],
+  "type" : "translator",
+  "version" : "1.1.0"
+}

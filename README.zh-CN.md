@@ -40,12 +40,12 @@ Pythia 应用和安装包不会捆绑第三方插件。仓库的 [`Plugins/`](Pl
 
 | 插件 | 下载 | 需要的凭据 |
 | --- | --- | --- |
-| 阿里云 Qwen3.5-35B-A3B | [`.pythia`](Plugins/aliyun-qwen3.5-35b-a3b-1.0.0.pythia) | 阿里云百炼 API Key |
-| DeepSeek | [`.pythia`](Plugins/deepseek-1.0.0.pythia) | DeepSeek API Key |
-| 七牛 GLM 4.5 Air（free） | [`.pythia`](Plugins/qiniu-glm-4.5-air-free-1.0.0.pythia) | 七牛 API Key |
-| SenseNova | [`.pythia`](Plugins/sensenova-1.0.0.pythia) | SenseNova API Key |
-| SiliconFlow | [`.pythia`](Plugins/siliconflow-1.0.0.pythia) | SiliconFlow API Key |
-| Xiaomi MiMo | [`.pythia`](Plugins/xiaomi-mimo-1.0.0.pythia) | Xiaomi MiMo API Key |
+| 阿里云 Qwen3.5-35B-A3B | [`.pythia`](Plugins/aliyun-qwen3.5-35b-a3b-1.1.0.pythia) | 阿里云百炼 API Key |
+| DeepSeek | [`.pythia`](Plugins/deepseek-1.1.0.pythia) | DeepSeek API Key |
+| 七牛 GLM 4.5 Air（free） | [`.pythia`](Plugins/qiniu-glm-4.5-air-free-1.1.0.pythia) | 七牛 API Key |
+| SenseNova | [`.pythia`](Plugins/sensenova-1.1.0.pythia) | SenseNova API Key |
+| SiliconFlow | [`.pythia`](Plugins/siliconflow-1.1.0.pythia) | SiliconFlow API Key |
+| Xiaomi MiMo | [`.pythia`](Plugins/xiaomi-mimo-1.1.0.pythia) | Xiaomi MiMo API Key |
 
 安装方式：打开 **设置 > 插件 > 安装插件**，选择下载的 `.pythia` 文件，安装后再在 Pythia 中填写自己的凭据。公开插件包不包含用户配置、API Key、WebDAV 信息、历史记录或本机路径。
 

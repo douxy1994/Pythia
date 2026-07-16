@@ -1,0 +1,43 @@
+{
+  "author" : "platform.sensenova.cn",
+  "capabilities" : [
+    "translate"
+  ],
+  "configuration" : [
+    {
+      "key" : "api_key",
+      "label" : "API Key",
+      "required" : true,
+      "type" : "secret"
+    },
+    {
+      "defaultValue" : "https://api.sensenova.cn",
+      "key" : "base_url",
+      "label" : "Base URL",
+      "required" : false,
+      "type" : "text"
+    },
+    {
+      "defaultValue" : "Pythia-Chat",
+      "key" : "model",
+      "label" : "Model",
+      "required" : false,
+      "type" : "text"
+    }
+  ],
+  "description" : "由 Pythia 从 Pot 插件自动转换。",
+  "entry" : "main.js",
+  "id" : "plugin.com.pot-app.sensenova",
+  "minimumPythiaVersion" : "1.0.0",
+  "name" : "Sensenova",
+  "permissions" : [
+    "network"
+  ],
+  "schemaVersion" : "1.0",
+  "supportedPlatforms" : [
+    "macos",
+    "windows"
+  ],
+  "type" : "translator",
+  "version" : "1.1.0"
+}

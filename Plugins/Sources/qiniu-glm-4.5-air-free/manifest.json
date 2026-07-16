@@ -1,0 +1,57 @@
+{
+  "author" : "pot-app",
+  "capabilities" : [
+    "translate"
+  ],
+  "configuration" : [
+    {
+      "key" : "apiKey",
+      "label" : "API Key",
+      "required" : true,
+      "type" : "secret"
+    },
+    {
+      "defaultValue" : "https://api.qnaigc.com/v1",
+      "key" : "baseURL",
+      "label" : "API 地址",
+      "required" : false,
+      "type" : "text"
+    },
+    {
+      "defaultValue" : "z-ai/glm-4.5-air-free",
+      "key" : "model",
+      "label" : "模型 ID",
+      "required" : false,
+      "type" : "text"
+    },
+    {
+      "defaultValue" : "0.1",
+      "key" : "temperature",
+      "label" : "Temperature",
+      "required" : false,
+      "type" : "text"
+    },
+    {
+      "defaultValue" : "4096",
+      "key" : "maxTokens",
+      "label" : "最大输出 tokens",
+      "required" : false,
+      "type" : "text"
+    }
+  ],
+  "description" : "由 Pythia 从 Pot 插件自动转换。",
+  "entry" : "main.js",
+  "id" : "plugin.com.pot-app.qiniu-glm-4-5-air-free",
+  "minimumPythiaVersion" : "1.0.0",
+  "name" : "七牛 GLM 4.5 Air (free)",
+  "permissions" : [
+    "network"
+  ],
+  "schemaVersion" : "1.0",
+  "supportedPlatforms" : [
+    "macos",
+    "windows"
+  ],
+  "type" : "translator",
+  "version" : "1.1.0"
+}
