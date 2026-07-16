@@ -18,7 +18,7 @@ The current published `.pythia` packages are under [`../../Plugins`](../../Plugi
 
 ## Implemented In This Scaffold
 
-- `lib/main.dart`: Material 3 Windows-facing app shell with translation input, language selectors, result cards, copy, clear, settings dialog, searchable/favorite/delete-capable history sidebar, and manual history sync action.
+- `lib/main.dart`: adaptive Material 3 Windows shell with separate Translate/History pages, macOS-parity source/result actions, screenshot OCR/translation, local favorite collection, Windows speech, JSON history export, and a six-section settings window.
 - `lib/core/history_record.dart`: cross-platform history model matching `Core/Schemas/history-record.schema.json`.
 - `lib/core/history_sync.dart`: Dart port of the macOS/Core merge strategy.
 - `lib/core/webdav_sync.dart`: WebDAV `/Pythia/history/history.json` sync and connection-test implementation.
@@ -28,9 +28,9 @@ The current published `.pythia` packages are under [`../../Plugins`](../../Plugi
 - `lib/core/update_checker.dart`: Pythia GitHub latest-release checker for version `1.0.0`.
 - `lib/core/release_package_verifier.dart` and `tool/verify_release_package.dart`: release gate that requires an AMD64 `Pythia.exe` and rejects bundled plugin payloads and private-key/API-token markers.
 - `lib/platform/*`: explicit platform interfaces plus MethodChannel Credential Manager storage for secrets.
-- `lib/platform/platform_services.dart`: MethodChannel contracts for selection translation, screenshot OCR, tray actions, hotkeys, startup, and window behavior.
+- `lib/platform/platform_services.dart`: MethodChannel contracts for selection translation, screenshot OCR, Windows speech, tray actions, hotkeys, startup, and window behavior.
 - `lib/platform/tray_action_dispatcher.dart`: tested routing for quick input translation, settings, history, and WebDAV history sync tray actions.
-- `windows/runner/*`: native Flutter Windows host, CMake project, Credential Manager channel, selected-text clipboard fallback, Windows Runtime screenshot OCR with a multi-monitor selection overlay, startup registration, always-on-top window handling, complete tray icon/menu callbacks, close-to-tray behavior, global hotkey registration/dispatch, and window placement persistence.
+- `windows/runner/*`: native Flutter Windows host, CMake project, Credential Manager channel, selected-text clipboard fallback, Windows Runtime screenshot OCR with a multi-monitor selection overlay, Windows Speech API output, startup registration, always-on-top window handling, complete tray icon/menu callbacks, close-to-tray behavior, global hotkey registration/dispatch, and window placement persistence.
 - `test/history_sync_test.dart`: merge behavior, corrupt-remote protection, and WebDAV connection-test behavior tests.
 - `test/translation_service_test.dart`: provider request, language mapping, response parsing, and credential behavior tests.
 - `test/update_checker_test.dart`: GitHub latest-release parsing, version comparison, and HTTP failure behavior tests.
@@ -42,7 +42,7 @@ The current published `.pythia` packages are under [`../../Plugins`](../../Plugi
 ## Still Required On Windows
 
 - Continue interactive verification of the included native host on representative Windows applications and display configurations. Local x64 build, raw start/restart, installer build, silent install/start/uninstall, and a persistent current-user installation now pass on Windows 11 build 26200 at 150% scaling.
-- Enter submission, Shift+Enter line breaks, IME composing protection, fixed source height, vertically growing results, persistent multi-service selection/order, expandable result cards, and per-service failure cards are implemented and covered by automated tests. Chinese IME candidate behavior still needs user-driven checks with the input methods listed in the handoff.
+- Enter submission, Shift+Enter line breaks, IME composing protection, fixed source height, vertically growing results, adaptive Translate/History navigation, six-section settings, persistent multi-service selection/order, expandable result cards, source/result utility actions, and per-service failure cards are covered by automated tests. Chinese IME candidate behavior still needs user-driven checks with the input methods listed in the handoff.
 - Verify screenshot OCR, global hotkeys, and signed update installation on Windows. The settings page has a real hotkey recorder and the updater downloads only paired x64 installer/SHA-256 assets, verifies them, checks Authenticode natively, and launches the installer.
 - Verify UI Automation selected-text reading and its clipboard fallback across representative Windows applications.
 - Verify Google, Baidu, Youdao, OpenAI-compatible, DeepL, and LibreTranslate against live Windows networking and Credential Manager.

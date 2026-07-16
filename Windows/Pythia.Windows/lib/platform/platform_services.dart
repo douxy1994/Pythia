@@ -17,6 +17,10 @@ abstract interface class ScreenshotOcrService {
   Future<String> captureAndRecognize({required bool translateAfterRecognition});
 }
 
+abstract interface class TextToSpeechService {
+  Future<void> speak(String text);
+}
+
 abstract interface class TrayService {
   Future<void> install();
   Future<void> updateMenu();
@@ -56,6 +60,7 @@ class MethodChannelWindowsPlatformService
         GlobalHotkeyService,
         SelectedTextReader,
         ScreenshotOcrService,
+        TextToSpeechService,
         TrayService,
         WindowBehaviorService,
         UpdateInstallerService,
@@ -133,6 +138,11 @@ class MethodChannelWindowsPlatformService
           'translateAfterRecognition': translateAfterRecognition,
         }) ??
         '';
+  }
+
+  @override
+  Future<void> speak(String text) async {
+    await _invoke<void>('speech.speak', {'text': text});
   }
 
   @override

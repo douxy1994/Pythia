@@ -11,6 +11,8 @@ import 'webdav_sync.dart';
 class PythiaLocalStore implements HistoryRepository {
   Directory? _baseDirectory;
 
+  PythiaLocalStore({Directory? baseDirectory}) : _baseDirectory = baseDirectory;
+
   Future<Directory> _directory() async {
     if (_baseDirectory != null) return _baseDirectory!;
     final support = await getApplicationSupportDirectory();
@@ -69,9 +71,12 @@ class PythiaLocalStore implements HistoryRepository {
   @override
   Future<List<PythiaHistoryRecord>> readAllForSync() async {
     final file = await _historyFile();
-    if (!file.existsSync()) return const [];
+    // Callers merge, insert, delete and sort this collection before writing it
+    // back. Returning `const []` for a new profile makes the very first
+    // translation fail with "Cannot remove from an unmodifiable list".
+    if (!file.existsSync()) return <PythiaHistoryRecord>[];
     final body = await file.readAsString();
-    if (body.trim().isEmpty) return const [];
+    if (body.trim().isEmpty) return <PythiaHistoryRecord>[];
     final decoded = jsonDecode(body) as List<Object?>;
     return decoded
         .cast<Map<String, Object?>>()

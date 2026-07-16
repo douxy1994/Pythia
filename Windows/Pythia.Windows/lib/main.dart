@@ -133,6 +133,7 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
   String status = '就绪';
   bool translating = false;
   bool syncing = false;
+  int selectedPage = 0;
   Future<void>? activeSync;
   final webdavAutoSyncScheduler = WebDavAutoSyncScheduler();
   final historyChangeSyncScheduler = HistoryChangeSyncScheduler();
@@ -326,6 +327,128 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
     }
   }
 
+  Future<void> _screenshotRecognize() async {
+    setState(() => status = '正在截图 OCR...');
+    try {
+      final text = (await platformService.captureAndRecognize(
+        translateAfterRecognition: false,
+      ))
+          .trim();
+      if (text.isEmpty) {
+        setState(() => status = '截图 OCR 未返回文本');
+        return;
+      }
+      sourceController.text = text;
+      setState(() {
+        selectedPage = 0;
+        status = 'OCR 完成，已填入原文';
+      });
+      sourceFocusNode.requestFocus();
+    } on PlatformException catch (error) {
+      setState(() {
+        status = error.code == 'ocr_cancelled'
+            ? '已取消截图'
+            : '截图 OCR 失败：${error.message ?? error.code}';
+      });
+    } catch (error) {
+      setState(() => status = '截图 OCR 失败：$error');
+    }
+  }
+
+  Future<void> _pasteSource() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text ?? '';
+    if (text.isEmpty) {
+      setState(() => status = '剪贴板中没有文本');
+      return;
+    }
+    sourceController.text = text;
+    sourceController.selection = TextSelection.collapsed(offset: text.length);
+    setState(() => status = '已粘贴原文');
+    sourceFocusNode.requestFocus();
+  }
+
+  Future<void> _copySource() async {
+    final text = sourceController.text;
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) setState(() => status = '已复制原文');
+  }
+
+  void _stripSourceNewlines() {
+    final compact = sourceController.text
+        .replaceAll(RegExp(r'[\r\n]+'), ' ')
+        .replaceAll(RegExp(r'\s{2,}'), ' ')
+        .trim();
+    sourceController.text = compact;
+    sourceController.selection =
+        TextSelection.collapsed(offset: compact.length);
+    setState(() => status = '已删除换行');
+  }
+
+  Future<void> _copyAllResults() async {
+    final text = _successfulResultText();
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) setState(() => status = '已复制全部译文');
+  }
+
+  String _successfulResultText() {
+    return results
+        .where((result) => result.isSuccess)
+        .map((result) => result.text)
+        .where((text) => text.trim().isNotEmpty)
+        .join('\n\n');
+  }
+
+  Future<void> _speakResults() async {
+    final text = _successfulResultText();
+    if (text.isEmpty) return;
+    try {
+      await platformService.speak(text);
+      if (mounted) setState(() => status = '正在朗读译文');
+    } catch (error) {
+      if (mounted) setState(() => status = '朗读失败：$error');
+    }
+  }
+
+  Future<void> _addResultsToCollection() async {
+    final source = sourceController.text.trim();
+    final target = _successfulResultText().trim();
+    if (source.isEmpty || target.isEmpty) {
+      setState(() => status = '请先完成翻译，再加入生词本');
+      return;
+    }
+    final now = DateTime.now().toUtc();
+    await widget.store.addHistory(PythiaHistoryRecord(
+      id: 'favorite-${now.microsecondsSinceEpoch}',
+      sourceText: source,
+      translatedText: target,
+      sourceLanguage: widget.settings.sourceLanguage,
+      targetLanguage: widget.settings.targetLanguage,
+      service: results
+          .where((result) => result.isSuccess)
+          .map((result) => result.serviceName)
+          .join(', '),
+      createdAt: now,
+      updatedAt: now,
+      deviceId: await widget.store.deviceId(),
+      isFavorite: true,
+    ));
+    historyChangeSyncScheduler.historyChanged();
+    await _loadHistory();
+    if (mounted) setState(() => status = '已收藏到本地历史');
+  }
+
+  void _clearWorkspace() {
+    sourceController.clear();
+    setState(() {
+      results = const [];
+      status = '已清空';
+    });
+    sourceFocusNode.requestFocus();
+  }
+
   Future<void> _applyAlwaysOnTop(bool enabled) async {
     try {
       await platformService.setAlwaysOnTop(enabled);
@@ -465,6 +588,7 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
     if (!mounted) return;
     sourceController.clear();
     setState(() {
+      selectedPage = 0;
       results = const [];
       status = '请输入文本，按回车翻译';
     });
@@ -480,8 +604,13 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
   Future<void> _openHistoryFromTray() async {
     await platformService.showWindow();
     if (!mounted) return;
-    historySearchFocusNode.requestFocus();
-    setState(() => status = '已打开历史记录');
+    setState(() {
+      selectedPage = 1;
+      status = '已打开历史记录';
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) historySearchFocusNode.requestFocus();
+    });
   }
 
   Future<void> _syncHistoryFromTray() async {
@@ -690,7 +819,9 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
           httpClient: translationHttpClient,
         ),
       if (pluginManager != null)
-        for (final plugin in installedPlugins.where((item) => item.enabled))
+        for (final plugin in installedPlugins.where(
+          (item) => item.enabled && item.manifest.type == 'translator',
+        ))
           PythiaPluginTranslationProvider(
             manager: pluginManager!,
             plugin: plugin,
@@ -722,7 +853,9 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
           PythiaSettings.libreTranslateServiceId,
           'LibreTranslate',
         ),
-      for (final plugin in installedPlugins.where((item) => item.enabled))
+      for (final plugin in installedPlugins.where(
+        (item) => item.enabled && item.manifest.type == 'translator',
+      ))
         PythiaServiceOption(plugin.serviceId, plugin.manifest.name),
     ];
   }
@@ -790,253 +923,365 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
     setState(() => status = '已清空历史记录');
   }
 
+  Future<void> _exportHistory() async {
+    final location = await getSaveLocation(
+      suggestedName: 'pythia-history.json',
+      acceptedTypeGroups: const [
+        XTypeGroup(
+          label: 'Pythia JSON history',
+          extensions: ['json'],
+          mimeTypes: ['application/json'],
+        ),
+      ],
+    );
+    if (location == null) return;
+    final all = await widget.store.readAllForSync();
+    final collection = PythiaHistoryCollection(
+      deviceId: await widget.store.deviceId(),
+      updatedAt: DateTime.now().toUtc(),
+      records: all,
+    );
+    final path = location.path.toLowerCase().endsWith('.json')
+        ? location.path
+        : '${location.path}.json';
+    await File(path).writeAsString(
+      const JsonEncoder.withIndent('  ').convert(collection.toJson()),
+      flush: true,
+    );
+    if (mounted) setState(() => status = '已导出 ${all.length} 条历史记录');
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Pythia'),
-        actions: [
-          IconButton(
-            tooltip: '历史同步',
-            onPressed: syncing ? null : () => _syncHistory(),
-            icon: const Icon(Icons.sync),
-          ),
-          IconButton(
-            tooltip: '设置',
-            onPressed: () => _openSettings(context),
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
-      ),
-      body: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+    final pages = [
+      _buildTranslatorPage(context),
+      _buildHistoryPage(context),
+    ];
+    return LayoutBuilder(builder: (context, constraints) {
+      final compact = constraints.maxWidth < 700;
+      final page = IndexedStack(index: selectedPage, children: pages);
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(selectedPage == 0 ? 'Pythia' : '历史记录'),
+          actions: [
+            IconButton(
+              tooltip: '历史同步',
+              onPressed: syncing ? null : () => _syncHistory(),
+              icon: const Icon(Icons.sync),
+            ),
+            IconButton(
+              tooltip: '设置',
+              onPressed: () => _openSettings(context),
+              icon: const Icon(Icons.settings_outlined),
+            ),
+          ],
+        ),
+        body: compact
+            ? page
+            : Row(
                 children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      DropdownButton<String>(
-                        value: widget.settings.sourceLanguage,
-                        items: const [
-                          DropdownMenuItem(value: 'auto', child: Text('自动检测')),
-                          DropdownMenuItem(value: 'en', child: Text('English')),
-                          DropdownMenuItem(value: 'zh-CN', child: Text('简体中文')),
-                          DropdownMenuItem(value: 'ja', child: Text('日本語')),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          widget.onSettingsChanged(
-                            widget.settings.copyWith(sourceLanguage: value),
-                          );
-                        },
+                  NavigationRail(
+                    selectedIndex: selectedPage,
+                    labelType: NavigationRailLabelType.all,
+                    onDestinationSelected: (value) {
+                      setState(() => selectedPage = value);
+                    },
+                    destinations: const [
+                      NavigationRailDestination(
+                        icon: Icon(Icons.translate_outlined),
+                        selectedIcon: Icon(Icons.translate),
+                        label: Text('翻译'),
                       ),
-                      IconButton(
-                        tooltip: '交换源语言和目标语言',
-                        onPressed: _swapLanguages,
-                        icon: const Icon(Icons.swap_horiz),
-                      ),
-                      DropdownButton<String>(
-                        value: widget.settings.targetLanguage,
-                        items: const [
-                          DropdownMenuItem(value: 'zh-CN', child: Text('简体中文')),
-                          DropdownMenuItem(value: 'en', child: Text('English')),
-                          DropdownMenuItem(value: 'ja', child: Text('日本語')),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          widget.onSettingsChanged(
-                            widget.settings.copyWith(targetLanguage: value),
-                          );
-                        },
-                      ),
-                      IconButton(
-                        tooltip: '划词翻译',
-                        onPressed: translating ? null : _translateSelection,
-                        icon: const Icon(Icons.text_fields),
-                      ),
-                      IconButton(
-                        tooltip: '截图翻译',
-                        onPressed: translating ? null : _screenshotTranslate,
-                        icon: const Icon(Icons.crop_free),
-                      ),
-                      FilledButton.icon(
-                        onPressed: translating ? null : _translate,
-                        icon: const Icon(Icons.translate),
-                        label: const Text('翻译'),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.history_outlined),
+                        selectedIcon: Icon(Icons.history),
+                        label: Text('历史'),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: PythiaServicePickerButton(
-                      options: _availableTranslateServices(),
-                      selectedServiceIds: widget.settings.translateServiceOrder
-                          .where(
-                              widget.settings.enabledTranslateServices.contains)
-                          .toList(),
-                      onSelectionChanged: _setTranslateServiceSelection,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: PythiaTranslationWorkspace(
-                      sourceController: sourceController,
-                      sourceFocusNode: sourceFocusNode,
-                      onSubmit:
-                          translating ? null : () => unawaited(_translate()),
-                      sourceLanguageLabel:
-                          _languageLabel(widget.settings.sourceLanguage),
-                      targetLanguageLabel:
-                          _languageLabel(widget.settings.targetLanguage),
-                      results: results,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Text(status),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () {
-                          sourceController.clear();
-                          setState(() => results = const []);
-                        },
-                        child: const Text('清空'),
-                      ),
-                    ],
-                  ),
-                  if (widget.settings.webdavLastSyncStatus.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      [
-                        widget.settings.webdavLastSyncStatus,
-                        if (widget.settings.webdavLastSyncAt.isNotEmpty)
-                          widget.settings.webdavLastSyncAt,
-                        if (widget.settings.webdavLastSyncError.isNotEmpty)
-                          widget.settings.webdavLastSyncError,
-                      ].join(' · '),
-                      style: Theme.of(context).textTheme.bodySmall,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                  const VerticalDivider(width: 1),
+                  Expanded(child: page),
                 ],
               ),
+        bottomNavigationBar: compact
+            ? NavigationBar(
+                selectedIndex: selectedPage,
+                onDestinationSelected: (value) {
+                  setState(() => selectedPage = value);
+                },
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.translate_outlined),
+                    selectedIcon: Icon(Icons.translate),
+                    label: '翻译',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.history_outlined),
+                    selectedIcon: Icon(Icons.history),
+                    label: '历史',
+                  ),
+                ],
+              )
+            : null,
+      );
+    });
+  }
+
+  Widget _buildTranslatorPage(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              PythiaServicePickerButton(
+                options: _availableTranslateServices(),
+                selectedServiceIds: widget.settings.translateServiceOrder
+                    .where(widget.settings.enabledTranslateServices.contains)
+                    .toList(),
+                onSelectionChanged: _setTranslateServiceSelection,
+              ),
+              DropdownButton<String>(
+                value: widget.settings.sourceLanguage,
+                items: const [
+                  DropdownMenuItem(value: 'auto', child: Text('自动检测')),
+                  DropdownMenuItem(value: 'en', child: Text('English')),
+                  DropdownMenuItem(value: 'zh-CN', child: Text('简体中文')),
+                  DropdownMenuItem(value: 'zh-TW', child: Text('繁體中文')),
+                  DropdownMenuItem(value: 'ja', child: Text('日本語')),
+                  DropdownMenuItem(value: 'ko', child: Text('한국어')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    widget.onSettingsChanged(
+                      widget.settings.copyWith(sourceLanguage: value),
+                    );
+                  }
+                },
+              ),
+              IconButton(
+                tooltip: '交换源语言和目标语言',
+                onPressed: _swapLanguages,
+                icon: const Icon(Icons.swap_horiz),
+              ),
+              DropdownButton<String>(
+                value: widget.settings.targetLanguage,
+                items: const [
+                  DropdownMenuItem(value: 'zh-CN', child: Text('简体中文')),
+                  DropdownMenuItem(value: 'zh-TW', child: Text('繁體中文')),
+                  DropdownMenuItem(value: 'en', child: Text('English')),
+                  DropdownMenuItem(value: 'ja', child: Text('日本語')),
+                  DropdownMenuItem(value: 'ko', child: Text('한국어')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    widget.onSettingsChanged(
+                      widget.settings.copyWith(targetLanguage: value),
+                    );
+                  }
+                },
+              ),
+              IconButton(
+                tooltip: '划词翻译',
+                onPressed: translating ? null : _translateSelection,
+                icon: const Icon(Icons.text_fields),
+              ),
+              IconButton(
+                tooltip: '截图 OCR',
+                onPressed: translating ? null : _screenshotRecognize,
+                icon: const Icon(Icons.document_scanner_outlined),
+              ),
+              IconButton(
+                tooltip: '截图翻译',
+                onPressed: translating ? null : _screenshotTranslate,
+                icon: const Icon(Icons.crop_free),
+              ),
+              FilledButton.icon(
+                onPressed: translating ? null : _translate,
+                icon: const Icon(Icons.translate),
+                label: Text(translating ? '翻译中' : '翻译'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: PythiaTranslationWorkspace(
+              sourceController: sourceController,
+              sourceFocusNode: sourceFocusNode,
+              onSubmit: translating ? null : () => unawaited(_translate()),
+              onCopySource: _copySource,
+              onPasteSource: _pasteSource,
+              onStripNewlines: _stripSourceNewlines,
+              onClearSource: _clearWorkspace,
+              onCopyResults: _copyAllResults,
+              sourceLanguageLabel:
+                  _languageLabel(widget.settings.sourceLanguage),
+              targetLanguageLabel:
+                  _languageLabel(widget.settings.targetLanguage),
+              results: results,
             ),
           ),
-          VerticalDivider(width: 1, color: Theme.of(context).dividerColor),
-          SizedBox(
-            width: 320,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '历史记录',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: history.isEmpty ? null : _clearHistory,
-                        child: const Text('清空'),
-                      ),
-                    ],
-                  ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  status,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                  child: TextField(
-                    controller: historySearchController,
-                    focusNode: historySearchFocusNode,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
-                      hintText: '搜索历史',
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => _loadHistory(),
-                  ),
-                ),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
-                    children: [
-                      for (final item in history)
-                        Card(
-                          child: ListTile(
-                            leading: IconButton(
-                              tooltip: item.isFavorite ? '取消收藏' : '收藏',
-                              icon: Icon(
-                                item.isFavorite
-                                    ? Icons.star
-                                    : Icons.star_border,
-                              ),
-                              onPressed: () => _toggleFavorite(item),
-                            ),
-                            title: Text(
-                              item.sourceText,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item.translatedText,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${item.service} · ${syncStatusToJson(item.syncStatus)}',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                            trailing: IconButton(
-                              tooltip: '删除',
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () => _deleteHistoryRecord(item),
-                            ),
-                            onTap: () {
-                              sourceController.text = item.sourceText;
-                              setState(() => results = [
-                                    PythiaTranslationResult(
-                                      serviceId: item.service,
-                                      serviceName: item.service,
-                                      text: item.translatedText,
-                                      model: item.model,
-                                    ),
-                                  ]);
-                            },
-                          ),
-                        ),
-                      if (history.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Text(
-                            historySearchController.text.trim().isEmpty
-                                ? '暂无历史记录'
-                                : '没有匹配的历史记录',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
+              IconButton(
+                tooltip: '复制译文',
+                onPressed: results.any((result) => result.isSuccess)
+                    ? _copyAllResults
+                    : null,
+                icon: const Icon(Icons.copy_all_outlined),
+              ),
+              IconButton(
+                tooltip: '加入生词本',
+                onPressed: results.any((result) => result.isSuccess)
+                    ? _addResultsToCollection
+                    : null,
+                icon: const Icon(Icons.bookmark_add_outlined),
+              ),
+              IconButton(
+                tooltip: '朗读译文',
+                onPressed: results.any((result) => result.isSuccess)
+                    ? _speakResults
+                    : null,
+                icon: const Icon(Icons.volume_up_outlined),
+              ),
+              TextButton(onPressed: _clearWorkspace, child: const Text('清空')),
+            ],
+          ),
+          if (widget.settings.webdavLastSyncStatus.isNotEmpty)
+            Text(
+              [
+                widget.settings.webdavLastSyncStatus,
+                if (widget.settings.webdavLastSyncAt.isNotEmpty)
+                  widget.settings.webdavLastSyncAt,
+                if (widget.settings.webdavLastSyncError.isNotEmpty)
+                  widget.settings.webdavLastSyncError,
+              ].join(' · '),
+              style: Theme.of(context).textTheme.bodySmall,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryPage(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                '${history.length} 条记录',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              OutlinedButton.icon(
+                onPressed: _exportHistory,
+                icon: const Icon(Icons.file_download_outlined),
+                label: const Text('导出 JSON'),
+              ),
+              OutlinedButton.icon(
+                onPressed: syncing ? null : () => _syncHistory(),
+                icon: const Icon(Icons.sync),
+                label: const Text('同步'),
+              ),
+              TextButton.icon(
+                onPressed: history.isEmpty ? null : _clearHistory,
+                icon: const Icon(Icons.delete_sweep_outlined),
+                label: const Text('清空历史'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: historySearchController,
+            focusNode: historySearchFocusNode,
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: '搜索原文或译文',
+              isDense: true,
+            ),
+            onChanged: (_) => _loadHistory(),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: history.isEmpty
+                ? Center(
+                    child: Text(
+                      historySearchController.text.trim().isEmpty
+                          ? '暂无历史记录'
+                          : '没有匹配的历史记录',
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: history.length,
+                    itemBuilder: (context, index) {
+                      final item = history[index];
+                      return Card(
+                        child: ListTile(
+                          leading: IconButton(
+                            tooltip: item.isFavorite ? '取消收藏' : '收藏',
+                            icon: Icon(item.isFavorite
+                                ? Icons.star
+                                : Icons.star_border),
+                            onPressed: () => _toggleFavorite(item),
+                          ),
+                          title: Text(item.sourceText,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(item.translatedText,
+                                  maxLines: 2, overflow: TextOverflow.ellipsis),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${item.service} · ${syncStatusToJson(item.syncStatus)}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                          trailing: IconButton(
+                            tooltip: '删除',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () => _deleteHistoryRecord(item),
+                          ),
+                          onTap: () {
+                            sourceController.text = item.sourceText;
+                            setState(() {
+                              selectedPage = 0;
+                              results = [
+                                PythiaTranslationResult(
+                                  serviceId: item.service,
+                                  serviceName: item.service,
+                                  text: item.translatedText,
+                                  model: item.model,
+                                ),
+                              ];
+                              status = '已加载历史记录';
+                            });
+                            sourceFocusNode.requestFocus();
+                          },
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -1083,6 +1328,17 @@ class SettingsDialog extends StatefulWidget {
 }
 
 class _SettingsDialogState extends State<SettingsDialog> {
+  static const settingsSections = [
+    ('通用', Icons.tune),
+    ('快捷键', Icons.keyboard_outlined),
+    ('插件', Icons.extension_outlined),
+    ('翻译服务', Icons.translate_outlined),
+    ('备份与同步', Icons.cloud_sync_outlined),
+    ('关于', Icons.info_outline),
+  ];
+
+  int selectedSettingsSection = 0;
+  final settingsScrollController = ScrollController();
   late bool saveHistory = widget.settings.saveHistory;
   late PythiaThemeMode themeMode = widget.settings.themeMode;
   late bool launchAtStartup = widget.settings.launchAtStartup;
@@ -1152,6 +1408,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   @override
   void dispose() {
+    settingsScrollController.dispose();
     showWindowHotkey.dispose();
     selectionTranslateHotkey.dispose();
     screenshotTranslateHotkey.dispose();
@@ -1176,609 +1433,758 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('设置'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SwitchListTile(
-                value: saveHistory,
-                title: const Text('保存历史记录'),
-                onChanged: (value) => setState(() => saveHistory = value),
-              ),
-              DropdownButtonFormField<PythiaThemeMode>(
-                initialValue: themeMode,
-                decoration: const InputDecoration(labelText: '外观'),
-                items: const [
-                  DropdownMenuItem(
-                    value: PythiaThemeMode.system,
-                    child: Text('跟随系统'),
-                  ),
-                  DropdownMenuItem(
-                    value: PythiaThemeMode.light,
-                    child: Text('浅色'),
-                  ),
-                  DropdownMenuItem(
-                    value: PythiaThemeMode.dark,
-                    child: Text('深色'),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => themeMode = value);
-                },
-              ),
-              SwitchListTile(
-                value: launchAtStartup,
-                title: const Text('开机启动'),
-                subtitle: const Text('保存后立即注册到当前 Windows 用户的启动项。'),
-                onChanged: (value) => setState(() => launchAtStartup = value),
-              ),
-              SwitchListTile(
-                value: closeToTray,
-                title: const Text('关闭后最小化到托盘'),
-                onChanged: (value) => setState(() => closeToTray = value),
-              ),
-              SwitchListTile(
-                value: alwaysOnTop,
-                title: const Text('翻译窗口置顶'),
-                onChanged: (value) => setState(() => alwaysOnTop = value),
-              ),
-              SwitchListTile(
-                value: hideOnBlur,
-                title: const Text('失焦后隐藏翻译窗口'),
-                onChanged: (value) => setState(() => hideOnBlur = value),
-              ),
-              SwitchListTile(
-                value: notificationsEnabled,
-                title: const Text('系统通知'),
-                subtitle: const Text('后台自动同步完成或失败时显示 Windows 通知。'),
-                onChanged: (value) =>
-                    setState(() => notificationsEnabled = value),
-              ),
-              const Divider(),
-              HotkeyRecorderField(
-                controller: showWindowHotkey,
-                label: '显示窗口快捷键',
-              ),
-              HotkeyRecorderField(
-                controller: selectionTranslateHotkey,
-                label: '划词翻译快捷键',
-              ),
-              HotkeyRecorderField(
-                controller: screenshotTranslateHotkey,
-                label: '截图翻译快捷键',
-              ),
-              if (hotkeyStatus.isNotEmpty)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    hotkeyStatus,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ),
-              const Divider(),
-              PluginSettingsPanel(
-                manager: widget.pluginManager,
-                onChanged: (selectedServiceId) async {
-                  final plugins = await widget.pluginManager?.listInstalled() ??
-                      const <InstalledPythiaPlugin>[];
-                  final available = plugins
-                      .where((plugin) => plugin.enabled)
-                      .map((plugin) => plugin.serviceId)
-                      .toSet();
-                  enabledTranslateServices.removeWhere(
-                    (id) => id.startsWith('plugin:') && !available.contains(id),
-                  );
-                  if (selectedServiceId != null) {
-                    enabledTranslateServices.remove(selectedServiceId);
-                    enabledTranslateServices.insert(0, selectedServiceId);
-                  }
-                },
-              ),
-              const Divider(),
-              SwitchListTile(
-                value: googleEnabled,
-                title: const Text('启用 Google 翻译'),
-                subtitle: const Text('无需 API Key，可作为默认在线翻译服务。'),
-                onChanged: (value) => setState(() => googleEnabled = value),
-              ),
-              const Divider(),
-              SwitchListTile(
-                value: baiduEnabled,
-                title: const Text('启用百度翻译'),
-                subtitle:
-                    const Text('AppID 和密钥保存在 Windows Credential Manager。'),
-                onChanged: (value) => setState(() => baiduEnabled = value),
-              ),
-              TextField(
-                controller: baiduAppId,
-                enabled: baiduEnabled,
-                decoration: const InputDecoration(
-                  labelText: '百度 AppID',
-                  helperText: '留空表示不修改已保存的 Windows 凭据。',
-                ),
-              ),
-              TextField(
-                controller: baiduSecret,
-                enabled: baiduEnabled,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: '百度密钥',
-                  helperText: '留空表示不修改已保存的 Windows 凭据。',
-                ),
-              ),
-              const Divider(),
-              SwitchListTile(
-                value: youdaoEnabled,
-                title: const Text('启用有道翻译'),
-                subtitle:
-                    const Text('AppKey 和密钥保存在 Windows Credential Manager。'),
-                onChanged: (value) => setState(() => youdaoEnabled = value),
-              ),
-              TextField(
-                controller: youdaoAppKey,
-                enabled: youdaoEnabled,
-                decoration: const InputDecoration(
-                  labelText: '有道 AppKey',
-                  helperText: '留空表示不修改已保存的 Windows 凭据。',
-                ),
-              ),
-              TextField(
-                controller: youdaoSecret,
-                enabled: youdaoEnabled,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: '有道密钥',
-                  helperText: '留空表示不修改已保存的 Windows 凭据。',
-                ),
-              ),
-              const Divider(),
-              SwitchListTile(
-                value: openAICompatibleEnabled,
-                title: const Text('启用 OpenAI-compatible 翻译服务'),
-                subtitle: const Text(
-                  '兼容 OpenAI Chat Completions 的服务会显示在主界面多选服务里。',
-                ),
-                onChanged: (value) =>
-                    setState(() => openAICompatibleEnabled = value),
-              ),
-              TextField(
-                controller: openAICompatibleName,
-                decoration: const InputDecoration(labelText: '服务显示名称'),
-              ),
-              TextField(
-                controller: openAICompatibleBaseUrl,
-                decoration: const InputDecoration(
-                  labelText: 'Base URL',
-                  helperText:
-                      '例如 https://api.openai.com/v1，不要包含 /chat/completions。',
-                ),
-              ),
-              TextField(
-                controller: openAICompatibleModel,
-                decoration: const InputDecoration(labelText: '模型'),
-              ),
-              TextField(
-                controller: openAICompatibleApiKey,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'API Key',
-                  helperText: '留空表示不修改已保存的 Windows 凭据。',
-                ),
-              ),
-              const Divider(),
-              SwitchListTile(
-                value: deepLEnabled,
-                title: const Text('启用 DeepL'),
-                subtitle: const Text('支持 DeepL Free 与 Pro API。'),
-                onChanged: (value) => setState(() => deepLEnabled = value),
-              ),
-              TextField(
-                controller: deepLBaseUrl,
-                enabled: deepLEnabled,
-                decoration: const InputDecoration(
-                  labelText: 'DeepL Base URL',
-                  helperText: 'Free 默认 https://api-free.deepl.com/v2',
-                ),
-              ),
-              TextField(
-                controller: deepLApiKey,
-                enabled: deepLEnabled,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'DeepL API Key',
-                  helperText: '留空表示不修改已保存的 Windows 凭据。',
-                ),
-              ),
-              const Divider(),
-              SwitchListTile(
-                value: libreTranslateEnabled,
-                title: const Text('启用 LibreTranslate'),
-                subtitle: const Text('可连接公共实例或自托管实例。'),
-                onChanged: (value) =>
-                    setState(() => libreTranslateEnabled = value),
-              ),
-              TextField(
-                controller: libreTranslateBaseUrl,
-                enabled: libreTranslateEnabled,
-                decoration: const InputDecoration(
-                  labelText: 'LibreTranslate Base URL',
-                  helperText: '例如 https://libretranslate.com',
-                ),
-              ),
-              TextField(
-                controller: libreTranslateApiKey,
-                enabled: libreTranslateEnabled,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'LibreTranslate API Key（可选）',
-                  helperText: '留空表示不修改已保存的 Windows 凭据。',
-                ),
-              ),
-              const Divider(),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '备份与恢复',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: backupBusy ? null : _exportPortableBackup,
-                      icon: const Icon(Icons.file_download_outlined),
-                      label: const Text('导出本地备份'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: backupBusy ? null : _restorePortableBackup,
-                      icon: const Icon(Icons.settings_backup_restore),
-                      label: const Text('从备份恢复'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: backupBusy ? null : _backupToWebDav,
-                      icon: const Icon(Icons.cloud_upload_outlined),
-                      label: const Text('备份到 WebDAV'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: backupBusy ? null : _restoreFromWebDav,
-                      icon: const Icon(Icons.cloud_download_outlined),
-                      label: const Text('从 WebDAV 恢复'),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '备份包含可移植翻译设置和历史记录，不包含 API Key、WebDAV 凭据、快捷键、启动项或窗口状态。',
-                ),
-              ),
-              if (backupStatus.isNotEmpty)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(backupStatus),
-                ),
-              const Divider(),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  widget.settings.webdavUrl.isEmpty
-                      ? '当前未配置 WebDAV。'
-                      : '当前 WebDAV：${widget.settings.webdavUsername.isEmpty ? '匿名' : widget.settings.webdavUsername} · ${widget.settings.webdavUrl}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-              if (widget.settings.webdavLastSyncStatus.isNotEmpty)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    [
-                      widget.settings.webdavLastSyncStatus,
-                      if (widget.settings.webdavLastSyncAt.isNotEmpty)
-                        widget.settings.webdavLastSyncAt,
-                      if (widget.settings.webdavLastSyncError.isNotEmpty)
-                        widget.settings.webdavLastSyncError,
-                    ].join(' · '),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: webdavUrl,
-                decoration: const InputDecoration(labelText: 'WebDAV 地址'),
-              ),
-              TextField(
-                controller: webdavUser,
-                decoration: const InputDecoration(labelText: 'WebDAV 用户名'),
-              ),
-              TextField(
-                controller: webdavPassword,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'WebDAV 密码或令牌',
-                  helperText: '留空表示不修改已保存的 Windows 凭据。',
-                ),
-              ),
-              if (credentialStatus.isNotEmpty)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    credentialStatus,
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error),
-                  ),
-                ),
-              if (connectionStatus.isNotEmpty)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(connectionStatus),
-                ),
-              SwitchListTile(
-                value: autoSync,
-                title: const Text('自动同步历史记录'),
-                onChanged: (value) => setState(() => autoSync = value),
-              ),
-              Row(
+    final mediaSize = MediaQuery.sizeOf(context);
+    final dialogWidth = (mediaSize.width - 24).clamp(0.0, 980.0).toDouble();
+    final dialogHeight = (mediaSize.height - 24).clamp(0.0, 720.0).toDouble();
+    return Dialog(
+      insetPadding: const EdgeInsets.all(12),
+      child: SizedBox(
+        width: dialogWidth,
+        height: dialogHeight,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 8, 10),
+              child: Row(
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: syncIntervalValue,
-                      enabled: autoSync,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: const InputDecoration(
-                        labelText: '自动同步间隔',
-                      ),
+                  Text('Pythia 设置',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: '关闭',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(),
+            Expanded(
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 176,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(8),
+                      itemCount: settingsSections.length,
+                      itemBuilder: (context, index) {
+                        final section = settingsSections[index];
+                        return ListTile(
+                          selected: selectedSettingsSection == index,
+                          leading: Icon(section.$2, size: 20),
+                          title: Text(section.$1),
+                          dense: true,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          onTap: () => setState(() {
+                            selectedSettingsSection = index;
+                            if (settingsScrollController.hasClients) {
+                              settingsScrollController.jumpTo(0);
+                            }
+                          }),
+                        );
+                      },
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 120,
-                    child: DropdownButtonFormField<WebDavSyncIntervalUnit>(
-                      initialValue: syncIntervalUnit,
-                      decoration: const InputDecoration(labelText: '单位'),
-                      items: [
-                        for (final unit in WebDavSyncIntervalUnit.values)
-                          DropdownMenuItem(
-                            value: unit,
-                            child: Text(unit.label),
-                          ),
-                      ],
-                      onChanged: autoSync
-                          ? (value) {
-                              if (value != null) {
-                                setState(() => syncIntervalUnit = value);
-                              }
-                            }
-                          : null,
+                  const VerticalDivider(width: 1),
+                  Expanded(
+                    child: Scrollbar(
+                      controller: settingsScrollController,
+                      thumbVisibility: true,
+                      child: SingleChildScrollView(
+                        controller: settingsScrollController,
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              settingsSections[selectedSettingsSection].$1,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 12),
+                            if (selectedSettingsSection == 0) ...[
+                              SwitchListTile(
+                                value: saveHistory,
+                                title: const Text('保存历史记录'),
+                                onChanged: (value) =>
+                                    setState(() => saveHistory = value),
+                              ),
+                              DropdownButtonFormField<PythiaThemeMode>(
+                                initialValue: themeMode,
+                                decoration:
+                                    const InputDecoration(labelText: '外观'),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: PythiaThemeMode.system,
+                                    child: Text('跟随系统'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: PythiaThemeMode.light,
+                                    child: Text('浅色'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: PythiaThemeMode.dark,
+                                    child: Text('深色'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value == null) return;
+                                  setState(() => themeMode = value);
+                                },
+                              ),
+                              SwitchListTile(
+                                value: launchAtStartup,
+                                title: const Text('开机启动'),
+                                subtitle:
+                                    const Text('保存后立即注册到当前 Windows 用户的启动项。'),
+                                onChanged: (value) =>
+                                    setState(() => launchAtStartup = value),
+                              ),
+                              SwitchListTile(
+                                value: closeToTray,
+                                title: const Text('关闭后最小化到托盘'),
+                                onChanged: (value) =>
+                                    setState(() => closeToTray = value),
+                              ),
+                              SwitchListTile(
+                                value: alwaysOnTop,
+                                title: const Text('翻译窗口置顶'),
+                                onChanged: (value) =>
+                                    setState(() => alwaysOnTop = value),
+                              ),
+                              SwitchListTile(
+                                value: hideOnBlur,
+                                title: const Text('失焦后隐藏翻译窗口'),
+                                onChanged: (value) =>
+                                    setState(() => hideOnBlur = value),
+                              ),
+                              SwitchListTile(
+                                value: notificationsEnabled,
+                                title: const Text('系统通知'),
+                                subtitle:
+                                    const Text('后台自动同步完成或失败时显示 Windows 通知。'),
+                                onChanged: (value) => setState(
+                                    () => notificationsEnabled = value),
+                              ),
+                            ],
+                            if (selectedSettingsSection == 1) ...[
+                              HotkeyRecorderField(
+                                controller: showWindowHotkey,
+                                label: '显示窗口快捷键',
+                              ),
+                              HotkeyRecorderField(
+                                controller: selectionTranslateHotkey,
+                                label: '划词翻译快捷键',
+                              ),
+                              HotkeyRecorderField(
+                                controller: screenshotTranslateHotkey,
+                                label: '截图翻译快捷键',
+                              ),
+                              if (hotkeyStatus.isNotEmpty)
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    hotkeyStatus,
+                                    style: TextStyle(
+                                      color:
+                                          Theme.of(context).colorScheme.error,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                            if (selectedSettingsSection == 2) ...[
+                              PluginSettingsPanel(
+                                manager: widget.pluginManager,
+                                onChanged: (selectedServiceId) async {
+                                  final plugins = await widget.pluginManager
+                                          ?.listInstalled() ??
+                                      const <InstalledPythiaPlugin>[];
+                                  final available = plugins
+                                      .where((plugin) => plugin.enabled)
+                                      .map((plugin) => plugin.serviceId)
+                                      .toSet();
+                                  enabledTranslateServices.removeWhere(
+                                    (id) =>
+                                        id.startsWith('plugin:') &&
+                                        !available.contains(id),
+                                  );
+                                  if (selectedServiceId != null) {
+                                    enabledTranslateServices
+                                        .remove(selectedServiceId);
+                                    enabledTranslateServices.insert(
+                                        0, selectedServiceId);
+                                  }
+                                },
+                              ),
+                            ],
+                            if (selectedSettingsSection == 3) ...[
+                              SwitchListTile(
+                                value: googleEnabled,
+                                title: const Text('启用 Google 翻译'),
+                                subtitle: const Text('无需 API Key，可作为默认在线翻译服务。'),
+                                onChanged: (value) =>
+                                    setState(() => googleEnabled = value),
+                              ),
+                              const Divider(),
+                              SwitchListTile(
+                                value: baiduEnabled,
+                                title: const Text('启用百度翻译'),
+                                subtitle: const Text(
+                                    'AppID 和密钥保存在 Windows Credential Manager。'),
+                                onChanged: (value) =>
+                                    setState(() => baiduEnabled = value),
+                              ),
+                              TextField(
+                                controller: baiduAppId,
+                                enabled: baiduEnabled,
+                                decoration: const InputDecoration(
+                                  labelText: '百度 AppID',
+                                  helperText: '留空表示不修改已保存的 Windows 凭据。',
+                                ),
+                              ),
+                              TextField(
+                                controller: baiduSecret,
+                                enabled: baiduEnabled,
+                                obscureText: true,
+                                decoration: const InputDecoration(
+                                  labelText: '百度密钥',
+                                  helperText: '留空表示不修改已保存的 Windows 凭据。',
+                                ),
+                              ),
+                              const Divider(),
+                              SwitchListTile(
+                                value: youdaoEnabled,
+                                title: const Text('启用有道翻译'),
+                                subtitle: const Text(
+                                    'AppKey 和密钥保存在 Windows Credential Manager。'),
+                                onChanged: (value) =>
+                                    setState(() => youdaoEnabled = value),
+                              ),
+                              TextField(
+                                controller: youdaoAppKey,
+                                enabled: youdaoEnabled,
+                                decoration: const InputDecoration(
+                                  labelText: '有道 AppKey',
+                                  helperText: '留空表示不修改已保存的 Windows 凭据。',
+                                ),
+                              ),
+                              TextField(
+                                controller: youdaoSecret,
+                                enabled: youdaoEnabled,
+                                obscureText: true,
+                                decoration: const InputDecoration(
+                                  labelText: '有道密钥',
+                                  helperText: '留空表示不修改已保存的 Windows 凭据。',
+                                ),
+                              ),
+                              const Divider(),
+                              SwitchListTile(
+                                value: openAICompatibleEnabled,
+                                title: const Text('启用 OpenAI-compatible 翻译服务'),
+                                subtitle: const Text(
+                                  '兼容 OpenAI Chat Completions 的服务会显示在主界面多选服务里。',
+                                ),
+                                onChanged: (value) => setState(
+                                    () => openAICompatibleEnabled = value),
+                              ),
+                              TextField(
+                                controller: openAICompatibleName,
+                                decoration:
+                                    const InputDecoration(labelText: '服务显示名称'),
+                              ),
+                              TextField(
+                                controller: openAICompatibleBaseUrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Base URL',
+                                  helperText:
+                                      '例如 https://api.openai.com/v1，不要包含 /chat/completions。',
+                                ),
+                              ),
+                              TextField(
+                                controller: openAICompatibleModel,
+                                decoration:
+                                    const InputDecoration(labelText: '模型'),
+                              ),
+                              TextField(
+                                controller: openAICompatibleApiKey,
+                                obscureText: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'API Key',
+                                  helperText: '留空表示不修改已保存的 Windows 凭据。',
+                                ),
+                              ),
+                              const Divider(),
+                              SwitchListTile(
+                                value: deepLEnabled,
+                                title: const Text('启用 DeepL'),
+                                subtitle:
+                                    const Text('支持 DeepL Free 与 Pro API。'),
+                                onChanged: (value) =>
+                                    setState(() => deepLEnabled = value),
+                              ),
+                              TextField(
+                                controller: deepLBaseUrl,
+                                enabled: deepLEnabled,
+                                decoration: const InputDecoration(
+                                  labelText: 'DeepL Base URL',
+                                  helperText:
+                                      'Free 默认 https://api-free.deepl.com/v2',
+                                ),
+                              ),
+                              TextField(
+                                controller: deepLApiKey,
+                                enabled: deepLEnabled,
+                                obscureText: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'DeepL API Key',
+                                  helperText: '留空表示不修改已保存的 Windows 凭据。',
+                                ),
+                              ),
+                              const Divider(),
+                              SwitchListTile(
+                                value: libreTranslateEnabled,
+                                title: const Text('启用 LibreTranslate'),
+                                subtitle: const Text('可连接公共实例或自托管实例。'),
+                                onChanged: (value) => setState(
+                                    () => libreTranslateEnabled = value),
+                              ),
+                              TextField(
+                                controller: libreTranslateBaseUrl,
+                                enabled: libreTranslateEnabled,
+                                decoration: const InputDecoration(
+                                  labelText: 'LibreTranslate Base URL',
+                                  helperText: '例如 https://libretranslate.com',
+                                ),
+                              ),
+                              TextField(
+                                controller: libreTranslateApiKey,
+                                enabled: libreTranslateEnabled,
+                                obscureText: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'LibreTranslate API Key（可选）',
+                                  helperText: '留空表示不修改已保存的 Windows 凭据。',
+                                ),
+                              ),
+                            ],
+                            if (selectedSettingsSection == 4) ...[
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '备份与恢复',
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Wrap(
+                                  spacing: 10,
+                                  runSpacing: 8,
+                                  children: [
+                                    OutlinedButton.icon(
+                                      onPressed: backupBusy
+                                          ? null
+                                          : _exportPortableBackup,
+                                      icon: const Icon(
+                                          Icons.file_download_outlined),
+                                      label: const Text('导出本地备份'),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: backupBusy
+                                          ? null
+                                          : _restorePortableBackup,
+                                      icon: const Icon(
+                                          Icons.settings_backup_restore),
+                                      label: const Text('从备份恢复'),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed:
+                                          backupBusy ? null : _backupToWebDav,
+                                      icon: const Icon(
+                                          Icons.cloud_upload_outlined),
+                                      label: const Text('备份到 WebDAV'),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: backupBusy
+                                          ? null
+                                          : _restoreFromWebDav,
+                                      icon: const Icon(
+                                          Icons.cloud_download_outlined),
+                                      label: const Text('从 WebDAV 恢复'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '备份包含可移植翻译设置和历史记录，不包含 API Key、WebDAV 凭据、快捷键、启动项或窗口状态。',
+                                ),
+                              ),
+                              if (backupStatus.isNotEmpty)
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(backupStatus),
+                                ),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  widget.settings.webdavUrl.isEmpty
+                                      ? '当前未配置 WebDAV。'
+                                      : '当前 WebDAV：${widget.settings.webdavUsername.isEmpty ? '匿名' : widget.settings.webdavUsername} · ${widget.settings.webdavUrl}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                              if (widget
+                                  .settings.webdavLastSyncStatus.isNotEmpty)
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    [
+                                      widget.settings.webdavLastSyncStatus,
+                                      if (widget
+                                          .settings.webdavLastSyncAt.isNotEmpty)
+                                        widget.settings.webdavLastSyncAt,
+                                      if (widget.settings.webdavLastSyncError
+                                          .isNotEmpty)
+                                        widget.settings.webdavLastSyncError,
+                                    ].join(' · '),
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: webdavUrl,
+                                decoration: const InputDecoration(
+                                    labelText: 'WebDAV 地址'),
+                              ),
+                              TextField(
+                                controller: webdavUser,
+                                decoration: const InputDecoration(
+                                    labelText: 'WebDAV 用户名'),
+                              ),
+                              TextField(
+                                controller: webdavPassword,
+                                obscureText: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'WebDAV 密码或令牌',
+                                  helperText: '留空表示不修改已保存的 Windows 凭据。',
+                                ),
+                              ),
+                              if (credentialStatus.isNotEmpty)
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    credentialStatus,
+                                    style: TextStyle(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .error),
+                                  ),
+                                ),
+                              if (connectionStatus.isNotEmpty)
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(connectionStatus),
+                                ),
+                              SwitchListTile(
+                                value: autoSync,
+                                title: const Text('自动同步历史记录'),
+                                onChanged: (value) =>
+                                    setState(() => autoSync = value),
+                              ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: syncIntervalValue,
+                                      enabled: autoSync,
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly
+                                      ],
+                                      decoration: const InputDecoration(
+                                        labelText: '自动同步间隔',
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  SizedBox(
+                                    width: 120,
+                                    child: DropdownButtonFormField<
+                                        WebDavSyncIntervalUnit>(
+                                      initialValue: syncIntervalUnit,
+                                      decoration: const InputDecoration(
+                                          labelText: '单位'),
+                                      items: [
+                                        for (final unit
+                                            in WebDavSyncIntervalUnit.values)
+                                          DropdownMenuItem(
+                                            value: unit,
+                                            child: Text(unit.label),
+                                          ),
+                                      ],
+                                      onChanged: autoSync
+                                          ? (value) {
+                                              if (value != null) {
+                                                setState(() =>
+                                                    syncIntervalUnit = value);
+                                              }
+                                            }
+                                          : null,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'API Key 与 WebDAV 密码必须通过 Windows Credential Manager/DPAPI 平台通道保存，不写入 settings.json。',
+                              ),
+                            ],
+                            if (selectedSettingsSection == 5) ...[
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '当前版本：$pythiaCurrentVersion',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                              if (updateStatus.isNotEmpty)
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(updateStatus),
+                                ),
+                              if (availableUpdate?.installer != null)
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: FilledButton.icon(
+                                      onPressed: installingUpdate
+                                          ? null
+                                          : _downloadAndInstallUpdate,
+                                      icon: installingUpdate
+                                          ? const SizedBox.square(
+                                              dimension: 16,
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2),
+                                            )
+                                          : const Icon(Icons.system_update_alt),
+                                      label: Text(
+                                        installingUpdate ? '正在准备更新' : '下载并安装',
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'API Key 与 WebDAV 密码必须通过 Windows Credential Manager/DPAPI 平台通道保存，不写入 settings.json。',
-              ),
-              const Divider(),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '当前版本：$pythiaCurrentVersion',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-              if (updateStatus.isNotEmpty)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(updateStatus),
-                ),
-              if (availableUpdate?.installer != null)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: FilledButton.icon(
-                      onPressed:
-                          installingUpdate ? null : _downloadAndInstallUpdate,
-                      icon: installingUpdate
-                          ? const SizedBox.square(
-                              dimension: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.system_update_alt),
-                      label: Text(
-                        installingUpdate ? '正在准备更新' : '下载并安装',
-                      ),
+            ),
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (selectedSettingsSection == 5)
+                    TextButton(
+                      onPressed: checkingUpdate ? null : _checkForUpdates,
+                      child: const Text('检查更新'),
                     ),
+                  if (selectedSettingsSection == 4)
+                    TextButton(
+                      onPressed: _clearWebDavConfig,
+                      child: const Text('清除 WebDAV'),
+                    ),
+                  if (selectedSettingsSection == 4)
+                    TextButton(
+                      onPressed:
+                          testingConnection ? null : _testWebDavConnection,
+                      child: const Text('测试连接'),
+                    ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('取消'),
                   ),
-                ),
-            ],
-          ),
+                  FilledButton(
+                    onPressed: () async {
+                      if (!_validateHotkeys()) return;
+                      if (autoSync && webdavUrl.text.trim().isEmpty) {
+                        setState(() {
+                          connectionStatus = '启用自动同步前，请先填写 WebDAV 地址。';
+                        });
+                        return;
+                      }
+                      final syncSchedule = WebDavSyncSchedule(
+                        int.tryParse(syncIntervalValue.text.trim()) ?? 0,
+                        syncIntervalUnit,
+                      );
+                      try {
+                        syncSchedule.validated();
+                      } on FormatException catch (error) {
+                        setState(
+                            () => connectionStatus = error.message.toString());
+                        return;
+                      }
+                      final password = webdavPassword.text;
+                      final providerApiKey = openAICompatibleApiKey.text;
+                      final credentialValues = <String, String>{
+                        openAICompatibleApiKeySecretKey: providerApiKey,
+                        deepLApiKeySecretKey: deepLApiKey.text,
+                        libreTranslateApiKeySecretKey:
+                            libreTranslateApiKey.text,
+                        baiduAppIdSecretKey: baiduAppId.text,
+                        baiduSecretKey: baiduSecret.text,
+                        youdaoAppKeySecretKey: youdaoAppKey.text,
+                        youdaoSecretKey: youdaoSecret.text,
+                      };
+                      try {
+                        for (final entry in credentialValues.entries) {
+                          if (entry.value.isNotEmpty) {
+                            await widget.credentialStore.writeSecret(
+                              entry.key,
+                              entry.value,
+                            );
+                          }
+                        }
+                      } catch (error) {
+                        setState(
+                            () => credentialStatus = '保存 API Key 失败：$error');
+                        return;
+                      }
+                      if (password.isNotEmpty) {
+                        try {
+                          await widget.credentialStore.writeSecret(
+                            webdavPasswordSecretKey,
+                            password,
+                          );
+                        } catch (error) {
+                          setState(() =>
+                              credentialStatus = '保存 Windows 凭据失败：$error');
+                          return;
+                        }
+                      }
+                      if (!context.mounted) return;
+                      final enabledServices = enabledTranslateServices.toList();
+                      _updateNewProviderSelection(
+                        enabledServices,
+                        id: PythiaSettings.googleServiceId,
+                        enabled: googleEnabled,
+                        wasEnabled: widget.settings.googleEnabled,
+                      );
+                      _updateNewProviderSelection(
+                        enabledServices,
+                        id: PythiaSettings.baiduServiceId,
+                        enabled: baiduEnabled,
+                        wasEnabled: widget.settings.baiduEnabled,
+                      );
+                      _updateNewProviderSelection(
+                        enabledServices,
+                        id: PythiaSettings.youdaoServiceId,
+                        enabled: youdaoEnabled,
+                        wasEnabled: widget.settings.youdaoEnabled,
+                      );
+                      if (openAICompatibleEnabled &&
+                          !widget.settings.openAICompatibleEnabled) {
+                        enabledServices
+                            .remove(PythiaSettings.openAICompatibleServiceId);
+                        enabledServices.insert(
+                          0,
+                          PythiaSettings.openAICompatibleServiceId,
+                        );
+                      } else if (!openAICompatibleEnabled) {
+                        enabledServices
+                            .remove(PythiaSettings.openAICompatibleServiceId);
+                      }
+                      _updateNewProviderSelection(
+                        enabledServices,
+                        id: PythiaSettings.deepLServiceId,
+                        enabled: deepLEnabled,
+                        wasEnabled: widget.settings.deepLEnabled,
+                      );
+                      _updateNewProviderSelection(
+                        enabledServices,
+                        id: PythiaSettings.libreTranslateServiceId,
+                        enabled: libreTranslateEnabled,
+                        wasEnabled: widget.settings.libreTranslateEnabled,
+                      );
+                      if (enabledServices.isEmpty) enabledServices.add('local');
+                      Navigator.pop(
+                        context,
+                        widget.settings.copyWith(
+                          saveHistory: saveHistory,
+                          themeMode: themeMode,
+                          launchAtStartup: launchAtStartup,
+                          closeToTray: closeToTray,
+                          alwaysOnTop: alwaysOnTop,
+                          hideOnBlur: hideOnBlur,
+                          notificationsEnabled: notificationsEnabled,
+                          showWindowHotkey: showWindowHotkey.text.trim().isEmpty
+                              ? 'Ctrl+Alt+P'
+                              : showWindowHotkey.text.trim(),
+                          selectionTranslateHotkey:
+                              selectionTranslateHotkey.text.trim().isEmpty
+                                  ? 'Ctrl+Alt+E'
+                                  : selectionTranslateHotkey.text.trim(),
+                          screenshotTranslateHotkey:
+                              screenshotTranslateHotkey.text.trim().isEmpty
+                                  ? 'Ctrl+Alt+S'
+                                  : screenshotTranslateHotkey.text.trim(),
+                          enabledTranslateServices: enabledServices,
+                          translateServiceOrder: enabledServices,
+                          googleEnabled: googleEnabled,
+                          baiduEnabled: baiduEnabled,
+                          youdaoEnabled: youdaoEnabled,
+                          openAICompatibleEnabled: openAICompatibleEnabled,
+                          openAICompatibleName:
+                              openAICompatibleName.text.trim().isEmpty
+                                  ? 'OpenAI Compatible'
+                                  : openAICompatibleName.text.trim(),
+                          openAICompatibleBaseUrl:
+                              openAICompatibleBaseUrl.text.trim().isEmpty
+                                  ? 'https://api.openai.com/v1'
+                                  : openAICompatibleBaseUrl.text.trim(),
+                          openAICompatibleModel:
+                              openAICompatibleModel.text.trim().isEmpty
+                                  ? 'gpt-4o-mini'
+                                  : openAICompatibleModel.text.trim(),
+                          deepLEnabled: deepLEnabled,
+                          deepLBaseUrl: deepLBaseUrl.text.trim().isEmpty
+                              ? 'https://api-free.deepl.com/v2'
+                              : deepLBaseUrl.text.trim(),
+                          libreTranslateEnabled: libreTranslateEnabled,
+                          libreTranslateBaseUrl:
+                              libreTranslateBaseUrl.text.trim().isEmpty
+                                  ? 'https://libretranslate.com'
+                                  : libreTranslateBaseUrl.text.trim(),
+                          webdavUrl: webdavUrl.text.trim(),
+                          webdavUsername: webdavUser.text.trim(),
+                          webdavHistoryAutoSync: autoSync,
+                          webdavHistorySyncIntervalValue: syncSchedule.value,
+                          webdavHistorySyncIntervalUnit:
+                              syncSchedule.unit.storageValue,
+                        ),
+                      );
+                    },
+                    child: const Text('保存'),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: checkingUpdate ? null : _checkForUpdates,
-          child: const Text('检查更新'),
-        ),
-        TextButton(
-          onPressed: _clearWebDavConfig,
-          child: const Text('清除 WebDAV'),
-        ),
-        TextButton(
-          onPressed: testingConnection ? null : _testWebDavConnection,
-          child: const Text('测试连接'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () async {
-            if (!_validateHotkeys()) return;
-            if (autoSync && webdavUrl.text.trim().isEmpty) {
-              setState(() {
-                connectionStatus = '启用自动同步前，请先填写 WebDAV 地址。';
-              });
-              return;
-            }
-            final syncSchedule = WebDavSyncSchedule(
-              int.tryParse(syncIntervalValue.text.trim()) ?? 0,
-              syncIntervalUnit,
-            );
-            try {
-              syncSchedule.validated();
-            } on FormatException catch (error) {
-              setState(() => connectionStatus = error.message.toString());
-              return;
-            }
-            final password = webdavPassword.text;
-            final providerApiKey = openAICompatibleApiKey.text;
-            final credentialValues = <String, String>{
-              openAICompatibleApiKeySecretKey: providerApiKey,
-              deepLApiKeySecretKey: deepLApiKey.text,
-              libreTranslateApiKeySecretKey: libreTranslateApiKey.text,
-              baiduAppIdSecretKey: baiduAppId.text,
-              baiduSecretKey: baiduSecret.text,
-              youdaoAppKeySecretKey: youdaoAppKey.text,
-              youdaoSecretKey: youdaoSecret.text,
-            };
-            try {
-              for (final entry in credentialValues.entries) {
-                if (entry.value.isNotEmpty) {
-                  await widget.credentialStore.writeSecret(
-                    entry.key,
-                    entry.value,
-                  );
-                }
-              }
-            } catch (error) {
-              setState(() => credentialStatus = '保存 API Key 失败：$error');
-              return;
-            }
-            if (password.isNotEmpty) {
-              try {
-                await widget.credentialStore.writeSecret(
-                  webdavPasswordSecretKey,
-                  password,
-                );
-              } catch (error) {
-                setState(() => credentialStatus = '保存 Windows 凭据失败：$error');
-                return;
-              }
-            }
-            if (!context.mounted) return;
-            final enabledServices = enabledTranslateServices.toList();
-            _updateNewProviderSelection(
-              enabledServices,
-              id: PythiaSettings.googleServiceId,
-              enabled: googleEnabled,
-              wasEnabled: widget.settings.googleEnabled,
-            );
-            _updateNewProviderSelection(
-              enabledServices,
-              id: PythiaSettings.baiduServiceId,
-              enabled: baiduEnabled,
-              wasEnabled: widget.settings.baiduEnabled,
-            );
-            _updateNewProviderSelection(
-              enabledServices,
-              id: PythiaSettings.youdaoServiceId,
-              enabled: youdaoEnabled,
-              wasEnabled: widget.settings.youdaoEnabled,
-            );
-            if (openAICompatibleEnabled &&
-                !widget.settings.openAICompatibleEnabled) {
-              enabledServices.remove(PythiaSettings.openAICompatibleServiceId);
-              enabledServices.insert(
-                0,
-                PythiaSettings.openAICompatibleServiceId,
-              );
-            } else if (!openAICompatibleEnabled) {
-              enabledServices.remove(PythiaSettings.openAICompatibleServiceId);
-            }
-            _updateNewProviderSelection(
-              enabledServices,
-              id: PythiaSettings.deepLServiceId,
-              enabled: deepLEnabled,
-              wasEnabled: widget.settings.deepLEnabled,
-            );
-            _updateNewProviderSelection(
-              enabledServices,
-              id: PythiaSettings.libreTranslateServiceId,
-              enabled: libreTranslateEnabled,
-              wasEnabled: widget.settings.libreTranslateEnabled,
-            );
-            if (enabledServices.isEmpty) enabledServices.add('local');
-            Navigator.pop(
-              context,
-              widget.settings.copyWith(
-                saveHistory: saveHistory,
-                themeMode: themeMode,
-                launchAtStartup: launchAtStartup,
-                closeToTray: closeToTray,
-                alwaysOnTop: alwaysOnTop,
-                hideOnBlur: hideOnBlur,
-                notificationsEnabled: notificationsEnabled,
-                showWindowHotkey: showWindowHotkey.text.trim().isEmpty
-                    ? 'Ctrl+Alt+P'
-                    : showWindowHotkey.text.trim(),
-                selectionTranslateHotkey:
-                    selectionTranslateHotkey.text.trim().isEmpty
-                        ? 'Ctrl+Alt+E'
-                        : selectionTranslateHotkey.text.trim(),
-                screenshotTranslateHotkey:
-                    screenshotTranslateHotkey.text.trim().isEmpty
-                        ? 'Ctrl+Alt+S'
-                        : screenshotTranslateHotkey.text.trim(),
-                enabledTranslateServices: enabledServices,
-                translateServiceOrder: enabledServices,
-                googleEnabled: googleEnabled,
-                baiduEnabled: baiduEnabled,
-                youdaoEnabled: youdaoEnabled,
-                openAICompatibleEnabled: openAICompatibleEnabled,
-                openAICompatibleName: openAICompatibleName.text.trim().isEmpty
-                    ? 'OpenAI Compatible'
-                    : openAICompatibleName.text.trim(),
-                openAICompatibleBaseUrl:
-                    openAICompatibleBaseUrl.text.trim().isEmpty
-                        ? 'https://api.openai.com/v1'
-                        : openAICompatibleBaseUrl.text.trim(),
-                openAICompatibleModel: openAICompatibleModel.text.trim().isEmpty
-                    ? 'gpt-4o-mini'
-                    : openAICompatibleModel.text.trim(),
-                deepLEnabled: deepLEnabled,
-                deepLBaseUrl: deepLBaseUrl.text.trim().isEmpty
-                    ? 'https://api-free.deepl.com/v2'
-                    : deepLBaseUrl.text.trim(),
-                libreTranslateEnabled: libreTranslateEnabled,
-                libreTranslateBaseUrl: libreTranslateBaseUrl.text.trim().isEmpty
-                    ? 'https://libretranslate.com'
-                    : libreTranslateBaseUrl.text.trim(),
-                webdavUrl: webdavUrl.text.trim(),
-                webdavUsername: webdavUser.text.trim(),
-                webdavHistoryAutoSync: autoSync,
-                webdavHistorySyncIntervalValue: syncSchedule.value,
-                webdavHistorySyncIntervalUnit: syncSchedule.unit.storageValue,
-              ),
-            );
-          },
-          child: const Text('保存'),
-        ),
-      ],
     );
   }
 

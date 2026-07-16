@@ -1,6 +1,6 @@
 # Pythia Windows 本机验收记录（2026-07-16）
 
-本记录描述 `codex/windows-final` 在真实 Windows x64 开发机上的第一轮开发、构建、安装和自动化验收。它不把尚未执行的人工场景标记为完成。
+本记录描述 `codex/windows-final` 在真实 Windows x64 开发机上的开发、构建、安装和自动化验收，以及根据 macOS 界面完成的第二轮布局修复。它不把尚未执行的人工场景标记为完成。
 
 ## 环境
 
@@ -25,18 +25,27 @@
 - 浅色和深色主题使用 Segoe UI、不透明 surface、Fluent 风格圆角与填充控件；顶部工具栏可在窄窗口换行，语言交换按钮执行真实交换。
 - 打包脚本同时发现 Program Files、当前用户目录和 `PATH` 中的 Inno Setup。
 
+## macOS 对照修复
+
+- 复现 150% 缩放下 1180×760 物理窗口仅有 789×538 logical pixels；原固定 320 px 历史栏会把翻译工作区压窄并导致状态文本溢出。
+- 主窗口改为自适应 Translate/History 导航：常规宽度使用 NavigationRail，窄宽度使用底部 NavigationBar；历史记录成为完整页面并补齐加载、收藏、删除、清空、同步和 JSON 导出。
+- 设置从单个 520 px 长表单改为“通用、快捷键、插件、翻译服务、备份与同步、关于”六个侧栏页面，内容与按钮区独立滚动/换行。
+- 按 macOS 翻译窗补齐复制原文、粘贴、删除换行、清空原文、截图 OCR（不自动翻译）、复制全部译文、收藏到本地历史和朗读译文入口。
+- Windows 原生宿主增加 SAPI 朗读通道；Dart MethodChannel 合同已有自动化测试，实际语音和语言选择仍列为人工验证。
+- 修复新用户第一次翻译保存历史时 `Cannot remove from an unmodifiable list`；空历史现在返回可变集合，并有真实文件回归测试。
+
 ## 自动验证结果
 
 - `node ..\..\script\validate_pythia_plugins.mjs`：3 个示例、2 份 bundled runner 和 6 个公开插件包通过。
 - `flutter analyze`：无问题。
-- `flutter test`：103 项全部通过（基线 85 项，本轮新增 18 项）。
+- `flutter test`：106 项全部通过（基线 85 项，累计新增 21 项）。
 - `flutter build windows --debug`：成功，Debug `Pythia.exe` 创建响应窗口。
 - `flutter build windows --release`：成功生成 `Pythia.exe`。
 - `dart run tool\verify_release_package.dart build\windows\x64\runner\Release`：AMD64、插件排除和敏感材料门禁通过。
 - `tool\build_windows_installer.ps1`：成功生成安装程序和同名 SHA-256 sidecar。
-- 安装程序 SHA-256：`8290871dacd5883485f706ac23f986323d0ee54e8c6ba2a11ad07e884d734d08`。
+- 最终安装程序 SHA-256：`729377f0c6f4a895e2bd20c9a32ab86d69ea182d05524aa636049690eab55f30`，大小 `33,737,915` bytes。
 - `tool\smoke_windows_release.ps1`：raw release 启动、重启、临时目录静默安装、已安装版本启动、静默卸载全部通过。
-- 当前用户正式安装：`%LOCALAPPDATA%\Programs\Pythia\Pythia.exe`，版本 `1.0.0`，进程创建响应窗口。
+- 当前用户正式安装：`%LOCALAPPDATA%\Programs\Pythia\Pythia.exe`，版本 `1.0.0`，进程创建响应窗口；已安装 EXE SHA-256 `7309f86deed6ca3e5c93afc9bd6d23bc4890c8f1438b4f7143e8d95abefc29a4` 与 Release EXE 完全一致。
 - 已安装目录含 `runtime\node.exe`，未发现 `.pythia`、`.potext`、证书或私钥文件。
 
 ## 尚未计为通过

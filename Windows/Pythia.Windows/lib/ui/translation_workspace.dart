@@ -10,6 +10,11 @@ class PythiaTranslationWorkspace extends StatelessWidget {
   final TextEditingController sourceController;
   final FocusNode sourceFocusNode;
   final VoidCallback? onSubmit;
+  final VoidCallback? onCopySource;
+  final VoidCallback? onPasteSource;
+  final VoidCallback? onStripNewlines;
+  final VoidCallback? onClearSource;
+  final VoidCallback? onCopyResults;
   final String sourceLanguageLabel;
   final String targetLanguageLabel;
   final List<PythiaTranslationResult> results;
@@ -19,6 +24,11 @@ class PythiaTranslationWorkspace extends StatelessWidget {
     required this.sourceController,
     required this.sourceFocusNode,
     required this.onSubmit,
+    this.onCopySource,
+    this.onPasteSource,
+    this.onStripNewlines,
+    this.onClearSource,
+    this.onCopyResults,
     required this.sourceLanguageLabel,
     required this.targetLanguageLabel,
     required this.results,
@@ -34,6 +44,32 @@ class PythiaTranslationWorkspace extends StatelessWidget {
           focusNode: sourceFocusNode,
           onSubmit: onSubmit,
           languageLabel: sourceLanguageLabel,
+          actions: [
+            IconButton(
+              tooltip: '复制原文',
+              visualDensity: VisualDensity.compact,
+              onPressed: onCopySource,
+              icon: const Icon(Icons.copy_outlined, size: 18),
+            ),
+            IconButton(
+              tooltip: '粘贴',
+              visualDensity: VisualDensity.compact,
+              onPressed: onPasteSource,
+              icon: const Icon(Icons.content_paste_outlined, size: 18),
+            ),
+            IconButton(
+              tooltip: '删除换行',
+              visualDensity: VisualDensity.compact,
+              onPressed: onStripNewlines,
+              icon: const Icon(Icons.format_clear, size: 18),
+            ),
+            IconButton(
+              tooltip: '清空原文',
+              visualDensity: VisualDensity.compact,
+              onPressed: onClearSource,
+              icon: const Icon(Icons.delete_outline, size: 18),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         Expanded(
@@ -48,10 +84,24 @@ class PythiaTranslationWorkspace extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: Text(
-                    '译文（$targetLanguageLabel）',
-                    style: Theme.of(context).textTheme.titleSmall,
+                  padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '译文（$targetLanguageLabel）',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '复制全部译文',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: results.any((result) => result.isSuccess)
+                            ? onCopyResults
+                            : null,
+                        icon: const Icon(Icons.copy_all_outlined, size: 18),
+                      ),
+                    ],
                   ),
                 ),
                 Expanded(

@@ -12,6 +12,7 @@ class PythiaSourceTextField extends StatefulWidget {
   final FocusNode focusNode;
   final VoidCallback? onSubmit;
   final String languageLabel;
+  final List<Widget> actions;
 
   const PythiaSourceTextField({
     super.key,
@@ -19,6 +20,7 @@ class PythiaSourceTextField extends StatefulWidget {
     required this.focusNode,
     required this.onSubmit,
     required this.languageLabel,
+    this.actions = const [],
   });
 
   @override
@@ -59,29 +61,46 @@ class _PythiaSourceTextFieldState extends State<PythiaSourceTextField> {
     return SizedBox(
       key: PythiaSourceTextField.regionKey,
       height: PythiaSourceTextField.height,
-      child: Focus(
-        onKeyEvent: _handleKeyEvent,
-        child: Scrollbar(
-          controller: scrollController,
-          thumbVisibility: true,
-          child: TextField(
-            key: PythiaSourceTextField.inputKey,
-            controller: widget.controller,
-            focusNode: widget.focusNode,
-            scrollController: scrollController,
-            expands: true,
-            minLines: null,
-            maxLines: null,
-            keyboardType: TextInputType.multiline,
-            textInputAction: TextInputAction.newline,
-            textAlignVertical: TextAlignVertical.top,
-            decoration: InputDecoration(
-              labelText: '原文（${widget.languageLabel}）',
-              alignLabelWithHint: true,
-              border: const OutlineInputBorder(),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Focus(
+              onKeyEvent: _handleKeyEvent,
+              child: Scrollbar(
+                controller: scrollController,
+                thumbVisibility: true,
+                child: TextField(
+                  key: PythiaSourceTextField.inputKey,
+                  controller: widget.controller,
+                  focusNode: widget.focusNode,
+                  scrollController: scrollController,
+                  expands: true,
+                  minLines: null,
+                  maxLines: null,
+                  keyboardType: TextInputType.multiline,
+                  textInputAction: TextInputAction.newline,
+                  textAlignVertical: TextAlignVertical.top,
+                  decoration: InputDecoration(
+                    labelText: '原文（${widget.languageLabel}）',
+                    alignLabelWithHint: true,
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.fromLTRB(14, 22, 14, 12),
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
+          if (widget.actions.isNotEmpty)
+            Positioned(
+              top: 2,
+              right: 8,
+              child: Material(
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                child: Row(
+                    mainAxisSize: MainAxisSize.min, children: widget.actions),
+              ),
+            ),
+        ],
       ),
     );
   }

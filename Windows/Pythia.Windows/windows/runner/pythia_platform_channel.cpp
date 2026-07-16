@@ -4,6 +4,7 @@
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 #include <shellapi.h>
+#include <sapi.h>
 #include <softpub.h>
 #include <wintrust.h>
 #include <uiautomation.h>
@@ -55,6 +56,7 @@ bool g_tray_menu_open = false;
 int g_next_hotkey_id = kHotKeyBaseId;
 std::map<int, std::string> g_hotkey_actions;
 MethodChannel<EncodableValue>* g_platform_channel = nullptr;
+ISpVoice* g_speech_voice = nullptr;
 
 void ShowPythiaWindow(HWND window) {
   if (window == nullptr) {
@@ -351,6 +353,38 @@ std::wstring Utf8ToWide(const std::string& value) {
   ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
                         static_cast<int>(value.size()), result.data(), size);
   return result;
+}
+
+void SpeakText(const MethodCall<EncodableValue>& call,
+               std::unique_ptr<MethodResult<EncodableValue>> result) {
+  const auto text = StringArg(call.arguments(), "text");
+  if (!text.has_value() || text->empty()) {
+    result->Error("invalid_args", "Missing speech text.");
+    return;
+  }
+  const HRESULT initialized = ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  if (FAILED(initialized) && initialized != RPC_E_CHANGED_MODE) {
+    result->Error("speech_unavailable", "Unable to initialize Windows speech.");
+    return;
+  }
+  if (g_speech_voice == nullptr) {
+    const HRESULT created = ::CoCreateInstance(
+        CLSID_SpVoice, nullptr, CLSCTX_ALL, IID_ISpVoice,
+        reinterpret_cast<void**>(&g_speech_voice));
+    if (FAILED(created) || g_speech_voice == nullptr) {
+      result->Error("speech_unavailable", "Windows Speech API is unavailable.");
+      return;
+    }
+  }
+  const std::wstring wide_text = Utf8ToWide(*text);
+  const HRESULT spoken = g_speech_voice->Speak(
+      wide_text.c_str(), SPF_ASYNC | SPF_PURGEBEFORESPEAK | SPF_IS_NOT_XML,
+      nullptr);
+  if (FAILED(spoken)) {
+    result->Error("speech_failed", "Windows Speech API could not speak the text.");
+    return;
+  }
+  result->Success();
 }
 
 void LaunchUpdateInstaller(
@@ -885,6 +919,8 @@ void RegisterPythiaPlatformChannel(flutter::BinaryMessenger* messenger,
           } else {
             result->Error(ocr.error_code, ocr.error_message);
           }
+        } else if (method == "speech.speak") {
+          SpeakText(call, std::move(result));
         } else if (method == "update.launchInstaller") {
           LaunchUpdateInstaller(window, call, std::move(result));
         } else {

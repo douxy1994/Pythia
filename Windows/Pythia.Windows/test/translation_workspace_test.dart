@@ -52,4 +52,41 @@ void main() {
     expect(sourceAfter, sourceBefore);
     expect(resultsAfter - resultsBefore, 200);
   });
+
+  testWidgets('source and result actions mirror the macOS workspace controls',
+      (tester) async {
+    final controller = TextEditingController(text: 'hello');
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+    var pasted = false;
+    var stripped = false;
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          width: 700,
+          height: 600,
+          child: PythiaTranslationWorkspace(
+            sourceController: controller,
+            sourceFocusNode: focusNode,
+            onSubmit: () {},
+            onPasteSource: () => pasted = true,
+            onStripNewlines: () => stripped = true,
+            sourceLanguageLabel: 'English',
+            targetLanguageLabel: '简体中文',
+            results: const [],
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.byTooltip('粘贴'));
+    await tester.tap(find.byTooltip('删除换行'));
+    expect(pasted, isTrue);
+    expect(stripped, isTrue);
+    expect(find.byTooltip('复制原文'), findsOneWidget);
+    expect(find.byTooltip('清空原文'), findsOneWidget);
+    expect(find.byTooltip('复制全部译文'), findsOneWidget);
+  });
 }

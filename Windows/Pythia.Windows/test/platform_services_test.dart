@@ -35,6 +35,7 @@ void main() {
     await service.saveWindowPlacement();
     await service.unregisterAll();
     await service.register('selection.translate', 'Ctrl+Alt+E');
+    await service.speak('你好');
     await service.quitApp();
 
     expect(calls.map((call) => call.method), [
@@ -49,6 +50,7 @@ void main() {
       'window.savePlacement',
       'hotkey.unregisterAll',
       'hotkey.register',
+      'speech.speak',
       'app.quit',
     ]);
     expect(calls[0].arguments, {'enabled': true});
@@ -65,7 +67,8 @@ void main() {
       'action': 'selection.translate',
       'accelerator': 'Ctrl+Alt+E',
     });
-    expect(calls[11].arguments, isNull);
+    expect(calls[11].arguments, {'text': '你好'});
+    expect(calls[12].arguments, isNull);
   });
 
   test('selection and screenshot methods return text', () async {

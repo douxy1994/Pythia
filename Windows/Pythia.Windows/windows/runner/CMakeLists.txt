@@ -30,6 +30,7 @@ target_link_libraries(${BINARY_NAME} PRIVATE
   flutter_wrapper_app
   Advapi32
   Shell32
+  Sapi
   Wintrust
   Crypt32
   WindowsApp
