@@ -32,6 +32,7 @@
 - Windows project builds with an x64 Visual Studio toolchain; non-x64 CMake configuration is rejected.
 - `Pythia.exe` is AMD64 (`PE machine 0x8664`), verified by the release package gate.
 - App starts, exits, and restarts.
+- Uninstall removes the current-user `Pythia` Run value without disturbing a value that existed before an isolated smoke test.
 - Main translation flow works.
 - Settings save and change behavior.
 - API keys and WebDAV credentials are stored via Credential Manager or DPAPI.

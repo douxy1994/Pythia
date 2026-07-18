@@ -130,7 +130,7 @@ dart run tool\verify_release_package.dart build\windows\x64\runner\Release
 .\tool\build_windows_installer.ps1
 ```
 
-The 2026-07-16 local Windows 11 development acceptance passed 103 Flutter tests, the AMD64 release/package gate, installer and SHA-256 creation, and raw start/restart plus silent install/start/uninstall smoke tests. See the [local Windows acceptance record](Docs/WINDOWS_ACCEPTANCE_2026-07-16.md). Production still requires Authenticode signing and the documented user-driven IME, live-service, sync, and multi-display scenarios.
+The local Windows 11 development acceptance, last verified on 2026-07-18, now passes 114 Flutter tests, native MSVC geometry/tray/x64 checks, the AMD64 release/package gate, installer and SHA-256 creation, and raw start/restart plus silent install/start/startup-cleanup/uninstall smoke tests. See the [local Windows acceptance record](Docs/WINDOWS_ACCEPTANCE_2026-07-16.md). Production still requires Authenticode signing and the documented user-driven IME, live-service, sync, and multi-display scenarios.
 
 ## Plugin Contract Verification
 

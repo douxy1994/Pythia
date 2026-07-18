@@ -18,7 +18,7 @@ The current published `.pythia` packages are under [`../../Plugins`](../../Plugi
 
 ## Implemented In This Scaffold
 
-- `lib/main.dart`: adaptive Material 3 Windows shell with separate Translate/History pages, macOS-parity source/result actions, screenshot OCR/translation, local favorite collection, Windows speech, JSON history export, and a six-section settings window.
+- `lib/main.dart`: adaptive Material 3 Windows shell with separate Translate/History pages, macOS-parity source/result actions, screenshot OCR/translation, local favorite collection, Windows speech, JSON history export, and an eight-section settings window.
 - `lib/core/history_record.dart`: cross-platform history model matching `Core/Schemas/history-record.schema.json`.
 - `lib/core/history_sync.dart`: Dart port of the macOS/Core merge strategy.
 - `lib/core/webdav_sync.dart`: WebDAV `/Pythia/history/history.json` sync and connection-test implementation.
@@ -28,22 +28,23 @@ The current published `.pythia` packages are under [`../../Plugins`](../../Plugi
 - `lib/core/update_checker.dart`: Pythia GitHub latest-release checker for version `1.0.0`.
 - `lib/core/release_package_verifier.dart` and `tool/verify_release_package.dart`: release gate that requires an AMD64 `Pythia.exe` and rejects bundled plugin payloads and private-key/API-token markers.
 - `lib/platform/*`: explicit platform interfaces plus MethodChannel Credential Manager storage for secrets.
-- `lib/platform/platform_services.dart`: MethodChannel contracts for selection translation, screenshot OCR, Windows speech, tray actions, hotkeys, startup, and window behavior.
+- `lib/platform/platform_services.dart`: MethodChannel contracts for selection translation, screenshot OCR, Windows speech, tray actions, hotkeys, startup, window behavior, system accent color, reduced animation, and native window appearance.
 - `lib/platform/tray_action_dispatcher.dart`: tested routing for quick input translation, settings, history, and WebDAV history sync tray actions.
 - `windows/runner/*`: native Flutter Windows host, CMake project, Credential Manager channel, selected-text clipboard fallback, Windows Runtime screenshot OCR with a multi-monitor selection overlay, Windows Speech API output, startup registration, always-on-top window handling, complete tray icon/menu callbacks, close-to-tray behavior, global hotkey registration/dispatch, and window placement persistence.
 - `test/history_sync_test.dart`: merge behavior, corrupt-remote protection, and WebDAV connection-test behavior tests.
 - `test/translation_service_test.dart`: provider request, language mapping, response parsing, and credential behavior tests.
 - `test/update_checker_test.dart`: GitHub latest-release parsing, version comparison, and HTTP failure behavior tests.
 - `test/platform_services_test.dart`: Windows platform MethodChannel method names and argument contracts.
+- `test/windows_theme_test.dart` and `test/settings_dialog_test.dart`: Windows accent/font/material behavior plus 100%, 125%, 150%, and 200% DPI settings-shell coverage.
 - `test/tray_action_dispatcher_test.dart`: complete tray business-action routing.
 - `test/native/tray_action_map_test.cpp`: platform-independent native command-to-Dart action mapping.
 - `test/release_package_verifier_test.dart`: Windows x64 architecture plus release package plugin/secret exclusion tests.
 
 ## Still Required On Windows
 
-- Continue interactive verification of the included native host on representative Windows applications and display configurations. Local x64 build, raw start/restart, installer build, silent install/start/uninstall, and a persistent current-user installation now pass on Windows 11 build 26200 at 150% scaling.
-- Enter submission, Shift+Enter line breaks, IME composing protection, fixed source height, vertically growing results, adaptive Translate/History navigation, six-section settings, persistent multi-service selection/order, expandable result cards, source/result utility actions, and per-service failure cards are covered by automated tests. Chinese IME candidate behavior still needs user-driven checks with the input methods listed in the handoff.
-- Verify screenshot OCR, global hotkeys, and signed update installation on Windows. The settings page has a real hotkey recorder and the updater downloads only paired x64 installer/SHA-256 assets, verifies them, checks Authenticode natively, and launches the installer.
+- Continue interactive verification of the included native host on representative Windows applications and display configurations. Local x64 build, raw start/restart, installer build, silent install/start/startup-cleanup/uninstall, and a persistent current-user installation now pass on Windows 11 build 26200 at 150% scaling.
+- Enter submission, Shift+Enter line breaks, IME composing protection, fixed source height, vertically growing results, adaptive Translate/History navigation, eight-section settings, persistent multi-service selection/order, expandable result cards, source/result utility actions, and per-service failure cards are covered by automated tests. Chinese IME candidate behavior still needs user-driven checks with the input methods listed in the handoff.
+- Verify screenshot OCR, global hotkeys, and signed update installation on Windows. Settings expose separate screenshot-translate and screenshot-OCR shortcuts, and the updater downloads only paired x64 installer/SHA-256 assets, verifies them, checks Authenticode natively, and launches the installer.
 - Verify UI Automation selected-text reading and its clipboard fallback across representative Windows applications.
 - Verify Google, Baidu, Youdao, OpenAI-compatible, DeepL, and LibreTranslate against live Windows networking and Credential Manager.
 - Run `dart run tool/verify_release_package.dart build\windows\x64\runner\Release` against the real release directory after `flutter build windows --release`. Update checks already point to `https://github.com/douxy1994/Pythia/releases`, but need live Windows verification.

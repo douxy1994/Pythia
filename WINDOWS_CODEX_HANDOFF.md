@@ -2,7 +2,7 @@
 
 > 面向接手 Windows 版 Pythia 的 Codex。请先完整阅读本文，再修改代码。
 >
-> 更新日期：2026-07-15  
+> 更新日期：2026-07-18
 > 产品版本：Pythia 1.0.0  
 > Windows 目标：Windows 11 x64 / AMD64  
 > 仓库：<https://github.com/douxy1994/Pythia>
@@ -398,7 +398,7 @@ dart run tool\verify_release_package.dart build\windows\x64\runner\Release
 
 ### 8.3 Windows 11 UI
 
-当前是基础 Material 3 外壳。目标不是伪造 macOS Liquid Glass，而是使用 Windows 11 设计语言：
+Windows 客户端已经在 Flutter 控件之上建立 Fluent 风格主题：读取系统强调色和减少动画策略，优先使用 Segoe UI Variable，原生窗口请求圆角 Mica 与深色标题栏，不支持时保持不透明可读回退。目标不是伪造 macOS Liquid Glass；后续人工验收仍需确认：
 
 - 系统、浅色、深色三种真实主题。
 - 可在支持环境使用 Mica/Acrylic 或 Flutter 中与系统一致的材料，但正文背景必须保持可读，不得整窗透明。
@@ -541,7 +541,7 @@ CI 不能证明以下交互正确：
 ### 通用
 
 - 系统/浅色/深色真实生效。
-- 开机启动真实生效，切换后立即更新 Run 注册表项。
+- 系统强调色和减少动画策略真实生效。
 - 保存后有明确成功反馈。
 
 ### 翻译服务
@@ -558,6 +558,13 @@ CI 不能证明以下交互正确：
 - 同一区域提供插件开发指南链接。
 - 已安装插件列表中提供启用、改名、配置、测试、重新转换和删除。
 - 删除按钮只出现在插件页。
+
+### OCR
+
+- 截图 OCR 与截图翻译保持两个独立入口。
+- 可选择 OCR 完成后是否自动翻译。
+- 独立 OCR 快捷键可录制、保存和重新注册。
+- 缺少系统 OCR 语言包、空识别和用户取消均显示明确状态。
 
 ### 快捷键
 
@@ -579,6 +586,7 @@ CI 不能证明以下交互正确：
 
 ### 窗口
 
+- 开机启动真实生效，切换后立即更新 Run 注册表项，卸载时删除该值。
 - 关闭到托盘。
 - 始终置顶。
 - 失焦隐藏。
@@ -610,6 +618,9 @@ pythia/windows_platform
 | `window.setHideOnBlur` | `{enabled}` | void |
 | `window.restorePlacement` | none | void |
 | `window.savePlacement` | none | void |
+| `theme.getSystemPreferences` | none | `{accentArgb, animationsEnabled}` |
+| `theme.applyWindowAppearance` | `{darkMode}` | void |
+| `speech.speak` | `{text}` | void |
 | `notification.show` | `{title, body, level}` | void |
 | `update.launchInstaller` | `{path}` | void |
 | `app.quit` | none | void |
@@ -735,6 +746,7 @@ plugin.<plugin-id>.<field-key>
 显示窗口：Ctrl+Alt+P
 划词翻译：Ctrl+Alt+E
 截图翻译：Ctrl+Alt+S
+截图 OCR：Ctrl+Alt+Shift+R
 ```
 
 快捷键验收：
@@ -1171,7 +1183,7 @@ flutter test test\platform_services_test.dart
 - [ ] 划词剪贴板回退和恢复。
 - [ ] 截图 OCR。
 - [ ] 多显示器和不同 DPI。
-- [ ] 三个全局快捷键。
+- [ ] 四个全局快捷键。
 - [ ] 快捷键冲突。
 - [ ] 托盘左键、右键所有动作。
 - [ ] 置顶、关闭到托盘、失焦隐藏。

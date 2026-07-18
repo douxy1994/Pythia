@@ -130,7 +130,7 @@ dart run tool\verify_release_package.dart build\windows\x64\runner\Release
 .\tool\build_windows_installer.ps1
 ```
 
-2026-07-16 的本机 Windows 11 开发验收已通过 103 项 Flutter 测试、AMD64 release/发布门禁、安装包与 SHA-256 生成，以及启动、重启、静默安装、启动和卸载冒烟；详见 [Windows 本机验收记录](Docs/WINDOWS_ACCEPTANCE_2026-07-16.md)。正式发布前仍需使用生产 Authenticode 证书签名，并完成文档列出的真实输入法、网络服务和多屏人工场景。
+本机 Windows 11 开发验收于 2026-07-18 完成最终复验，现已通过 114 项 Flutter 测试、MSVC 原生几何/托盘/x64 检查、AMD64 release/发布门禁、安装包与 SHA-256 生成，以及启动、重启、静默安装、启动、启动项清理和卸载冒烟；详见 [Windows 本机验收记录](Docs/WINDOWS_ACCEPTANCE_2026-07-16.md)。正式发布前仍需使用生产 Authenticode 证书签名，并完成文档列出的真实输入法、网络服务、同步和多屏人工场景。
 
 ## 插件契约验证
 
