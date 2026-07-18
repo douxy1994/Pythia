@@ -408,7 +408,7 @@ public sealed partial class HomePage : Page
     private void SourceTextBox_TextCompositionEnded(UIElement sender, TextCompositionEndedEventArgs args) =>
         _isTextCompositionActive = false;
 
-    private async void SourceTextBox_KeyDown(object sender, KeyRoutedEventArgs e)
+    private async void SourceTextBox_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
         var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift)
             .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);

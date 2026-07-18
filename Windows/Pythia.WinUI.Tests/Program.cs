@@ -22,6 +22,21 @@ void Check(bool condition, string message)
     if (!condition) failures.Add(message);
 }
 
+string? FindRepositoryFile(string relativePath)
+{
+    foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
+    {
+        var directory = new DirectoryInfo(start);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, relativePath);
+            if (File.Exists(candidate)) return candidate;
+            directory = directory.Parent;
+        }
+    }
+    return null;
+}
+
 if (args.Length >= 2 && args[0] == "--install-repo-plugins")
 {
     var packageDirectory = Path.GetFullPath(args[1]);
@@ -79,6 +94,33 @@ Check(HomeInteractionPolicy.ResolveEnter(true, false, false, false) == HomeInput
 Check(HomeInteractionPolicy.ResolveEnter(true, true, false, false) == HomeInputAction.InsertLineBreak, "Shift+Enter line break");
 Check(HomeInteractionPolicy.ResolveEnter(true, false, true, false) == HomeInputAction.None, "IME composing Enter is ignored");
 Check(HomeInteractionPolicy.ResolveEnter(true, false, false, true) == HomeInputAction.None, "repeated Enter is ignored");
+var homePageXamlPath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Pages", "HomePage.xaml"));
+var homePageXaml = homePageXamlPath is null ? string.Empty : File.ReadAllText(homePageXamlPath);
+Check(homePageXaml.Contains("PreviewKeyDown=\"SourceTextBox_PreviewKeyDown\"", StringComparison.Ordinal) &&
+      !homePageXaml.Contains("KeyDown=\"SourceTextBox_KeyDown\"", StringComparison.Ordinal),
+    "real HomePage TextBox intercepts Enter before multiline handling");
+var settingsPageXamlPath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Pages", "SettingsPage.xaml"));
+var settingsPageXaml = settingsPageXamlPath is null ? string.Empty : File.ReadAllText(settingsPageXamlPath);
+Check(settingsPageXaml.Contains("<pages:PluginSettingsPanel", StringComparison.Ordinal) &&
+      settingsPageXaml.Contains("Text=\"翻译插件\"", StringComparison.Ordinal),
+    "real SettingsPage embeds the translation plugin control panel");
+var pluginPanelXamlPath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Pages", "PluginSettingsPanel.xaml"));
+var pluginPanelXaml = pluginPanelXamlPath is null ? string.Empty : File.ReadAllText(pluginPanelXamlPath);
+Check(pluginPanelXaml.Contains("AutomationProperties.AutomationId=\"InstalledPluginPicker\"", StringComparison.Ordinal) &&
+      pluginPanelXaml.Contains("保存插件配置", StringComparison.Ordinal) &&
+      pluginPanelXaml.Contains("测试连通性", StringComparison.Ordinal),
+    "plugin settings UI exposes selection, configuration, and connectivity actions");
+var startupSettingsRequest = StartupRequest.Parse(["Pythia.exe", "--settings", "plugins"]);
+var startupTextRequest = StartupRequest.Parse(["Pythia.exe", "--text=hello"]);
+var winUiStartupRequest = StartupRequest.Parse(["--settings", "plugins"]);
+Check(startupSettingsRequest.SettingsSection == "plugins" && startupSettingsRequest.SourceText is null,
+    "startup settings route");
+Check(startupTextRequest.SourceText == "hello" && startupTextRequest.SettingsSection is null,
+    "startup source-text route");
+Check(winUiStartupRequest.SettingsSection == "plugins", "WinUI launch arguments without executable route correctly");
+Check(StartupRequest.Tokenize("--settings plugins --text \"hello world\"")
+        .SequenceEqual(["--settings", "plugins", "--text", "hello world"]),
+    "WinUI activation argument tokenizer preserves quoted text");
 var submissionGate = new HomeSubmissionGate();
 Check(submissionGate.TryEnter() && !submissionGate.TryEnter() && submissionGate.IsEntered,
     "duplicate translation submission is rejected while busy");

@@ -82,7 +82,7 @@
                     TextWrapping="Wrap"
                     TextCompositionStarted="SourceTextBox_TextCompositionStarted"
                     TextCompositionEnded="SourceTextBox_TextCompositionEnded"
-                    KeyDown="SourceTextBox_KeyDown" />
+                    PreviewKeyDown="SourceTextBox_PreviewKeyDown" />
                 <Grid Grid.Row="1" Padding="10,7" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />

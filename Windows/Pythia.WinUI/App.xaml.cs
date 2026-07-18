@@ -25,6 +25,9 @@ public partial class App : Application
     {
         try
         {
+            var startupArguments = Environment.GetCommandLineArgs()
+                .Concat(StartupRequest.Tokenize(args.Arguments));
+            var startupRequest = StartupRequest.Parse(startupArguments);
             var current = AppInstance.GetCurrent();
             var primary = AppInstance.FindOrRegisterForKey("Pythia.Windows.Native");
             if (!primary.IsCurrent)
@@ -48,7 +51,12 @@ public partial class App : Application
             await Services.InitializeAsync();
             _window = new MainWindow();
             MainAppWindow = _window;
-            ((MainWindow)_window).ShowAndActivate();
+            var mainWindow = (MainWindow)_window;
+            mainWindow.ShowAndActivate();
+            if (startupRequest.SettingsSection is not null)
+                await mainWindow.ShowSettingsAsync(startupRequest.SettingsSection);
+            else if (startupRequest.SourceText is not null)
+                await mainWindow.ShowHomeTextAsync(startupRequest.SourceText, false);
             if (Services.Settings.CheckForUpdatesOnStartup) _ = CheckForStartupUpdateAsync();
         }
         catch (Exception exception)

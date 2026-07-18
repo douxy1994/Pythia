@@ -27,6 +27,7 @@ public sealed partial class SettingsPage : Page
         _sections.Add("window", WindowSection);
         _sections.Add("about", AboutSection);
         LoadValues();
+        ShowSection("general");
     }
 
     private void LoadValues()
@@ -63,7 +64,6 @@ public sealed partial class SettingsPage : Page
         HideOnBlurSwitch.IsOn = settings.HideOnBlur;
         NotificationsSwitch.IsOn = settings.NotificationsEnabled;
         CheckUpdateOnStartupSwitch.IsOn = settings.CheckForUpdatesOnStartup;
-        PluginPathText.Text = App.Services.Store.PluginsDirectory;
         MarkExistingCredential(BaiduAppIdBox, "provider.baidu.appId");
         MarkExistingCredential(BaiduSecretBox, "provider.baidu.secret");
         MarkExistingCredential(YoudaoAppKeyBox, "provider.youdao.appKey");
@@ -87,8 +87,24 @@ public sealed partial class SettingsPage : Page
 
     private void CategoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if ((CategoryList.SelectedItem as ListViewItem)?.Tag is string tag && _sections.TryGetValue(tag, out var section))
-            section.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = true, VerticalAlignmentRatio = 0 });
+        if ((CategoryList.SelectedItem as ListViewItem)?.Tag is string tag) ShowSection(tag);
+    }
+
+    private void ShowSection(string tag)
+    {
+        if (_sections.Count == 0 || !_sections.ContainsKey(tag)) return;
+        foreach (var (sectionTag, section) in _sections)
+            section.Visibility = sectionTag == tag ? Visibility.Visible : Visibility.Collapsed;
+        SettingsScroll.ChangeView(null, 0, null, true);
+    }
+
+    public void SelectSection(string tag)
+    {
+        var item = CategoryList.Items.OfType<ListViewItem>().FirstOrDefault(candidate =>
+            string.Equals(candidate.Tag as string, tag, StringComparison.OrdinalIgnoreCase));
+        if (item is null) return;
+        CategoryList.SelectedItem = item;
+        ShowSection((string)item.Tag);
     }
 
     private async void Save_Click(object sender, RoutedEventArgs e)

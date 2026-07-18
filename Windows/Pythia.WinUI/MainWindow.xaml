@@ -37,7 +37,7 @@
             PaneDisplayMode="Auto"
             SelectionChanged="NavView_SelectionChanged">
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="翻译" IsSelected="True" Tag="translate">
+                <NavigationViewItem Content="翻译" Tag="translate">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Character" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="历史记录" Tag="history">

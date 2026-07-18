@@ -5,14 +5,15 @@
 - Branch: `codex/windows-final`
 - Client: `Windows/Pythia.WinUI` (WinUI 3, C# 14, .NET 10, x64)
 - Installer: `Windows/Pythia.WinUI/dist/Pythia-1.0.0-windows-x64.exe`
-- Size: `121066212` bytes
-- SHA-256: `eca1c75218fed60be0f0aa18f94b328d3ee9d2ca7808e8ebf2eaadaedeb093f0`
+- Size: `121089532` bytes
+- SHA-256: `a9fdd028c53ac1963812e798eb893648ebed50761045a62c8eb086acba75bb10`
 - Local install: `%LOCALAPPDATA%\Programs\Pythia\Pythia.exe`
 - GitHub: not pushed
 
 ## Implemented parity work
 
-- IME-aware Enter submission, Shift+Enter line break, repeat suppression, and single-flight duplicate prevention.
+- The real multiline input now intercepts Enter through `PreviewKeyDown` before WinUI consumes it as a line break; Shift+Enter, IME composition, repeat suppression, and single-flight duplicate prevention remain explicit.
+- Settings now displays one category at a time and embeds a real translation-plugin console with installed-plugin selection, icons, enable/disable, install/remove, manifest-driven fields, credential preservation, configuration save, and connectivity testing.
 - Native drag reorder plus keyboard reorder; enabled services and order share one persisted model.
 - Smart auto-language direction for pure Chinese, pure English, and mixed Chinese/English.
 - Audited Fluent action icons, accessible names/tooltips, synchronized application icon, packaged plugin icons, and Pythia fallback icon.
@@ -29,12 +30,13 @@
 
 ## Regression evidence
 
-Two complete regression rounds passed after the final behavior changes:
+The final rewrite regression passed after the real XAML event and settings controls changed:
 
 - Release build: 0 warnings, 0 errors.
 - Native smoke suite: passed.
 - Exact homepage icon mapping assertions: passed.
-- Enter/Shift/IME/repeat/dedup assertions: passed.
+- Enter/Shift/IME/repeat/dedup policy assertions and the real `HomePage.xaml` `PreviewKeyDown` binding contract: passed.
+- The real `SettingsPage.xaml` plugin-console contract, dynamic configuration actions, and startup navigation routes: passed.
 - First-to-last, last-to-first, invalid/cancelled reorder and persistence assertions: passed.
 - Plugin protocol, timeout, redaction, unsafe archive, ordered dispatch, icon discovery, and classifier assertions: passed.
 - History newest-wins, tombstone-wins, conflict, backup omission, schedule, and favorite timestamp assertions: passed.
@@ -67,11 +69,12 @@ Five packages contain provider artwork and render that file; SenseNova has no pa
 - Reinstall restored executable, pinned runtime, desktop shortcut, and Start menu shortcut.
 - Launching the installed executable twice produced one Pythia process.
 - Installed executable hash matches the published executable.
+- Visual Studio Community 2026 `18.8.0` is installed with the official `Microsoft.VisualStudio.Workload.Universal` WinUI application-development workload; `Pythia.Windows.slnx` opens both Windows projects.
 - Installer is intentionally unsigned for local testing; production publishing remains blocked on Authenticode signing.
 
 ## Environment-dependent acceptance still requiring a human/live account
 
-- The Windows desktop automation helper could enumerate Pythia's full accessibility tree but could not activate either Pythia or Windows Notepad in this session. Therefore real mouse/keyboard runs for Microsoft Pinyin candidate confirmation, drag reorder, selection capture, screenshot overlay, hotkey dispatch, audio, and visual DPI review must be performed by the user on the installed candidate.
+- The Windows desktop automation helper activated the final installed executable and verified the rendered plugin settings page, including the installed provider, dynamic fields, save action, and connectivity action. Its keyboard injection did not deliver characters or Return to WinUI controls, so a human must still press Enter once and check Microsoft Pinyin candidate confirmation. Drag reorder, selection capture, screenshot overlay, hotkey dispatch, audio, and visual DPI review also remain human desktop checks.
 - Credentialed built-in providers and missing/invalid plugin credentials need valid accounts before a success result is possible.
 - WebDAV manual/periodic/cross-device sync needs a real WebDAV endpoint.
 - Production updater acceptance needs a signed GitHub Release installer; the local candidate is not signed and was not pushed.

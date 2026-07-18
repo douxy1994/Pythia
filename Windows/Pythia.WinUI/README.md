@@ -14,7 +14,9 @@ cross-platform client. Existing Pot configurations are imported idempotently
 from `%APPDATA%\com.pot-app.desktop\config.json`; secret fields are moved
 directly into Windows Credential Manager and are never written to JSON.
 
-On the home page, Enter translates and Shift+Enter inserts a line break. The
+On the home page, the real multiline input intercepts Enter with
+`PreviewKeyDown` before WinUI inserts a line break; Shift+Enter still inserts a
+line break. The
 service picker enables, disables, and drag-reorders built-in and plugin services.
 Plugin result cards show packaged provider icons and expose a single-service retry
 action. Selection translation reads UI Automation TextPattern first and uses a
@@ -22,7 +24,10 @@ clipboard-preserving copy fallback only when necessary. Screenshot actions freez
 the multi-monitor desktop, accept a drag region, run Windows OCR, and optionally
 translate the recognized text.
 
-Settings includes hotkey recording with atomic conflict rollback, Windows
+Settings shows one category at a time. Its translation-plugin category directly
+selects, enables, installs, removes, configures, and tests every installed plugin;
+it is not a redirect to the separate plugin inventory page. Settings also includes
+hotkey recording with atomic conflict rollback, Windows
 Credential Manager-backed secrets, manual/automatic WebDAV history sync, local
 and WebDAV portable backup/restore, and an SHA-256-verified GitHub update flow.
 Portable backups omit passwords and API keys.
@@ -30,8 +35,11 @@ Portable backups omit passwords and API keys.
 ## Build
 
 ```powershell
-dotnet build .\Pythia.WinUI.csproj -c Release -p:Platform=x64
+dotnet build ..\..\Pythia.Windows.slnx -c Release
 ```
+
+The solution is supported by Visual Studio Community 2026 with the `WinUI
+application development` workload.
 
 ## Smoke tests
 

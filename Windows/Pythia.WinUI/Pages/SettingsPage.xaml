@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Page x:Class="Pythia.Pages.SettingsPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+<Page x:Class="Pythia.Pages.SettingsPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:pages="using:Pythia.Pages">
     <Grid Padding="20,16,24,20" ColumnSpacing="20" RowSpacing="12">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
         <Grid.ColumnDefinitions><ColumnDefinition Width="205" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -91,8 +91,11 @@
                     </StackPanel>
 
                     <StackPanel x:Name="PluginsSection" Tag="plugins" Spacing="10">
-                        <TextBlock FontSize="20" FontWeight="SemiBold" Text="插件" />
-                        <Border Style="{StaticResource PythiaCardStyle}"><StackPanel Spacing="8"><TextBlock FontWeight="SemiBold" Text="Pythia 翻译插件" /><TextBlock Text="在侧栏“插件”页面安装、查看或卸载 .pythia 插件。插件目录与旧 Windows 版保持一致。" TextWrapping="Wrap" /><TextBlock x:Name="PluginPathText" IsTextSelectionEnabled="True" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" /></StackPanel></Border>
+                        <TextBlock FontSize="20" FontWeight="SemiBold" Text="翻译插件" />
+                        <InfoBar IsOpen="True" IsClosable="False" Severity="Informational" Title="与 macOS 插件设置保持一致">
+                            <TextBlock Text="在这里直接选择、启停、安装、配置并测试翻译插件，不需要跳转到其他页面。" TextWrapping="Wrap" />
+                        </InfoBar>
+                        <pages:PluginSettingsPanel x:Name="PluginSettings" />
                     </StackPanel>
 
                     <StackPanel x:Name="OcrSection" Tag="ocr" Spacing="10">

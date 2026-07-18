@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/Windows/">
+    <Project Path="Windows/Pythia.WinUI/Pythia.WinUI.csproj" />
+    <Project Path="Windows/Pythia.WinUI.Tests/Pythia.WinUI.Tests.csproj" />
+  </Folder>
+</Solution>

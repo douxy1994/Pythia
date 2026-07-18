@@ -24,6 +24,8 @@ public sealed partial class MainWindow : Window
         SelectionCaptureService.Initialize(WinRT.Interop.WindowNative.GetWindowHandle(this));
         if (AppWindow.Presenter is OverlappedPresenter presenter)
             presenter.IsAlwaysOnTop = App.Services.Settings.AlwaysOnTop;
+        var translateItem = NavView.MenuItems.OfType<NavigationViewItem>().First(item => (string)item.Tag == "translate");
+        NavView.SelectedItem = translateItem;
         NavFrame.Navigate(typeof(HomePage));
         try
         {
@@ -64,9 +66,7 @@ public sealed partial class MainWindow : Window
                 SelectNavigationItem("history");
                 break;
             case PythiaTrayAction.Settings:
-                ShowWindow();
-                NavView.SelectedItem = NavView.SettingsItem;
-                if (NavFrame.CurrentSourcePageType != typeof(SettingsPage)) NavFrame.Navigate(typeof(SettingsPage));
+                await ShowSettingsAsync();
                 break;
             case PythiaTrayAction.SyncHistory:
                 ShowWindow();
@@ -172,6 +172,16 @@ public sealed partial class MainWindow : Window
     }
 
     private void ShowWindow() => ShowAndActivate();
+
+    public async Task ShowSettingsAsync(string section = "general")
+    {
+        ShowAndActivate();
+        await Task.Yield();
+        NavView.SelectedItem = NavView.SettingsItem;
+        if (NavFrame.CurrentSourcePageType != typeof(SettingsPage)) NavFrame.Navigate(typeof(SettingsPage));
+        await Task.Yield();
+        if (NavFrame.Content is SettingsPage settingsPage) settingsPage.SelectSection(section);
+    }
 
     public bool TryApplyHotkeys(Pythia.Models.PythiaSettings settings, out string? error)
     {
