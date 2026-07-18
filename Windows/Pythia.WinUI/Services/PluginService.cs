@@ -7,11 +7,15 @@ using Pythia.Models;
 
 namespace Pythia.Services;
 
-public sealed class PluginService(LocalStore store, CredentialStore credentials)
+public sealed class PluginService
 {
     private const int MaxArchiveEntries = 2048;
     private const long MaxArchiveBytes = 64L * 1024 * 1024;
     private static readonly Regex ValidId = new("^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$", RegexOptions.CultureInvariant);
+    private static readonly Regex ValidVersion = new("^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$", RegexOptions.CultureInvariant);
+    private static readonly HashSet<string> AllowedPermissions = new(["network"], StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> AllowedConfigurationTypes = new(["text", "secret", "select"], StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> BlockedPackageExtensions = new([".exe", ".dll", ".com", ".cmd", ".bat", ".ps1", ".msi"], StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -19,6 +23,16 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
         WriteIndented = true,
     };
     private readonly object _stateLock = new();
+    private readonly LocalStore store;
+    private readonly CredentialStore credentials;
+    private readonly string? _nodeExecutableOverride;
+
+    public PluginService(LocalStore store, CredentialStore credentials, string? nodeExecutableOverride = null)
+    {
+        this.store = store;
+        this.credentials = credentials;
+        _nodeExecutableOverride = nodeExecutableOverride;
+    }
 
     private string StatePath => Path.Combine(store.PluginsDirectory, "plugin-state.json");
     private string RunnerPath => Path.Combine(store.RuntimeDirectory, "pythia-plugin-runner.cjs");
@@ -58,39 +72,57 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
             ?? ServiceCatalog.DisplayName(serviceId);
     }
 
+    public string? IconPath(string serviceId)
+    {
+        var id = serviceId.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase)
+            ? serviceId["plugin:".Length..]
+            : serviceId;
+        return LoadInstalled().FirstOrDefault(item => item.Id.Equals(id, StringComparison.OrdinalIgnoreCase))?.IconPath;
+    }
+
     public PluginInfo Install(string archivePath)
     {
         if (!archivePath.EndsWith(".pythia", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("请选择 .pythia 插件包。");
-        if (new FileInfo(archivePath).Length > MaxArchiveBytes)
+        if (!File.Exists(archivePath) && !Directory.Exists(archivePath))
+            throw new FileNotFoundException("插件包不存在。", archivePath);
+        if (File.Exists(archivePath) && new FileInfo(archivePath).Length > MaxArchiveBytes)
             throw new InvalidDataException("插件包超过 64 MiB 限制。");
 
         var staging = Path.Combine(store.PluginsDirectory, ".install-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(staging);
         try
         {
-            using var archive = ZipFile.OpenRead(archivePath);
-            if (archive.Entries.Count > MaxArchiveEntries)
-                throw new InvalidDataException("插件包文件数量超过限制。");
-            long expandedBytes = 0;
-            foreach (var archiveEntry in archive.Entries)
+            if (Directory.Exists(archivePath))
             {
-                expandedBytes += archiveEntry.Length;
-                if (expandedBytes > MaxArchiveBytes)
-                    throw new InvalidDataException("插件解压后超过 64 MiB 限制。");
-                if (((archiveEntry.ExternalAttributes >> 16) & 0xF000) == 0xA000)
-                    throw new InvalidDataException("插件包不能包含符号链接。");
-                var destination = Path.GetFullPath(Path.Combine(staging, archiveEntry.FullName));
-                var stagingRoot = Path.GetFullPath(staging) + Path.DirectorySeparatorChar;
-                if (!destination.StartsWith(stagingRoot, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("插件包包含不安全路径。");
-                if (archiveEntry.Name.Length == 0)
+                CopyPluginDirectory(archivePath, staging);
+            }
+            else
+            {
+                using var archive = ZipFile.OpenRead(archivePath);
+                if (archive.Entries.Count > MaxArchiveEntries)
+                    throw new InvalidDataException("插件包文件数量超过限制。");
+                long expandedBytes = 0;
+                foreach (var archiveEntry in archive.Entries)
                 {
-                    Directory.CreateDirectory(destination);
-                    continue;
+                    expandedBytes += archiveEntry.Length;
+                    if (expandedBytes > MaxArchiveBytes)
+                        throw new InvalidDataException("插件解压后超过 64 MiB 限制。");
+                    if (((archiveEntry.ExternalAttributes >> 16) & 0xF000) == 0xA000)
+                        throw new InvalidDataException("插件包不能包含符号链接。");
+                    ValidatePackageRelativePath(archiveEntry.FullName);
+                    var destination = Path.GetFullPath(Path.Combine(staging, archiveEntry.FullName));
+                    var stagingRoot = Path.GetFullPath(staging) + Path.DirectorySeparatorChar;
+                    if (!destination.StartsWith(stagingRoot, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException("插件包包含不安全路径。");
+                    if (archiveEntry.Name.Length == 0)
+                    {
+                        Directory.CreateDirectory(destination);
+                        continue;
+                    }
+                    Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                    archiveEntry.ExtractToFile(destination, true);
                 }
-                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                archiveEntry.ExtractToFile(destination, true);
             }
 
             var manifests = Directory.EnumerateFiles(staging, "manifest.json", SearchOption.AllDirectories).ToArray();
@@ -99,8 +131,19 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
             var rootDirectory = Path.GetDirectoryName(manifests[0])!;
             var plugin = ReadPlugin(rootDirectory, ReadState(), requirePythiaExtension: false);
             var target = Path.Combine(store.PluginsDirectory, plugin.Id + ".pythia");
-            if (Directory.Exists(target)) Directory.Delete(target, true);
-            Directory.Move(rootDirectory, target);
+            var backup = target + ".replace-" + Guid.NewGuid().ToString("N");
+            if (Directory.Exists(target)) Directory.Move(target, backup);
+            try
+            {
+                Directory.Move(rootDirectory, target);
+                if (Directory.Exists(backup)) Directory.Delete(backup, true);
+            }
+            catch
+            {
+                if (Directory.Exists(target)) Directory.Delete(target, true);
+                if (Directory.Exists(backup)) Directory.Move(backup, target);
+                throw;
+            }
             EnsureState(plugin.Id);
             MigrateLegacyPotConfigurations(plugin.Id);
             return LoadInstalled().First(item => item.Id == plugin.Id);
@@ -144,8 +187,7 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
                 var value = values.GetValueOrDefault(field.Key)?.Trim() ?? string.Empty;
                 if (field.Type.Equals("secret", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (value.Length == 0) credentials.Delete(SecretKey(plugin.Id, field.Key));
-                    else credentials.Write(SecretKey(plugin.Id, field.Key), values[field.Key]);
+                    if (value.Length > 0) credentials.Write(SecretKey(plugin.Id, field.Key), values[field.Key]);
                 }
                 else if (value.Length > 0)
                 {
@@ -196,21 +238,119 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
         string targetLanguage,
         CancellationToken cancellationToken = default)
     {
-        var id = serviceId.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase)
-            ? serviceId["plugin:".Length..]
-            : serviceId;
-        var plugin = LoadInstalled().FirstOrDefault(item => item.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException("插件未安装或清单无效。");
+        var plugin = FindPlugin(serviceId);
         if (!plugin.Enabled) throw new InvalidOperationException($"{plugin.Name} 已停用。");
+        var timeout = TimeSpan.FromSeconds(Math.Min(300, Math.Max(30, 30 + text.Length / 20d)));
+        return await ExecuteAsync(plugin, text, sourceLanguage, targetLanguage, timeout, cancellationToken);
+    }
+
+    public async Task<PluginConnectionResult> TestConnectionAsync(
+        PluginInfo plugin,
+        CancellationToken cancellationToken = default,
+        TimeSpan? maximumDuration = null)
+    {
+        var maximum = maximumDuration ?? TimeSpan.FromSeconds(30);
+        if (maximum <= TimeSpan.Zero || maximum > TimeSpan.FromSeconds(30))
+            maximum = TimeSpan.FromSeconds(30);
+        var started = Stopwatch.StartNew();
+        var config = GetConfiguration(plugin);
+        var missingCredential = plugin.Configuration
+            .Where(field => field.Required && field.Type.Equals("secret", StringComparison.OrdinalIgnoreCase) &&
+                            string.IsNullOrWhiteSpace(config.GetValueOrDefault(field.Key)))
+            .Select(field => field.Label)
+            .ToArray();
+        if (missingCredential.Length > 0)
+        {
+            var result = new PluginConnectionResult(PluginConnectionStatus.MissingCredential,
+                $"请先配置：{string.Join("、", missingCredential)}。", 0, started.Elapsed);
+            RecordError(plugin.Id, $"[{result.StatusDisplay}] {result.Message}");
+            return result;
+        }
+        var missingConfiguration = plugin.Configuration
+            .Where(field => field.Required && !field.Type.Equals("secret", StringComparison.OrdinalIgnoreCase) &&
+                            string.IsNullOrWhiteSpace(config.GetValueOrDefault(field.Key)))
+            .Select(field => field.Label)
+            .ToArray();
+        if (missingConfiguration.Length > 0)
+        {
+            var result = new PluginConnectionResult(PluginConnectionStatus.MissingRequiredConfiguration,
+                $"请先配置：{string.Join("、", missingConfiguration)}。", 0, started.Elapsed);
+            RecordError(plugin.Id, $"[{result.StatusDisplay}] {result.Message}");
+            return result;
+        }
+
+        PluginConnectionResult? lastResult = null;
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            var remaining = maximum - started.Elapsed;
+            if (remaining <= TimeSpan.Zero)
+                return new(PluginConnectionStatus.Timeout, "插件连通性测试已在 30 秒内停止。", attempt - 1, started.Elapsed);
+            try
+            {
+                await ExecuteAsync(plugin, "Hello", "en", "zh-CN", remaining, cancellationToken);
+                RecordError(plugin.Id, string.Empty);
+                return new(PluginConnectionStatus.Success, "插件返回了有效译文。", attempt, started.Elapsed);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                var failure = ClassifyFailure(exception);
+                lastResult = new(failure.Status, failure.Message, attempt, started.Elapsed);
+                var canRetry = failure.Retryable && attempt == 1 && maximum - started.Elapsed > TimeSpan.FromMilliseconds(750);
+                if (!canRetry) break;
+                await Task.Delay(TimeSpan.FromMilliseconds(350), cancellationToken);
+            }
+        }
+        lastResult ??= new(PluginConnectionStatus.ProcessAbnormalExit, "插件测试未能完成。", 1, started.Elapsed);
+        RecordError(plugin.Id, $"[{lastResult.StatusDisplay}] {lastResult.Message}");
+        return lastResult with { Duration = started.Elapsed };
+    }
+
+    public static PluginConnectionStatus ClassifyConnectionFailure(string? code, string message, bool processExited = false)
+    {
+        var value = $"{code} {message}".ToLowerInvariant();
+        if (value.Contains("model") && (value.Contains("not found") || value.Contains("unavailable") ||
+            value.Contains("disabled") || value.Contains("不存在") || value.Contains("不可用") || value.Contains("已停用")))
+            return PluginConnectionStatus.ModelUnavailable;
+        if (value.Contains("authentication_failed") || value.Contains("unauthorized") || value.Contains("invalid api") ||
+            value.Contains("invalid credential") || value.Contains("http 401") || value.Contains("http status: 401") ||
+            value.Contains("http 403") || value.Contains("http status: 403") || value.Contains("凭据无效") || value.Contains("密钥无效"))
+            return PluginConnectionStatus.InvalidCredential;
+        if (value.Contains("timeout") || value.Contains("timed out") || value.Contains("超时"))
+            return PluginConnectionStatus.Timeout;
+        if (value.Contains("invalid_response") || value.Contains("invalid response") || value.Contains("invalid json") ||
+            value.Contains("统一响应") || value.Contains("data.text") || value.Contains("格式") || value.Contains("协议"))
+            return PluginConnectionStatus.ProtocolIncompatible;
+        if (value.Contains("rate_limited") || value.Contains("http 408") || value.Contains("http status: 408") ||
+            value.Contains("http 429") || value.Contains("http status: 429") || Regex.IsMatch(value, @"http(?: status:)? 5\d\d"))
+            return PluginConnectionStatus.UpstreamError;
+        if (value.Contains("network_error") || value.Contains("failed to fetch") || value.Contains("network unreachable") ||
+            value.Contains("econn") || value.Contains("enotfound") || value.Contains("dns") || value.Contains("tls") ||
+            value.Contains("网络不可达") || value.Contains("无法连接"))
+            return PluginConnectionStatus.NetworkUnreachable;
+        return processExited ? PluginConnectionStatus.ProcessAbnormalExit : PluginConnectionStatus.UpstreamError;
+    }
+
+    private async Task<string> ExecuteAsync(
+        PluginInfo plugin,
+        string text,
+        string sourceLanguage,
+        string targetLanguage,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
         var config = GetConfiguration(plugin);
         var missing = plugin.Configuration
             .Where(field => field.Required && string.IsNullOrWhiteSpace(config.GetValueOrDefault(field.Key)))
             .Select(field => field.Label)
             .ToArray();
         if (missing.Length > 0)
-            throw new InvalidOperationException($"插件配置不完整：{string.Join("、", missing)}。");
+            throw new PluginExecutionException("CONFIGURATION_REQUIRED", $"插件配置不完整：{string.Join("、", missing)}。", false);
         var node = ResolveNodeExecutable()
-            ?? throw new InvalidOperationException("Pythia 插件运行时缺少 node.exe。");
+            ?? throw new PluginExecutionException("RUNTIME_MISSING", "Pythia 插件运行时缺少 runtime\\node.exe。", false, processExited: true);
         var requestId = Guid.NewGuid().ToString("N");
         var request = JsonSerializer.Serialize(new
         {
@@ -226,7 +366,7 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
             },
             context = new { platform = "windows", pythiaVersion = "1.0.0" },
         });
-        var timeout = TimeSpan.FromSeconds(Math.Min(1200, Math.Max(180, 180 + text.Length / 20d)));
+        timeout = timeout < TimeSpan.FromMilliseconds(250) ? TimeSpan.FromMilliseconds(250) : timeout;
         var startInfo = new ProcessStartInfo
         {
             FileName = node,
@@ -246,9 +386,9 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
         try
         {
             process.Start();
-            var stdoutTask = process.StandardOutput.ReadToEndAsync();
-            var stderrTask = process.StandardError.ReadToEndAsync();
-            using var timeoutSource = new CancellationTokenSource(timeout + TimeSpan.FromSeconds(2));
+            var stdoutTask = ReadBoundedAsync(process.StandardOutput, 8 * 1024 * 1024);
+            var stderrTask = ReadBoundedAsync(process.StandardError, 1024 * 1024);
+            using var timeoutSource = new CancellationTokenSource(timeout);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
             try
             {
@@ -256,12 +396,12 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
             }
             catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
-                TryKill(process);
-                throw new TimeoutException("插件执行超时，已终止该插件进程。");
+                TryKillAndWait(process);
+                throw new PluginExecutionException("TIMEOUT", "插件执行超时，已终止该插件进程。", true);
             }
             catch
             {
-                TryKill(process);
+                TryKillAndWait(process);
                 throw;
             }
 
@@ -270,14 +410,21 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
             if (Encoding.UTF8.GetByteCount(stdout) > 8 * 1024 * 1024)
                 throw new InvalidDataException("插件响应超过 8 MiB 限制。");
             if (process.ExitCode != 0)
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(stderr)
-                    ? "插件执行失败。"
-                    : Limit(SanitizeExternalError(stderr)));
-            using var response = JsonDocument.Parse(stdout);
+                throw new PluginExecutionException("PROCESS_EXITED", string.IsNullOrWhiteSpace(stderr)
+                    ? "插件进程异常退出。"
+                    : Limit(SanitizeExternalError(stderr)), false, processExited: true);
+            JsonDocument response;
+            try { response = JsonDocument.Parse(stdout); }
+            catch (JsonException exception)
+            {
+                throw new PluginExecutionException("INVALID_RESPONSE", "插件返回的 JSON 格式无效。", false, innerException: exception);
+            }
+            using (response)
+            {
             var root = response.RootElement;
             if (!root.TryGetProperty("requestId", out var responseId) || responseId.GetString() != requestId ||
                 !root.TryGetProperty("success", out var success) || success.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
-                throw new InvalidDataException("插件返回了无效的统一响应。");
+                throw new PluginExecutionException("INVALID_RESPONSE", "插件返回了无效的统一响应。", false);
             if (!success.GetBoolean())
             {
                 var error = root.TryGetProperty("error", out var errorObject) ? errorObject : default;
@@ -285,24 +432,31 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
                     ? codeValue.GetString() : "RUNTIME_ERROR";
                 var message = error.ValueKind == JsonValueKind.Object && error.TryGetProperty("message", out var messageValue)
                     ? messageValue.GetString() : "插件报告执行失败。";
-                throw new InvalidOperationException($"{code}：{Limit(SanitizeExternalError(Redact(message ?? string.Empty, plugin, config)))}");
+                var retryable = error.ValueKind == JsonValueKind.Object && error.TryGetProperty("retryable", out var retryableValue) &&
+                                retryableValue.ValueKind == JsonValueKind.True;
+                throw new PluginExecutionException(code ?? "RUNTIME_ERROR",
+                    Limit(SanitizeExternalError(Redact(message ?? string.Empty, plugin, config))), retryable);
             }
             if (!root.TryGetProperty("data", out var data) || !data.TryGetProperty("text", out var translated) ||
                 string.IsNullOrWhiteSpace(translated.GetString()))
-                throw new InvalidDataException("插件成功响应缺少非空 data.text。");
+                throw new PluginExecutionException("INVALID_RESPONSE", "插件成功响应缺少非空 data.text。", false);
             RecordError(plugin.Id, string.Empty);
             return translated.GetString()!.Trim();
+            }
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception exception)
         {
             var safeMessage = Limit(SanitizeExternalError(Redact(exception.Message, plugin, config)));
             RecordError(plugin.Id, safeMessage);
-            throw new InvalidOperationException(safeMessage, exception);
+            if (exception is PluginExecutionException pluginException)
+                throw new PluginExecutionException(pluginException.Code, safeMessage, pluginException.Retryable,
+                    pluginException.ProcessExited, pluginException);
+            throw new PluginExecutionException("RUNTIME_ERROR", safeMessage, false, innerException: exception);
         }
         finally
         {
-            TryKill(process);
+            TryKillAndWait(process);
         }
     }
 
@@ -379,43 +533,82 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
         var manifestPath = Path.Combine(directory, "manifest.json");
         using var json = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = json.RootElement;
-        var id = Read(root, "id", string.Empty);
-        var name = Read(root, "name", string.Empty);
-        var version = Read(root, "version", string.Empty);
-        var entry = Read(root, "entry", string.Empty);
-        if (!ValidId.IsMatch(id) || name.Length == 0 || version.Length == 0 || entry.Length == 0)
-            throw new InvalidDataException("插件清单格式无效。");
-        if (root.TryGetProperty("supportedPlatforms", out var platforms) && platforms.ValueKind == JsonValueKind.Array &&
-            !platforms.EnumerateArray().Any(item => item.GetString()?.Equals("windows", StringComparison.OrdinalIgnoreCase) == true))
+        if (root.ValueKind != JsonValueKind.Object) throw new InvalidDataException("插件清单必须是 JSON 对象。");
+        var schemaVersion = RequiredString(root, "schemaVersion");
+        var id = RequiredString(root, "id");
+        var name = RequiredString(root, "name");
+        var version = RequiredString(root, "version");
+        var description = RequiredString(root, "description");
+        var author = RequiredString(root, "author");
+        var type = RequiredString(root, "type");
+        var entry = RequiredString(root, "entry");
+        var minimumVersion = RequiredString(root, "minimumPythiaVersion");
+        if (schemaVersion != "1.0" || !ValidId.IsMatch(id) || !ValidVersion.IsMatch(version) ||
+            !ValidVersion.IsMatch(minimumVersion) || !type.Equals("translator", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("插件清单版本、ID 或类型无效。");
+        if (Version.TryParse(minimumVersion.Split('-', '+')[0], out var requiredVersion) && requiredVersion > new Version(1, 0, 0))
+            throw new InvalidDataException($"插件需要 Pythia {minimumVersion} 或更高版本。");
+        if (!root.TryGetProperty("supportedPlatforms", out var platforms) || platforms.ValueKind != JsonValueKind.Array ||
+            platforms.GetArrayLength() == 0 || platforms.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String))
+            throw new InvalidDataException("插件 supportedPlatforms 字段无效。");
+        if (!platforms.EnumerateArray().Any(item => item.GetString()?.Equals("windows", StringComparison.OrdinalIgnoreCase) == true))
             throw new InvalidDataException("插件不支持 Windows。");
-        if (root.TryGetProperty("capabilities", out var capabilities) && capabilities.ValueKind == JsonValueKind.Array &&
-            !capabilities.EnumerateArray().Any(item => item.GetString()?.Equals("translate", StringComparison.OrdinalIgnoreCase) == true))
+        if (!root.TryGetProperty("capabilities", out var capabilities) || capabilities.ValueKind != JsonValueKind.Array ||
+            !capabilities.EnumerateArray().Any(item => item.ValueKind == JsonValueKind.String &&
+                item.GetString()?.Equals("translate", StringComparison.OrdinalIgnoreCase) == true))
             throw new InvalidDataException("插件未声明 translate 能力。");
+        if (!root.TryGetProperty("permissions", out var permissions) || permissions.ValueKind != JsonValueKind.Array ||
+            permissions.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String ||
+                !AllowedPermissions.Contains(item.GetString() ?? string.Empty)))
+            throw new InvalidDataException("插件 permissions 字段包含不支持的权限。");
+        if (Path.IsPathRooted(entry) || Path.GetExtension(entry) != ".js" ||
+            entry.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries).Any(part => part == ".."))
+            throw new InvalidDataException("插件入口必须是包内安全的相对 .js 路径。");
         var entryPath = Path.GetFullPath(Path.Combine(directory, entry));
         var directoryRoot = Path.GetFullPath(directory) + Path.DirectorySeparatorChar;
         if (!entryPath.StartsWith(directoryRoot, StringComparison.OrdinalIgnoreCase) || !File.Exists(entryPath))
             throw new InvalidDataException("插件入口文件无效。");
 
+        if (!root.TryGetProperty("configuration", out var configuration) || configuration.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("插件 configuration 字段无效。");
         var fields = new List<PluginConfigurationField>();
-        if (root.TryGetProperty("configuration", out var configuration) && configuration.ValueKind == JsonValueKind.Array)
+        var fieldKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in configuration.EnumerateArray())
         {
-            foreach (var item in configuration.EnumerateArray())
+            if (item.ValueKind != JsonValueKind.Object) throw new InvalidDataException("插件配置字段必须是对象。");
+            var key = RequiredString(item, "key");
+            var label = RequiredString(item, "label");
+            var fieldType = RequiredString(item, "type");
+            if (!ValidId.IsMatch("x." + key) || !fieldKeys.Add(key) || !AllowedConfigurationTypes.Contains(fieldType))
+                throw new InvalidDataException("插件配置字段的 key 或 type 无效。");
+            if (!item.TryGetProperty("required", out var requiredValue) || requiredValue.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                throw new InvalidDataException($"插件配置字段 {key} 缺少 required 布尔值。");
+            string? defaultValue = null;
+            if (item.TryGetProperty("defaultValue", out var defaultElement) && defaultElement.ValueKind != JsonValueKind.Null)
             {
-                var key = Read(item, "key", string.Empty);
-                if (key.Length == 0) continue;
-                var options = new Dictionary<string, string>(StringComparer.Ordinal);
-                if (item.TryGetProperty("options", out var optionObject) && optionObject.ValueKind == JsonValueKind.Object)
-                    foreach (var option in optionObject.EnumerateObject()) options[option.Name] = option.Value.GetString() ?? option.Name;
-                fields.Add(new PluginConfigurationField(
-                    key,
-                    Read(item, "label", key),
-                    Read(item, "type", "text"),
-                    item.TryGetProperty("required", out var required) && required.ValueKind == JsonValueKind.True,
-                    item.TryGetProperty("defaultValue", out var defaultValue) && defaultValue.ValueKind == JsonValueKind.String
-                        ? defaultValue.GetString() : null,
-                    options));
+                if (defaultElement.ValueKind != JsonValueKind.String)
+                    throw new InvalidDataException($"插件配置字段 {key} 的默认值必须是字符串或 null。");
+                defaultValue = defaultElement.GetString();
             }
+            if (fieldType.Equals("secret", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(defaultValue))
+                throw new InvalidDataException($"秘密配置字段 {key} 不能包含默认值。");
+            var options = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (item.TryGetProperty("options", out var optionObject) && optionObject.ValueKind != JsonValueKind.Null)
+            {
+                if (optionObject.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException($"插件配置字段 {key} 的 options 必须是对象。");
+                foreach (var option in optionObject.EnumerateObject())
+                {
+                    if (option.Value.ValueKind != JsonValueKind.String)
+                        throw new InvalidDataException($"插件配置字段 {key} 的选项显示名必须是字符串。");
+                    options[option.Name] = option.Value.GetString() ?? option.Name;
+                }
+            }
+            if (fieldType.Equals("select", StringComparison.OrdinalIgnoreCase) && options.Count == 0)
+                throw new InvalidDataException($"选择配置字段 {key} 必须声明 options。");
+            fields.Add(new PluginConfigurationField(key, label, fieldType, requiredValue.GetBoolean(), defaultValue, options));
         }
+        var iconPath = ResolvePluginIcon(root, directory);
         var itemState = GetState(state, id);
         var configured = fields.Where(field => field.Required).All(field =>
             field.Type.Equals("secret", StringComparison.OrdinalIgnoreCase)
@@ -423,9 +616,9 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
                 : itemState.Configuration.ContainsKey(field.Key) || !string.IsNullOrWhiteSpace(field.DefaultValue));
         return new PluginInfo(
             id, name, version,
-            Read(root, "description", "翻译插件"),
-            Read(root, "author", "未知作者"),
-            directory, entry, fields,
+            description,
+            author,
+            directory, entry, iconPath, fields,
             itemState.Enabled, configured, itemState.LastError);
     }
 
@@ -483,18 +676,92 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
         return item;
     }
 
-    private static string? ResolveNodeExecutable()
+    private PluginInfo FindPlugin(string serviceId)
     {
-        var candidates = new List<string>
+        var id = serviceId.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase)
+            ? serviceId["plugin:".Length..]
+            : serviceId;
+        return LoadInstalled().FirstOrDefault(item => item.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException("插件未安装或清单无效。");
+    }
+
+    private string? ResolveNodeExecutable()
+    {
+        if (!string.IsNullOrWhiteSpace(_nodeExecutableOverride) && File.Exists(_nodeExecutableOverride))
+            return _nodeExecutableOverride;
+        var bundled = Path.Combine(AppContext.BaseDirectory, "Runtime", "node.exe");
+        return File.Exists(bundled) ? bundled : null;
+    }
+
+    private static (PluginConnectionStatus Status, string Message, bool Retryable) ClassifyFailure(Exception exception)
+    {
+        var plugin = exception as PluginExecutionException;
+        var status = ClassifyConnectionFailure(plugin?.Code, exception.Message, plugin?.ProcessExited == true);
+        var retryable = plugin?.Retryable == true || status is PluginConnectionStatus.NetworkUnreachable or
+            PluginConnectionStatus.Timeout or PluginConnectionStatus.UpstreamError;
+        return (status, string.IsNullOrWhiteSpace(exception.Message) ? "插件测试失败。" : exception.Message, retryable);
+    }
+
+    private static string? ResolvePluginIcon(JsonElement manifest, string directory)
+    {
+        string? relative = null;
+        if (manifest.TryGetProperty("icon", out var icon) && icon.ValueKind == JsonValueKind.String)
+            relative = icon.GetString();
+        if (string.IsNullOrWhiteSpace(relative))
+            relative = Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
+                .Select(Path.GetFileName)
+                .FirstOrDefault(file => file is not null && new[] { ".svg", ".png", ".jpg", ".jpeg", ".ico" }
+                    .Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase));
+        if (string.IsNullOrWhiteSpace(relative)) return null;
+        if (Path.IsPathRooted(relative) || relative.Split(['/', '\\']).Any(part => part == ".."))
+            throw new InvalidDataException("插件图标路径无效。");
+        var path = Path.GetFullPath(Path.Combine(directory, relative));
+        var root = Path.GetFullPath(directory) + Path.DirectorySeparatorChar;
+        var extension = Path.GetExtension(path);
+        if (!path.StartsWith(root, StringComparison.OrdinalIgnoreCase) || !File.Exists(path) ||
+            !new[] { ".svg", ".png", ".jpg", ".jpeg", ".ico" }.Contains(extension, StringComparer.OrdinalIgnoreCase))
+            throw new InvalidDataException("插件图标文件无效。");
+        return path;
+    }
+
+    private static string RequiredString(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(value.GetString()))
+            throw new InvalidDataException($"插件清单缺少有效的 {name} 字段。");
+        return value.GetString()!.Trim();
+    }
+
+    private static void ValidatePackageRelativePath(string relativePath)
+    {
+        var normalized = relativePath.Replace('\\', '/');
+        if (normalized.Split('/', StringSplitOptions.RemoveEmptyEntries).Any(part => part is ".." or "node_modules"))
+            throw new InvalidDataException("插件包包含不安全或不允许的目录。");
+        if (BlockedPackageExtensions.Contains(Path.GetExtension(normalized)))
+            throw new InvalidDataException("插件包不能包含可执行文件或安装脚本。");
+    }
+
+    private static void CopyPluginDirectory(string sourceDirectory, string destinationDirectory)
+    {
+        var sourceRoot = Path.GetFullPath(sourceDirectory) + Path.DirectorySeparatorChar;
+        var files = Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories).ToArray();
+        if (files.Length > MaxArchiveEntries) throw new InvalidDataException("插件包文件数量超过限制。");
+        long total = 0;
+        foreach (var file in files)
         {
-            Path.Combine(AppContext.BaseDirectory, "Runtime", "node.exe"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "node.exe"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "nodejs", "node.exe"),
-        };
-        candidates.AddRange((Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(path => Path.Combine(path.Trim('"'), "node.exe")));
-        return candidates.Distinct(StringComparer.OrdinalIgnoreCase).FirstOrDefault(File.Exists);
+            if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidDataException("插件目录不能包含符号链接或重解析点。");
+            total += new FileInfo(file).Length;
+            if (total > MaxArchiveBytes) throw new InvalidDataException("插件目录超过 64 MiB 限制。");
+            var full = Path.GetFullPath(file);
+            if (!full.StartsWith(sourceRoot, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("插件目录包含不安全路径。");
+            var relative = Path.GetRelativePath(sourceDirectory, full);
+            ValidatePackageRelativePath(relative);
+            var destination = Path.Combine(destinationDirectory, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(full, destination, true);
+        }
     }
 
     private static string SecretKey(string id, string key) => $"plugin.{id}.{key}";
@@ -505,14 +772,20 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
         foreach (var field in plugin.Configuration.Where(field => field.Type.Equals("secret", StringComparison.OrdinalIgnoreCase)))
             if (config.TryGetValue(field.Key, out var value) && value.Length >= 4)
                 result = result.Replace(value, "[REDACTED]", StringComparison.Ordinal);
-        return result;
+        return Regex.Replace(result,
+            @"(?i)(bearer|api[-_ ]?key|access[-_ ]?token|secret|password)\s*[:=]\s*[^\s;,]+",
+            "$1=[REDACTED]");
     }
 
     private static string SanitizeExternalError(string message)
     {
         var lines = message.Replace("\r", string.Empty).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var safe = lines
-            .Where(line => !line.StartsWith('{') && !line.StartsWith('[') && !line.Contains("request_id", StringComparison.OrdinalIgnoreCase))
+            .Where(line => !line.StartsWith('{') && !line.StartsWith('[') &&
+                           !line.Contains("request_id", StringComparison.OrdinalIgnoreCase) &&
+                           !line.Contains("authorization:", StringComparison.OrdinalIgnoreCase) &&
+                           !line.Contains("set-cookie:", StringComparison.OrdinalIgnoreCase) &&
+                           !line.Contains("cookie:", StringComparison.OrdinalIgnoreCase))
             .Select(line =>
             {
                 var jsonStart = line.IndexOf('{');
@@ -526,15 +799,51 @@ public sealed class PluginService(LocalStore store, CredentialStore credentials)
 
     private static string Limit(string value) => value.Length <= 2000 ? value : value[..2000] + "…";
 
-    private static void TryKill(Process process)
+    private static async Task<string> ReadBoundedAsync(StreamReader reader, int maximumCharacters)
     {
-        try { if (!process.HasExited) process.Kill(true); }
+        var builder = new StringBuilder(Math.Min(maximumCharacters + 1, 64 * 1024));
+        var buffer = new char[4096];
+        while (true)
+        {
+            var count = await reader.ReadAsync(buffer);
+            if (count == 0) break;
+            if (builder.Length <= maximumCharacters)
+            {
+                var remaining = maximumCharacters + 1 - builder.Length;
+                builder.Append(buffer, 0, Math.Min(count, remaining));
+            }
+        }
+        return builder.ToString();
+    }
+
+    private static void TryKillAndWait(Process process)
+    {
+        try
+        {
+            if (!process.HasExited) process.Kill(true);
+            process.WaitForExit(2000);
+        }
         catch { }
     }
 
-    private static string Read(JsonElement root, string name, string fallback) =>
-        root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString() ?? fallback : fallback;
+    private sealed class PluginExecutionException : Exception
+    {
+        public PluginExecutionException(
+            string code,
+            string message,
+            bool retryable,
+            bool processExited = false,
+            Exception? innerException = null) : base(message, innerException)
+        {
+            Code = code;
+            Retryable = retryable;
+            ProcessExited = processExited;
+        }
+
+        public string Code { get; }
+        public bool Retryable { get; }
+        public bool ProcessExited { get; }
+    }
 
     private sealed class PluginStateItem
     {

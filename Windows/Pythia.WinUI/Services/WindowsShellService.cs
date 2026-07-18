@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
+using Pythia.Models;
 
 namespace Pythia.Services;
 
@@ -10,6 +11,14 @@ public enum PythiaHotkeyAction
     SelectionTranslate = 2,
     ScreenshotTranslate = 3,
     ScreenshotOcr = 4,
+}
+
+public enum PythiaTrayAction
+{
+    QuickTranslate,
+    History,
+    SyncHistory,
+    Settings,
 }
 
 public sealed class WindowsShellService : IDisposable
@@ -49,6 +58,7 @@ public sealed class WindowsShellService : IDisposable
     private IntPtr _icon;
     private bool _trayAdded;
     private bool _exitRequested;
+    private readonly Dictionary<int, (uint Modifiers, uint Key, string Expression)> _registeredHotkeys = [];
 
     public WindowsShellService(Window window)
     {
@@ -58,12 +68,13 @@ public sealed class WindowsShellService : IDisposable
         if (!SetWindowSubclass(_hwnd, _subclassProc, 1, IntPtr.Zero))
             throw new Win32Exception(Marshal.GetLastWin32Error());
         AddTrayIcon();
-        RegisterHotkeys();
-        App.Services.SettingsSaved += SettingsSaved;
+        if (!TryRegisterHotkeys(App.Services.Settings, out var error) && error is not null)
+            App.Services.Status.Report(error);
     }
 
     public event EventHandler<PythiaHotkeyAction>? HotkeyInvoked;
     public event EventHandler? ShowRequested;
+    public event EventHandler<PythiaTrayAction>? TrayActionInvoked;
 
     public void ExitApplication()
     {
@@ -71,26 +82,58 @@ public sealed class WindowsShellService : IDisposable
         _window.Close();
     }
 
-    public void RegisterHotkeys()
+    public bool TryRegisterHotkeys(PythiaSettings settings, out string? error)
     {
-        for (var id = 1; id <= 4; id++) UnregisterHotKey(_hwnd, id);
-        Register((int)PythiaHotkeyAction.ShowWindow, App.Services.Settings.ShowWindowHotkey);
-        Register((int)PythiaHotkeyAction.SelectionTranslate, App.Services.Settings.SelectionTranslateHotkey);
-        Register((int)PythiaHotkeyAction.ScreenshotTranslate, App.Services.Settings.ScreenshotTranslateHotkey);
-        Register((int)PythiaHotkeyAction.ScreenshotOcr, App.Services.Settings.ScreenshotOcrHotkey);
-    }
-
-    private void SettingsSaved(object? sender, EventArgs e) => RegisterHotkeys();
-
-    private void Register(int id, string expression)
-    {
-        if (!TryParseHotkey(expression, out var modifiers, out var key))
+        var requested = new[]
         {
-            App.Services.Status.Report($"快捷键格式无效：{expression}");
-            return;
+            ((int)PythiaHotkeyAction.ShowWindow, settings.ShowWindowHotkey),
+            ((int)PythiaHotkeyAction.SelectionTranslate, settings.SelectionTranslateHotkey),
+            ((int)PythiaHotkeyAction.ScreenshotTranslate, settings.ScreenshotTranslateHotkey),
+            ((int)PythiaHotkeyAction.ScreenshotOcr, settings.ScreenshotOcrHotkey),
+        };
+        var parsed = new List<(int Id, uint Modifiers, uint Key, string Expression)>();
+        var combinations = new HashSet<(uint Modifiers, uint Key)>();
+        foreach (var item in requested)
+        {
+            if (!TryParseHotkey(item.Item2, out var modifiers, out var key))
+            {
+                error = $"快捷键格式无效：{item.Item2}";
+                return false;
+            }
+            if (!combinations.Add((modifiers, key)))
+            {
+                error = $"快捷键重复：{item.Item2}";
+                return false;
+            }
+            parsed.Add((item.Item1, modifiers, key, item.Item2));
         }
-        if (!RegisterHotKey(_hwnd, id, modifiers | ModNoRepeat, key))
-            App.Services.Status.Report($"快捷键已被占用：{expression}");
+
+        var previous = _registeredHotkeys.ToDictionary(item => item.Key, item => item.Value);
+        foreach (var id in previous.Keys) UnregisterHotKey(_hwnd, id);
+        var registeredIds = new List<int>();
+        foreach (var item in parsed)
+        {
+            if (RegisterHotKey(_hwnd, item.Id, item.Modifiers | ModNoRepeat, item.Key))
+            {
+                registeredIds.Add(item.Id);
+                continue;
+            }
+            foreach (var id in registeredIds) UnregisterHotKey(_hwnd, id);
+            _registeredHotkeys.Clear();
+            foreach (var old in previous)
+            {
+                if (RegisterHotKey(_hwnd, old.Key, old.Value.Modifiers | ModNoRepeat, old.Value.Key))
+                    _registeredHotkeys[old.Key] = old.Value;
+            }
+            error = $"快捷键已被其他程序占用：{item.Expression}；原快捷键已恢复。";
+            return false;
+        }
+
+        _registeredHotkeys.Clear();
+        foreach (var item in parsed)
+            _registeredHotkeys[item.Id] = (item.Modifiers, item.Key, item.Expression);
+        error = null;
+        return true;
     }
 
     private IntPtr WindowProc(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam, nuint id, IntPtr data)
@@ -155,7 +198,12 @@ public sealed class WindowsShellService : IDisposable
         {
             AppendMenu(menu, MfString, 1001, "显示 Pythia");
             AppendMenu(menu, MfSeparator, 0, string.Empty);
-            AppendMenu(menu, MfString, 1002, "退出");
+            AppendMenu(menu, MfString, 1002, "快速输入翻译");
+            AppendMenu(menu, MfString, 1003, "历史记录");
+            AppendMenu(menu, MfString, 1004, "同步历史");
+            AppendMenu(menu, MfString, 1005, "设置");
+            AppendMenu(menu, MfSeparator, 0, string.Empty);
+            AppendMenu(menu, MfString, 1006, "退出");
             GetCursorPos(out var point);
             SetForegroundWindow(_hwnd);
             var command = TrackPopupMenuEx(menu, TpmRightButton | TpmReturnCommand | TpmNonotify,
@@ -163,12 +211,20 @@ public sealed class WindowsShellService : IDisposable
             if (command == 1001)
                 _window.DispatcherQueue.TryEnqueue(() => ShowRequested?.Invoke(this, EventArgs.Empty));
             else if (command == 1002)
+                _window.DispatcherQueue.TryEnqueue(() => TrayActionInvoked?.Invoke(this, PythiaTrayAction.QuickTranslate));
+            else if (command == 1003)
+                _window.DispatcherQueue.TryEnqueue(() => TrayActionInvoked?.Invoke(this, PythiaTrayAction.History));
+            else if (command == 1004)
+                _window.DispatcherQueue.TryEnqueue(() => TrayActionInvoked?.Invoke(this, PythiaTrayAction.SyncHistory));
+            else if (command == 1005)
+                _window.DispatcherQueue.TryEnqueue(() => TrayActionInvoked?.Invoke(this, PythiaTrayAction.Settings));
+            else if (command == 1006)
                 _window.DispatcherQueue.TryEnqueue(ExitApplication);
         }
         finally { DestroyMenu(menu); }
     }
 
-    private static bool TryParseHotkey(string expression, out uint modifiers, out uint key)
+    public static bool TryParseHotkey(string expression, out uint modifiers, out uint key)
     {
         modifiers = 0;
         key = 0;
@@ -195,7 +251,6 @@ public sealed class WindowsShellService : IDisposable
 
     public void Dispose()
     {
-        App.Services.SettingsSaved -= SettingsSaved;
         for (var id = 1; id <= 4; id++) UnregisterHotKey(_hwnd, id);
         if (_trayAdded)
         {

@@ -22,8 +22,8 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
         if (normalizedText.Length == 0)
             throw new ArgumentException("请输入需要翻译的文本。", nameof(text));
 
-        var pair = NormalizePair(sourceLanguage, targetLanguage);
-        var tasks = serviceIds.Distinct().Select(async id =>
+        var pair = ResolveLanguages(normalizedText, sourceLanguage, targetLanguage);
+        var tasks = serviceIds.Distinct(StringComparer.OrdinalIgnoreCase).Select(async id =>
         {
             try
             {
@@ -37,7 +37,8 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
                     "libretranslate" => await TranslateLibreAsync(normalizedText, pair.Source, pair.Target, settings, cancellationToken),
                     _ when id.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase) && plugins is not null =>
                         new TranslationResult(id, plugins.DisplayName(id),
-                            await plugins.TranslateAsync(id, normalizedText, pair.Source, pair.Target, cancellationToken)),
+                            await plugins.TranslateAsync(id, normalizedText, pair.Source, pair.Target, cancellationToken),
+                            IconPath: plugins.IconPath(id)),
                     _ => new TranslationResult(id, ServiceCatalog.DisplayName(id), string.Empty, Error: "当前版本不支持此翻译服务。"),
                 };
             }
@@ -45,7 +46,8 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
             catch (Exception exception)
             {
                 return new TranslationResult(id, plugins?.DisplayName(id) ?? ServiceCatalog.DisplayName(id), string.Empty,
-                    Error: SafeError(exception));
+                    Error: SafeError(exception),
+                    IconPath: id.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase) ? plugins?.IconPath(id) : null);
             }
         });
 
@@ -215,10 +217,30 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
         _ => exception.Message,
     };
 
-    private static (string Source, string Target) NormalizePair(string source, string target)
+    public static (string Source, string Target) ResolveLanguages(string text, string source, string target)
     {
         source = string.IsNullOrWhiteSpace(source) ? "auto" : source;
         target = string.IsNullOrWhiteSpace(target) ? "zh-CN" : target;
+        if (source.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            var hasChinese = false;
+            var hasEnglish = false;
+            foreach (var rune in text.EnumerateRunes())
+            {
+                var value = rune.Value;
+                if (value is >= 0x4E00 and <= 0x9FFF or >= 0x3400 and <= 0x4DBF or >= 0x20000 and <= 0x2A6DF)
+                    hasChinese = true;
+                else if (value is >= 'A' and <= 'Z' or >= 'a' and <= 'z')
+                    hasEnglish = true;
+            }
+            if (hasChinese && !hasEnglish) target = "en";
+            else if (hasEnglish && !hasChinese) target = "zh-CN";
+            else if (hasChinese && hasEnglish)
+            {
+                if (target.StartsWith("en", StringComparison.OrdinalIgnoreCase)) source = "zh-CN";
+                else if (target.StartsWith("zh", StringComparison.OrdinalIgnoreCase)) source = "en";
+            }
+        }
         if (source == target)
             target = target.StartsWith("zh", StringComparison.OrdinalIgnoreCase) ? "en" : "zh-CN";
         return (source, target);

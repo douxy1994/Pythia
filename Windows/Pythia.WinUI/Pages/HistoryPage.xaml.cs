@@ -44,8 +44,17 @@ public sealed partial class HistoryPage : Page
     {
         if ((sender as Button)?.Tag is not HistoryRecord record) return;
         record.IsFavorite = !record.IsFavorite;
+        record.UpdatedAt = DateTimeOffset.UtcNow;
+        record.SyncStatus = App.Services.Settings.WebdavHistoryAutoSync ? "pendingUpload" : "local";
         await App.Services.SaveHistoryAsync();
         Refresh();
+    }
+
+    private async void Load_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is not HistoryRecord record || App.MainAppWindow is not MainWindow window) return;
+        await window.ShowHomeTextAsync(record.SourceText, false);
+        App.Services.Status.Report("已载入历史原文，可修改后重新翻译");
     }
 
     private void Copy_Click(object sender, RoutedEventArgs e)

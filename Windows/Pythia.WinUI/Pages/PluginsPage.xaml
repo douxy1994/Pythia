@@ -13,11 +13,11 @@
                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="扩展 Pythia 的翻译服务" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                <Button Style="{StaticResource PythiaToolbarButtonStyle}" Click="OpenFolder_Click">
+                <Button Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="打开插件目录" Click="OpenFolder_Click">
                     <StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="OpenLocal" /><TextBlock Text="打开目录" /></StackPanel>
                 </Button>
-                <Button Style="{StaticResource AccentButtonStyle}" CornerRadius="10" Click="Install_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="Download" /><TextBlock Text="安装插件" /></StackPanel>
+                <Button Style="{StaticResource AccentButtonStyle}" CornerRadius="10" AutomationProperties.Name="安装插件包" Click="Install_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="Add" /><TextBlock Text="安装插件" /></StackPanel>
                 </Button>
             </StackPanel>
         </Grid>
@@ -26,7 +26,7 @@
         </InfoBar>
         <Grid Grid.Row="2">
             <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
-                <FontIcon FontSize="40" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Glyph="&#xEA86;" />
+                <SymbolIcon Symbol="Repair" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                 <TextBlock FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" Text="尚未安装插件" />
                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="可通过右上角安装 .pythia 插件包" />
             </StackPanel>
@@ -40,7 +40,10 @@
                             <Grid ColumnSpacing="15">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="48" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <Border Width="48" Height="48" Background="{ThemeResource AccentFillColorSecondaryBrush}" CornerRadius="12">
-                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20" FontWeight="SemiBold" Text="{x:Bind NameInitial}" />
+                                    <Grid>
+                                        <Image Margin="7" Source="{x:Bind IconSource}" Stretch="Uniform" Visibility="{x:Bind IconVisibility}" />
+                                        <Image Margin="7" Source="/Assets/AppIcon.png" Stretch="Uniform" Visibility="{x:Bind FallbackIconVisibility}" />
+                                    </Grid>
                                 </Border>
                                 <StackPanel Grid.Column="1" Spacing="4">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
@@ -53,12 +56,14 @@
                                         <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="{x:Bind EnabledDisplay}" />
                                         <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="{x:Bind ConfigurationDisplay}" />
                                     </StackPanel>
+                                    <TextBlock FontSize="12" Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                               Text="{x:Bind LastError}" TextWrapping="Wrap" Visibility="{x:Bind LastErrorVisibility}" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
-                                    <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="配置插件" Tag="{x:Bind}" Click="Configure_Click"><SymbolIcon Symbol="Setting" /></Button>
-                                    <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="连通性测试" Tag="{x:Bind}" Click="Test_Click"><SymbolIcon Symbol="Sync" /></Button>
-                                    <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="{x:Bind ToggleDisplay}" Tag="{x:Bind}" Click="Toggle_Click"><SymbolIcon Symbol="Switch" /></Button>
-                                    <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="卸载插件" Tag="{x:Bind}" Click="Remove_Click"><SymbolIcon Symbol="Delete" /></Button>
+                                    <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="配置插件" AutomationProperties.Name="配置插件" Tag="{x:Bind}" Click="Configure_Click"><SymbolIcon Symbol="Setting" /></Button>
+                                    <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="运行最长 30 秒的连通性测试" AutomationProperties.Name="测试插件连通性" Tag="{x:Bind}" Click="Test_Click"><SymbolIcon Symbol="Play" /></Button>
+                                    <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="{x:Bind ToggleDisplay}" AutomationProperties.Name="启用或停用插件" Tag="{x:Bind}" Click="Toggle_Click"><SymbolIcon Symbol="Switch" /></Button>
+                                    <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="卸载插件" AutomationProperties.Name="卸载插件" Tag="{x:Bind}" Click="Remove_Click"><SymbolIcon Symbol="Delete" /></Button>
                                 </StackPanel>
                             </Grid>
                         </Border>

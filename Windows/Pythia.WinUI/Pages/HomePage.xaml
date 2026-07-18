@@ -12,22 +12,30 @@
             <RowDefinition Height="200" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Grid ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Spacing="3">
                 <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="翻译" />
                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="多引擎翻译、划词与屏幕文字识别" />
             </StackPanel>
-            <Button x:Name="ServiceButton" Grid.Column="1" Style="{StaticResource PythiaToolbarButtonStyle}" Click="ServiceButton_Click">
+            <Button x:Name="PinButton" Grid.Column="1" Margin="0,0,8,0" Style="{StaticResource PythiaToolbarButtonStyle}"
+                    AutomationProperties.AutomationId="PinWindowButton"
+                    AutomationProperties.Name="切换窗口置顶" ToolTipService.ToolTip="切换窗口置顶" Click="PinButton_Click">
+                <SymbolIcon Symbol="Pin" />
+            </Button>
+            <Button x:Name="ServiceButton" Grid.Column="2" Style="{StaticResource PythiaToolbarButtonStyle}" Click="ServiceButton_Click"
+                    AutomationProperties.AutomationId="ServiceOrderButton"
+                    AutomationProperties.Name="选择并排序翻译服务" ToolTipService.ToolTip="选择并拖动排序翻译服务">
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <SymbolIcon Symbol="Globe" />
+                    <SymbolIcon Symbol="Sort" />
                     <TextBlock x:Name="ServiceButtonLabel" VerticalAlignment="Center" />
-                    <FontIcon FontSize="12" Glyph="&#xE70D;" />
                 </StackPanel>
             </Button>
         </Grid>
@@ -41,13 +49,16 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <ComboBox x:Name="SourceLanguageBox" HorizontalAlignment="Stretch" Header="源语言" SelectionChanged="Language_SelectionChanged" />
-                <Button Grid.Column="1" Width="42" Height="42" Margin="0,20,0,0" ToolTipService.ToolTip="交换语言" Click="SwapLanguages_Click">
+                <Button Grid.Column="1" Width="42" Height="42" Margin="0,20,0,0" ToolTipService.ToolTip="交换源语言和目标语言"
+                        AutomationProperties.Name="交换源语言和目标语言" Click="SwapLanguages_Click">
                     <SymbolIcon Symbol="Switch" />
                 </Button>
                 <ComboBox x:Name="TargetLanguageBox" Grid.Column="2" HorizontalAlignment="Stretch" Header="目标语言" SelectionChanged="Language_SelectionChanged" />
-                <Button Grid.Column="3" Margin="0,20,0,0" Style="{StaticResource AccentButtonStyle}" CornerRadius="10" Click="Translate_Click">
+                <Button x:Name="TranslateButton" Grid.Column="3" Margin="0,20,0,0" Style="{StaticResource AccentButtonStyle}"
+                        AutomationProperties.AutomationId="TranslateButton"
+                        CornerRadius="10" AutomationProperties.Name="开始翻译" Click="Translate_Click">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <SymbolIcon Symbol="Go" />
+                        <SymbolIcon Symbol="Send" />
                         <TextBlock Text="翻译" />
                     </StackPanel>
                 </Button>
@@ -62,12 +73,15 @@
                 </Grid.RowDefinitions>
                 <TextBox
                     x:Name="SourceTextBox"
+                    AutomationProperties.AutomationId="SourceTextBox"
                     AcceptsReturn="True"
                     BorderThickness="0"
                     FontSize="17"
                     Padding="18,14"
                     PlaceholderText="输入或粘贴需要翻译的内容…"
                     TextWrapping="Wrap"
+                    TextCompositionStarted="SourceTextBox_TextCompositionStarted"
+                    TextCompositionEnded="SourceTextBox_TextCompositionEnded"
                     KeyDown="SourceTextBox_KeyDown" />
                 <Grid Grid.Row="1" Padding="10,7" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
                     <Grid.ColumnDefinitions>
@@ -75,16 +89,20 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal" Spacing="4">
-                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="粘贴" Click="Paste_Click"><SymbolIcon Symbol="Paste" /></Button>
-                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="移除换行" Click="RemoveLineBreaks_Click"><SymbolIcon Symbol="Trim" /></Button>
-                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="清空" Click="Clear_Click"><SymbolIcon Symbol="Delete" /></Button>
+                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="复制原文" AutomationProperties.Name="复制原文" Click="CopySource_Click"><SymbolIcon Symbol="Copy" /></Button>
+                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="粘贴" AutomationProperties.Name="粘贴原文" Click="Paste_Click"><SymbolIcon Symbol="Paste" /></Button>
+                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="移除换行并合并为单行" AutomationProperties.Name="合并原文为单行" Click="RemoveLineBreaks_Click"><SymbolIcon Symbol="AlignLeft" /></Button>
+                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="清空原文和结果" AutomationProperties.Name="清空原文和翻译结果" Click="Clear_Click"><SymbolIcon Symbol="Delete" /></Button>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="读取当前选中文本并翻译" Click="SelectionTranslate_Click">
+                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="读取当前选中文本并翻译" AutomationProperties.Name="划词翻译" Click="SelectionTranslate_Click">
                             <StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="TouchPointer" /><TextBlock Text="划词" /></StackPanel>
                         </Button>
-                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="从图片识别文字" Click="OcrImage_Click">
-                            <StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="Pictures" /><TextBlock Text="OCR" /></StackPanel>
+                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="截取屏幕区域、识别并翻译" AutomationProperties.Name="截图翻译" Click="ScreenshotTranslate_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="Camera" /><TextBlock Text="截图" /></StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="从图片识别文字" AutomationProperties.Name="图片文字识别" Click="OcrImage_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="Pictures" /><TextBlock Text="图片 OCR" /></StackPanel>
                         </Button>
                     </StackPanel>
                 </Grid>
@@ -94,7 +112,8 @@
         <Grid Grid.Row="3">
             <TextBlock x:Name="EmptyResultsText" HorizontalAlignment="Center" VerticalAlignment="Center"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="翻译结果会显示在这里" />
-            <ListView x:Name="ResultsList" ItemsSource="{x:Bind Results}" SelectionMode="None" Background="Transparent">
+            <ListView x:Name="ResultsList" ItemsSource="{x:Bind Results}" SelectionMode="None" Background="Transparent"
+                      AutomationProperties.AutomationId="TranslationResults">
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -110,20 +129,27 @@
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <SymbolIcon Symbol="Globe" />
+                                        <SymbolIcon Symbol="Globe" Visibility="{x:Bind BuiltInIconVisibility}" />
+                                        <Image Width="20" Height="20" Source="{x:Bind IconSource}" Stretch="Uniform" Visibility="{x:Bind PluginIconVisibility}" />
+                                        <Image Width="20" Height="20" Source="/Assets/AppIcon.png" Stretch="Uniform" Visibility="{x:Bind PluginFallbackVisibility}" />
                                         <TextBlock FontWeight="SemiBold" Text="{x:Bind ServiceName}" />
                                         <TextBlock Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="{x:Bind Model}" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                                        <Button Visibility="{x:Bind RetryVisibility}" Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="重试此插件" Tag="{x:Bind}" Click="RetryResult_Click">
+                                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="展开或收起结果"
+                                                AutomationProperties.Name="展开或收起翻译结果" Tag="{x:Bind}" Click="ToggleResult_Click">
+                                            <SymbolIcon Symbol="{x:Bind ExpandSymbol, Mode=OneWay}" />
+                                        </Button>
+                                        <Button Visibility="{x:Bind RetryVisibility}" Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="重试此插件" AutomationProperties.Name="重试插件翻译" Tag="{x:Bind}" Click="RetryResult_Click">
                                             <SymbolIcon Symbol="Refresh" />
                                         </Button>
-                                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="复制结果" Tag="{x:Bind}" Click="CopyResult_Click">
+                                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="复制结果" AutomationProperties.Name="复制翻译结果" Tag="{x:Bind}" Click="CopyResult_Click">
                                             <SymbolIcon Symbol="Copy" />
                                         </Button>
                                     </StackPanel>
                                 </Grid>
-                                <TextBlock Grid.Row="1" FontSize="17" IsTextSelectionEnabled="True" Text="{x:Bind DisplayText}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="1" FontSize="17" IsTextSelectionEnabled="True" Text="{x:Bind DisplayText}" TextWrapping="Wrap"
+                                           Visibility="{x:Bind BodyVisibility, Mode=OneWay}" />
                             </Grid>
                         </Border>
                     </DataTemplate>
@@ -131,11 +157,21 @@
             </ListView>
         </Grid>
 
-        <Grid Grid.Row="4" ColumnSpacing="8">
+        <Grid Grid.Row="4" ColumnSpacing="8" Margin="0,2,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="Enter 翻译 · Shift + Enter 换行" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                <Button Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="复制全部译文" ToolTipService.ToolTip="复制全部译文" Click="CopyAll_Click"><StackPanel Orientation="Horizontal" Spacing="6"><SymbolIcon Symbol="Copy" /><TextBlock Text="复制全部" /></StackPanel></Button>
+                <Button Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="收藏本次翻译" ToolTipService.ToolTip="收藏本次翻译" Click="FavoriteResults_Click"><StackPanel Orientation="Horizontal" Spacing="6"><SymbolIcon Symbol="OutlineStar" /><TextBlock Text="收藏" /></StackPanel></Button>
+                <Button Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="朗读首条译文" ToolTipService.ToolTip="朗读首条译文" Click="Speak_Click"><StackPanel Orientation="Horizontal" Spacing="6"><SymbolIcon Symbol="Volume" /><TextBlock Text="朗读" /></StackPanel></Button>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="5" ColumnSpacing="8">
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <ProgressRing Width="16" Height="16" IsActive="{x:Bind Services.Status.IsBusy, Mode=OneWay}" />
-            <TextBlock Grid.Column="1" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Services.Status.Message, Mode=OneWay}" />
-            <TextBlock Grid.Column="2" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="Enter 翻译 · Shift + Enter 换行" />
+            <TextBlock Grid.Column="1" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       AutomationProperties.AutomationId="StatusText" Text="{x:Bind Services.Status.Message, Mode=OneWay}" />
         </Grid>
     </Grid>
 </Page>

@@ -5,6 +5,18 @@ using Pythia.Services;
 
 var failures = new List<string>();
 
+string? FindNodeForTests()
+{
+    var candidates = new[]
+    {
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "node.exe"),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "nodejs", "node.exe"),
+    }.Concat((Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+        .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(path => Path.Combine(path.Trim('"'), "node.exe")));
+    return candidates.FirstOrDefault(File.Exists);
+}
+
 void Check(bool condition, string message)
 {
     if (!condition) failures.Add(message);
@@ -15,7 +27,7 @@ if (args.Length >= 2 && args[0] == "--install-repo-plugins")
     var packageDirectory = Path.GetFullPath(args[1]);
     var runConnectivity = args.Contains("--connectivity", StringComparer.OrdinalIgnoreCase);
     var store = new LocalStore();
-    var service = new PluginService(store, new CredentialStore());
+    var service = new PluginService(store, new CredentialStore(), FindNodeForTests());
     await service.InitializeAsync();
     var installed = new List<PluginInfo>();
     foreach (var package in Directory.EnumerateFiles(packageDirectory, "*.pythia").OrderBy(Path.GetFileName))
@@ -40,29 +52,14 @@ if (args.Length >= 2 && args[0] == "--install-repo-plugins")
     {
         foreach (var plugin in installed)
         {
-            var config = service.GetConfiguration(plugin);
-            var missing = plugin.Configuration
-                .Where(field => field.Required && string.IsNullOrWhiteSpace(config.GetValueOrDefault(field.Key)))
-                .Select(field => field.Label)
-                .ToArray();
-            if (missing.Length > 0)
-            {
-                Console.WriteLine($"连通性\t{plugin.Name}\t未测试（缺少必填配置）");
-                continue;
-            }
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
             try
             {
-                await service.TranslateAsync(plugin.ServiceId, "Hello", "en", "zh-CN", timeout.Token);
-                Console.WriteLine($"连通性\t{plugin.Name}\t通过");
-            }
-            catch (OperationCanceledException)
-            {
-                Console.WriteLine($"连通性\t{plugin.Name}\t失败（60 秒超时）");
+                var result = await service.TestConnectionAsync(plugin);
+                Console.WriteLine($"连通性\t{plugin.Name}\t{result.StatusDisplay}\t尝试 {result.Attempts} 次\t{result.Duration.TotalSeconds:F1} 秒");
             }
             catch (Exception exception)
             {
-                Console.WriteLine($"连通性\t{plugin.Name}\t失败（{exception.Message}）");
+                Console.WriteLine($"连通性\t{plugin.Name}\t测试中止\t{exception.GetType().Name}");
             }
         }
     }
@@ -78,6 +75,126 @@ var settings = new PythiaSettings
     TranslateServiceOrder = ["google", "deepl"],
 };
 Check(settings.ActiveServices.SequenceEqual(["google", "deepl"]), "service ordering");
+Check(HomeInteractionPolicy.ResolveEnter(true, false, false, false) == HomeInputAction.Submit, "Enter submits");
+Check(HomeInteractionPolicy.ResolveEnter(true, true, false, false) == HomeInputAction.InsertLineBreak, "Shift+Enter line break");
+Check(HomeInteractionPolicy.ResolveEnter(true, false, true, false) == HomeInputAction.None, "IME composing Enter is ignored");
+Check(HomeInteractionPolicy.ResolveEnter(true, false, false, true) == HomeInputAction.None, "repeated Enter is ignored");
+var submissionGate = new HomeSubmissionGate();
+Check(submissionGate.TryEnter() && !submissionGate.TryEnter() && submissionGate.IsEntered,
+    "duplicate translation submission is rejected while busy");
+submissionGate.Exit();
+Check(submissionGate.TryEnter(), "translation submission gate reopens after completion");
+submissionGate.Exit();
+Check(HomeInteractionPolicy.MoveService(["a", "b", "c"], 0, 2).SequenceEqual(["b", "c", "a"]), "service reorder first to last");
+Check(HomeInteractionPolicy.MoveService(["a", "b", "c"], 2, 0).SequenceEqual(["c", "a", "b"]), "service reorder last to first");
+Check(HomeInteractionPolicy.MoveService(["a", "b"], -1, 1).SequenceEqual(["a", "b"]), "cancelled service reorder is stable");
+Check(HomeInteractionPolicy.MergeBuiltInEnabled(
+    ["plugin:one", "google", "plugin:two"], ["deepl"]).SequenceEqual(["plugin:one", "plugin:two", "deepl"]),
+    "settings preserve enabled plugins");
+Check(TranslationCoordinator.ResolveLanguages("今天天气很好", "auto", "zh-CN") == ("auto", "en"),
+    "pure Chinese auto-routes to English");
+Check(TranslationCoordinator.ResolveLanguages("The weather is good", "auto", "en") == ("auto", "zh-CN"),
+    "pure English auto-routes to Chinese");
+Check(TranslationCoordinator.ResolveLanguages("今天 weather 很好", "auto", "en") == ("zh-CN", "en") &&
+      TranslationCoordinator.ResolveLanguages("今天 weather 很好", "auto", "zh-CN") == ("en", "zh-CN"),
+    "mixed Chinese and English respects selected target");
+Check(PluginService.ClassifyConnectionFailure("AUTHENTICATION_FAILED", "HTTP 401") == PluginConnectionStatus.InvalidCredential,
+    "plugin invalid credential classification");
+Check(PluginService.ClassifyConnectionFailure("MODEL_NOT_FOUND", "model unavailable") == PluginConnectionStatus.ModelUnavailable,
+    "plugin model classification");
+Check(PluginService.ClassifyConnectionFailure("NETWORK_ERROR", "ENOTFOUND") == PluginConnectionStatus.NetworkUnreachable,
+    "plugin network classification");
+Check(PluginService.ClassifyConnectionFailure("TIMEOUT", "timed out") == PluginConnectionStatus.Timeout,
+    "plugin timeout classification");
+Check(PluginService.ClassifyConnectionFailure("NETWORK_ERROR", "HTTP Status: 502") == PluginConnectionStatus.UpstreamError,
+    "plugin upstream classification");
+Check(PluginService.ClassifyConnectionFailure("INVALID_RESPONSE", "invalid JSON") == PluginConnectionStatus.ProtocolIncompatible,
+    "plugin protocol classification");
+Check(PluginService.ClassifyConnectionFailure("PROCESS_EXITED", "crashed", true) == PluginConnectionStatus.ProcessAbnormalExit,
+    "plugin process classification");
+Check(IconSemantics.Actions.Count >= 25 && IconSemantics.Actions.Values.All(item =>
+        item.Symbol != Microsoft.UI.Xaml.Controls.Symbol.Placeholder && !string.IsNullOrWhiteSpace(item.AccessibleName)),
+    "semantic icon mapping");
+var expectedHomeIcons = new Dictionary<string, Microsoft.UI.Xaml.Controls.Symbol>
+{
+    ["home.services"] = Microsoft.UI.Xaml.Controls.Symbol.Sort,
+    ["home.pin"] = Microsoft.UI.Xaml.Controls.Symbol.Pin,
+    ["home.swapLanguages"] = Microsoft.UI.Xaml.Controls.Symbol.Switch,
+    ["home.translate"] = Microsoft.UI.Xaml.Controls.Symbol.Send,
+    ["home.copySource"] = Microsoft.UI.Xaml.Controls.Symbol.Copy,
+    ["home.paste"] = Microsoft.UI.Xaml.Controls.Symbol.Paste,
+    ["home.removeLineBreaks"] = Microsoft.UI.Xaml.Controls.Symbol.AlignLeft,
+    ["home.clear"] = Microsoft.UI.Xaml.Controls.Symbol.Delete,
+    ["home.selection"] = Microsoft.UI.Xaml.Controls.Symbol.TouchPointer,
+    ["home.screenshot"] = Microsoft.UI.Xaml.Controls.Symbol.Camera,
+    ["home.ocrImage"] = Microsoft.UI.Xaml.Controls.Symbol.Pictures,
+    ["home.copyAll"] = Microsoft.UI.Xaml.Controls.Symbol.Copy,
+    ["home.favorite"] = Microsoft.UI.Xaml.Controls.Symbol.OutlineStar,
+    ["home.speak"] = Microsoft.UI.Xaml.Controls.Symbol.Volume,
+};
+Check(expectedHomeIcons.All(expected => IconSemantics.Actions.TryGetValue(expected.Key, out var actual) &&
+        actual.Symbol == expected.Value),
+    "home actions keep exact semantic icons");
+Check(SpeechService.NormalizeText("  hello  ") == "hello" && SpeechService.NormalizeText("   ").Length == 0,
+    "speech input normalization");
+var syncTime = DateTimeOffset.Parse("2026-07-18T00:00:00Z");
+var timestampStableFavorite = new HistoryRecord { UpdatedAt = syncTime };
+timestampStableFavorite.IsFavorite = true;
+Check(timestampStableFavorite.UpdatedAt == syncTime,
+    "history deserialization-safe favorite setter preserves timestamps");
+var localSyncRecord = new HistoryRecord
+{
+    Id = "same", SourceText = "old", TranslatedText = "旧", UpdatedAt = syncTime, CreatedAt = syncTime,
+};
+var remoteSyncRecord = new HistoryRecord
+{
+    Id = "same", SourceText = "new", TranslatedText = "新", UpdatedAt = syncTime.AddMinutes(1), CreatedAt = syncTime,
+};
+var newestMerge = HistorySyncService.Merge([localSyncRecord], [remoteSyncRecord]);
+Check(newestMerge.Records.Single().SourceText == "new" && newestMerge.Records.Single().SyncStatus == "synced",
+    "history sync newest update wins");
+var deletionRecord = HistorySyncService.Clone(localSyncRecord);
+deletionRecord.DeletedAt = syncTime.AddMinutes(-1);
+deletionRecord.UpdatedAt = syncTime.AddMinutes(-1);
+var deletionMerge = HistorySyncService.Merge([remoteSyncRecord], [deletionRecord]);
+Check(deletionMerge.Records.Single().DeletedAt is not null && deletionMerge.Records.Single().SyncStatus == "pendingDelete",
+    "history tombstone wins across devices");
+var conflictRight = HistorySyncService.Clone(localSyncRecord);
+conflictRight.SourceText = "conflict";
+var conflictMerge = HistorySyncService.Merge([localSyncRecord], [conflictRight]);
+Check(conflictMerge.ConflictCount == 1 && conflictMerge.Records.Single().SyncStatus == "conflict",
+    "history sync marks equal-time content conflicts");
+var portableSettings = new PythiaSettings
+{
+    SourceLanguage = "en",
+    TargetLanguage = "zh-CN",
+    EnabledTranslateServices = ["google"],
+    TranslateServiceOrder = ["google"],
+    WebdavUrl = "https://private.example.invalid/dav",
+    WebdavUsername = "private-user",
+};
+var portableJson = PortableBackupService.Create(portableSettings, [localSyncRecord]);
+Check(!portableJson.Contains("private.example", StringComparison.Ordinal) &&
+      !portableJson.Contains("private-user", StringComparison.Ordinal) &&
+      !portableJson.Contains("apiKey", StringComparison.OrdinalIgnoreCase),
+    "portable backup omits credentials and WebDAV identity");
+var portableRestore = PortableBackupService.Restore(portableJson, []);
+Check(portableRestore.ImportedCount == 1 && portableRestore.Records.Single().SyncStatus == "pendingUpload",
+    "portable backup restores mergeable pending history");
+Check(AppServices.GetSyncInterval(new PythiaSettings
+      { WebdavHistorySyncIntervalValue = 2, WebdavHistorySyncIntervalUnit = "week" }) == TimeSpan.FromDays(14),
+    "WebDAV week schedule");
+Check(WebDavService.NormalizeRootUrl("https://example.invalid/dav").AbsoluteUri ==
+      "https://example.invalid/dav/Pythia/", "WebDAV root normalization");
+Check(WindowsShellService.TryParseHotkey("Ctrl+Alt+P", out var parsedModifiers, out var parsedKey) &&
+      parsedModifiers != 0 && parsedKey == (uint)'P', "hotkey parser accepts recorded shortcut");
+Check(!WindowsShellService.TryParseHotkey("P", out _, out _),
+    "hotkey parser rejects unmodified keys");
+Check(UpdateService.TryParseVersion("v1.2.3", out var updateVersion) && updateVersion == new Version(1, 2, 3) &&
+      UpdateService.TryParseVersion("2.0.0-beta.1", out var previewVersion) && previewVersion == new Version(2, 0, 0),
+    "update version parser");
+Check(ScreenRegionSelector.NormalizeSelection(new System.Drawing.Point(120, 90), new System.Drawing.Point(20, 10)) ==
+      new System.Drawing.Rectangle(20, 10, 100, 80), "screenshot reverse drag geometry");
 
 var json = """
 {
@@ -126,6 +243,7 @@ try
       "author": "Pythia",
       "type": "translator",
       "entry": "main.js",
+      "minimumPythiaVersion": "1.0.0",
       "supportedPlatforms": ["windows"],
       "permissions": [],
       "configuration": [],
@@ -137,16 +255,107 @@ try
     var archive = Path.Combine(pluginTestRoot, "runtime-echo.pythia");
     ZipFile.CreateFromDirectory(packageRoot, archive);
     var pluginStore = new LocalStore(Path.Combine(pluginTestRoot, "data"));
-    var pluginService = new PluginService(pluginStore, new CredentialStore());
+    var testNode = FindNodeForTests() ?? throw new FileNotFoundException("Node.js is required for plugin runtime tests.");
+    var pluginService = new PluginService(pluginStore, new CredentialStore(), testNode);
     await pluginService.InitializeAsync();
+
+    var missingCredentialPlugin = new PluginInfo(
+        "test.missing.credential", "Missing Credential", "1.0.0", "test", "Pythia",
+        pluginTestRoot, "main.js", null,
+        [new PluginConfigurationField("apiKey", "API Key", "secret", true, null, new Dictionary<string, string>())]);
+    var missingCredentialResult = await pluginService.TestConnectionAsync(missingCredentialPlugin, maximumDuration: TimeSpan.FromSeconds(1));
+    Check(missingCredentialResult is { Status: PluginConnectionStatus.MissingCredential, Attempts: 0 },
+        "plugin missing credential preflight");
+    var missingConfigPlugin = new PluginInfo(
+        "test.missing.configuration", "Missing Configuration", "1.0.0", "test", "Pythia",
+        pluginTestRoot, "main.js", null,
+        [new PluginConfigurationField("endpoint", "Endpoint", "text", true, null, new Dictionary<string, string>())]);
+    var missingConfigResult = await pluginService.TestConnectionAsync(missingConfigPlugin, maximumDuration: TimeSpan.FromSeconds(1));
+    Check(missingConfigResult is { Status: PluginConnectionStatus.MissingRequiredConfiguration, Attempts: 0 },
+        "plugin missing required configuration preflight");
+
     var installed = pluginService.Install(archive);
     Check(installed.ServiceId == "plugin:test.echo.runtime" && installed.Enabled, "plugin install and service registration");
     var pluginOutput = await pluginService.TranslateAsync(installed.ServiceId, "hello", "en", "zh-CN");
     Check(pluginOutput == "hello-ok", "plugin runtime execution");
+    var connection = await pluginService.TestConnectionAsync(installed, maximumDuration: TimeSpan.FromSeconds(3));
+    Check(connection is { Status: PluginConnectionStatus.Success, Attempts: 1 }, "plugin classified connectivity success");
     var pluginCoordinator = new TranslationCoordinator(new CredentialStore(), pluginService);
     var pluginBatch = await pluginCoordinator.TranslateAsync(
         "integrated", "en", "zh-CN", [installed.ServiceId], new PythiaSettings());
     Check(pluginBatch.Results is [{ IsSuccess: true, Text: "integrated-ok" }], "plugin translation coordinator integration");
+
+    var secondRoot = Path.Combine(pluginTestRoot, "package-two");
+    Directory.CreateDirectory(secondRoot);
+    await File.WriteAllTextAsync(Path.Combine(secondRoot, "manifest.json"), """
+    {
+      "schemaVersion": "1.0",
+      "id": "test.echo.runtime.two",
+      "name": "Runtime Echo Two",
+      "version": "1.0.0",
+      "description": "Second deterministic plugin",
+      "author": "Pythia",
+      "type": "translator",
+      "entry": "main.js",
+      "minimumPythiaVersion": "1.0.0",
+      "supportedPlatforms": ["windows"],
+      "permissions": [],
+      "configuration": [],
+      "capabilities": ["translate"]
+    }
+    """);
+    await File.WriteAllTextAsync(Path.Combine(secondRoot, "main.js"),
+        "module.exports.translate = async (request) => request.input.text + '-two';");
+    await File.WriteAllTextAsync(Path.Combine(secondRoot, "plugin.svg"),
+        "<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><rect width='32' height='32' fill='#3b82f6'/></svg>");
+    var secondArchive = Path.Combine(pluginTestRoot, "runtime-echo-two.pythia");
+    ZipFile.CreateFromDirectory(secondRoot, secondArchive);
+    var second = pluginService.Install(secondArchive);
+    Check(second.IconPath is not null && File.Exists(second.IconPath), "plugin-provided icon discovery");
+    var orderedBatch = await pluginCoordinator.TranslateAsync(
+        "order", "en", "zh-CN", [second.ServiceId, installed.ServiceId], new PythiaSettings());
+    Check(orderedBatch.Results.Select(item => item.ServiceId).SequenceEqual([second.ServiceId, installed.ServiceId]) &&
+          orderedBatch.Results.Select(item => item.Text).SequenceEqual(["order-two", "order-ok"]),
+        "plugin dispatch and result order");
+    var persistedOrder = new PythiaSettings
+    {
+        TranslateServiceOrder = [second.ServiceId, installed.ServiceId],
+        EnabledTranslateServices = [second.ServiceId, installed.ServiceId],
+    };
+    await pluginStore.SaveSettingsAsync(persistedOrder);
+    var reloadedOrder = await pluginStore.LoadSettingsAsync();
+    Check(reloadedOrder.ActiveServices.SequenceEqual([second.ServiceId, installed.ServiceId]),
+        "service order persists across restart");
+
+    var timeoutRoot = Path.Combine(pluginTestRoot, "package-timeout");
+    Directory.CreateDirectory(timeoutRoot);
+    await File.WriteAllTextAsync(Path.Combine(timeoutRoot, "manifest.json"), """
+    {
+      "schemaVersion": "1.0", "id": "test.timeout.runtime", "name": "Runtime Timeout",
+      "version": "1.0.0", "description": "Timeout test", "author": "Pythia",
+      "type": "translator", "entry": "main.js", "minimumPythiaVersion": "1.0.0",
+      "supportedPlatforms": ["windows"], "permissions": [], "configuration": [], "capabilities": ["translate"]
+    }
+    """);
+    await File.WriteAllTextAsync(Path.Combine(timeoutRoot, "main.js"),
+        "module.exports.translate = async () => new Promise(() => {});");
+    var timeoutArchive = Path.Combine(pluginTestRoot, "runtime-timeout.pythia");
+    ZipFile.CreateFromDirectory(timeoutRoot, timeoutArchive);
+    var timeoutPlugin = pluginService.Install(timeoutArchive);
+    var timeoutResult = await pluginService.TestConnectionAsync(timeoutPlugin, maximumDuration: TimeSpan.FromMilliseconds(650));
+    Check(timeoutResult.Status == PluginConnectionStatus.Timeout && timeoutResult.Attempts <= 2 &&
+          timeoutResult.Duration < TimeSpan.FromSeconds(2), "plugin bounded timeout and retry");
+
+    var unsafeArchive = Path.Combine(pluginTestRoot, "unsafe.pythia");
+    using (var unsafeZip = ZipFile.Open(unsafeArchive, ZipArchiveMode.Create))
+        unsafeZip.CreateEntry("../escape.txt");
+    try
+    {
+        pluginService.Install(unsafeArchive);
+        failures.Add("plugin path traversal was accepted");
+    }
+    catch (InvalidDataException) { }
+
     await File.WriteAllTextAsync(Path.Combine(installed.DirectoryPath, "main.js"),
         "module.exports.translate = async () => { throw new Error('Http Request Error\\nHttp Status: 403\\n{\\\"private\\\":\\\"body\\\"}'); }; ");
     try
@@ -154,7 +363,7 @@ try
         await pluginService.TranslateAsync(installed.ServiceId, "error", "en", "zh-CN");
         failures.Add("plugin error sanitization did not throw");
     }
-    catch (InvalidOperationException exception)
+    catch (Exception exception)
     {
         Check(exception.Message == "Http Request Error；Http Status: 403", "plugin error response sanitization");
     }

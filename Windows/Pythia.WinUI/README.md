@@ -15,10 +15,17 @@ from `%APPDATA%\com.pot-app.desktop\config.json`; secret fields are moved
 directly into Windows Credential Manager and are never written to JSON.
 
 On the home page, Enter translates and Shift+Enter inserts a line break. The
-service picker enables, disables, and reorders built-in and plugin services.
-Plugin result cards expose a single-service retry action. Selection translation
-temporarily hides Pythia, copies the selection from the previously focused app,
-and restores Pythia with the translation result.
+service picker enables, disables, and drag-reorders built-in and plugin services.
+Plugin result cards show packaged provider icons and expose a single-service retry
+action. Selection translation reads UI Automation TextPattern first and uses a
+clipboard-preserving copy fallback only when necessary. Screenshot actions freeze
+the multi-monitor desktop, accept a drag region, run Windows OCR, and optionally
+translate the recognized text.
+
+Settings includes hotkey recording with atomic conflict rollback, Windows
+Credential Manager-backed secrets, manual/automatic WebDAV history sync, local
+and WebDAV portable backup/restore, and an SHA-256-verified GitHub update flow.
+Portable backups omit passwords and API keys.
 
 ## Build
 

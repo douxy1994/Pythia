@@ -1,8 +1,13 @@
 using Microsoft.UI.Windowing;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Pythia.Models;
 using Pythia.Services;
+using Windows.System;
+using Windows.UI.Core;
+using Windows.Storage.Pickers;
 
 namespace Pythia.Pages;
 
@@ -52,10 +57,12 @@ public sealed partial class SettingsPage : Page
         SyncIntervalBox.Value = settings.WebdavHistorySyncIntervalValue;
         SyncUnitBox.SelectedItem = SyncUnitBox.Items.OfType<ComboBoxItem>().FirstOrDefault(item => (string)item.Tag == settings.WebdavHistorySyncIntervalUnit) ?? SyncUnitBox.Items[1];
         WebDavStatusText.Text = settings.WebdavLastSyncStatus;
+        UpdateStatusText.Text = $"当前版本 {UpdateService.CurrentVersion.ToString(3)}";
         AlwaysOnTopSwitch.IsOn = settings.AlwaysOnTop;
         CloseToTraySwitch.IsOn = settings.CloseToTray;
         HideOnBlurSwitch.IsOn = settings.HideOnBlur;
         NotificationsSwitch.IsOn = settings.NotificationsEnabled;
+        CheckUpdateOnStartupSwitch.IsOn = settings.CheckForUpdatesOnStartup;
         PluginPathText.Text = App.Services.Store.PluginsDirectory;
         MarkExistingCredential(BaiduAppIdBox, "provider.baidu.appId");
         MarkExistingCredential(BaiduSecretBox, "provider.baidu.secret");
@@ -86,9 +93,26 @@ public sealed partial class SettingsPage : Page
 
     private async void Save_Click(object sender, RoutedEventArgs e)
     {
+        var settings = App.Services.Settings;
+        var previousHotkeys = (
+            settings.ShowWindowHotkey,
+            settings.SelectionTranslateHotkey,
+            settings.ScreenshotTranslateHotkey,
+            settings.ScreenshotOcrHotkey);
+        var hotkeysApplied = false;
         try
         {
-            var settings = App.Services.Settings;
+            settings.ShowWindowHotkey = ShowWindowHotkeyBox.Text.Trim();
+            settings.SelectionTranslateHotkey = SelectionHotkeyBox.Text.Trim();
+            settings.ScreenshotTranslateHotkey = ScreenshotTranslateHotkeyBox.Text.Trim();
+            settings.ScreenshotOcrHotkey = ScreenshotOcrHotkeyBox.Text.Trim();
+            if (App.MainAppWindow is MainWindow window &&
+                !window.TryApplyHotkeys(settings, out var hotkeyError))
+            {
+                RestorePreviousHotkeys(settings, previousHotkeys);
+                throw new InvalidOperationException(hotkeyError);
+            }
+            hotkeysApplied = true;
             settings.ThemeMode = (string)((ComboBoxItem)ThemeBox.SelectedItem).Tag;
             settings.SaveHistory = SaveHistorySwitch.IsOn;
             settings.LaunchAtStartup = LaunchAtStartupSwitch.IsOn;
@@ -98,32 +122,31 @@ public sealed partial class SettingsPage : Page
             settings.OpenAICompatibleEnabled = OpenAiSwitch.IsOn;
             settings.DeepLEnabled = DeepLSwitch.IsOn;
             settings.LibreTranslateEnabled = LibreSwitch.IsOn;
-            settings.EnabledTranslateServices = new[]
+            var enabledBuiltIns = new[]
             {
                 ("google", GoogleSwitch.IsOn), ("baidu", BaiduSwitch.IsOn), ("youdao", YoudaoSwitch.IsOn),
                 ("openai-compatible", OpenAiSwitch.IsOn), ("deepl", DeepLSwitch.IsOn), ("libretranslate", LibreSwitch.IsOn),
             }.Where(item => item.Item2).Select(item => item.Item1).ToList();
+            settings.EnabledTranslateServices = HomeInteractionPolicy
+                .MergeBuiltInEnabled(settings.EnabledTranslateServices, enabledBuiltIns).ToList();
             settings.OpenAICompatibleName = OpenAiNameBox.Text.Trim();
             settings.OpenAICompatibleBaseUrl = OpenAiUrlBox.Text.Trim();
             settings.OpenAICompatibleModel = OpenAiModelBox.Text.Trim();
             settings.DeepLBaseUrl = DeepLUrlBox.Text.Trim();
             settings.LibreTranslateBaseUrl = LibreUrlBox.Text.Trim();
             settings.ScreenshotOcrAutoTranslate = OcrAutoTranslateSwitch.IsOn;
-            settings.ShowWindowHotkey = ShowWindowHotkeyBox.Text.Trim();
-            settings.SelectionTranslateHotkey = SelectionHotkeyBox.Text.Trim();
-            settings.ScreenshotTranslateHotkey = ScreenshotTranslateHotkeyBox.Text.Trim();
-            settings.ScreenshotOcrHotkey = ScreenshotOcrHotkeyBox.Text.Trim();
             settings.WebdavUrl = WebDavUrlBox.Text.Trim();
             settings.WebdavUsername = WebDavUserBox.Text.Trim();
             settings.WebdavHistoryAutoSync = WebDavAutoSyncSwitch.IsOn;
             settings.WebdavHistorySyncIntervalValue = Math.Max(1, (int)SyncIntervalBox.Value);
             settings.WebdavHistorySyncIntervalUnit = (string)((ComboBoxItem)SyncUnitBox.SelectedItem).Tag;
-            settings.WebdavHistorySyncIntervalMinutes = settings.WebdavHistorySyncIntervalValue *
-                (settings.WebdavHistorySyncIntervalUnit switch { "day" => 1440, "hour" => 60, _ => 1 });
+            settings.WebdavHistorySyncIntervalMinutes = (int)Math.Min(int.MaxValue,
+                AppServices.GetSyncInterval(settings).TotalMinutes);
             settings.AlwaysOnTop = AlwaysOnTopSwitch.IsOn;
             settings.CloseToTray = CloseToTraySwitch.IsOn;
             settings.HideOnBlur = HideOnBlurSwitch.IsOn;
             settings.NotificationsEnabled = NotificationsSwitch.IsOn;
+            settings.CheckForUpdatesOnStartup = CheckUpdateOnStartupSwitch.IsOn;
 
             SaveCredential("provider.baidu.appId", BaiduAppIdBox.Text);
             SaveCredential("provider.baidu.secret", BaiduSecretBox.Password);
@@ -142,8 +165,67 @@ public sealed partial class SettingsPage : Page
         }
         catch (Exception exception)
         {
+            if (hotkeysApplied)
+            {
+                RestorePreviousHotkeys(settings, previousHotkeys);
+                if (App.MainAppWindow is MainWindow window) window.TryApplyHotkeys(settings, out _);
+            }
             SaveStatusText.Text = $"保存失败：{exception.Message}";
         }
+    }
+
+    private static void RestorePreviousHotkeys(
+        PythiaSettings settings,
+        (string Show, string Selection, string ScreenshotTranslate, string ScreenshotOcr) previous)
+    {
+        settings.ShowWindowHotkey = previous.Show;
+        settings.SelectionTranslateHotkey = previous.Selection;
+        settings.ScreenshotTranslateHotkey = previous.ScreenshotTranslate;
+        settings.ScreenshotOcrHotkey = previous.ScreenshotOcr;
+    }
+
+    private void HotkeyBox_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (sender is not TextBox box) return;
+        e.Handled = true;
+        if (e.Key is VirtualKey.Control or VirtualKey.LeftControl or VirtualKey.RightControl or
+            VirtualKey.Shift or VirtualKey.LeftShift or VirtualKey.RightShift or
+            VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu or
+            VirtualKey.LeftWindows or VirtualKey.RightWindows)
+            return;
+
+        var key = HotkeyToken(e.Key);
+        if (key is null)
+        {
+            SaveStatusText.Text = "快捷键主键仅支持 A–Z、0–9 和 F1–F24。";
+            return;
+        }
+        var parts = new List<string>();
+        if (IsKeyDown(VirtualKey.Control)) parts.Add("Ctrl");
+        if (IsKeyDown(VirtualKey.Menu)) parts.Add("Alt");
+        if (IsKeyDown(VirtualKey.Shift)) parts.Add("Shift");
+        if (IsKeyDown(VirtualKey.LeftWindows) || IsKeyDown(VirtualKey.RightWindows)) parts.Add("Win");
+        if (parts.Count == 0)
+        {
+            SaveStatusText.Text = "快捷键必须至少包含 Ctrl、Alt、Shift 或 Win 中的一个修饰键。";
+            return;
+        }
+        parts.Add(key);
+        box.Text = string.Join('+', parts);
+        box.SelectAll();
+        SaveStatusText.Text = "快捷键已录入，保存后生效。";
+    }
+
+    private static bool IsKeyDown(VirtualKey key) =>
+        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
+
+    private static string? HotkeyToken(VirtualKey key)
+    {
+        var code = (int)key;
+        if (code >= (int)VirtualKey.A && code <= (int)VirtualKey.Z) return ((char)code).ToString();
+        if (code >= (int)VirtualKey.Number0 && code <= (int)VirtualKey.Number9) return ((char)code).ToString();
+        if (code >= (int)VirtualKey.F1 && code <= (int)VirtualKey.F24) return key.ToString();
+        return null;
     }
 
     private static void SaveCredential(string key, string value)
@@ -156,11 +238,167 @@ public sealed partial class SettingsPage : Page
         WebDavStatusText.Text = "正在测试连接…";
         try
         {
-            var password = WebDavPasswordBox.Password;
-            if (password.Length == 0) password = App.Services.Credentials.Read("webdav.password") ?? string.Empty;
+            var password = await SaveWebDavInputsAsync();
             await WebDavService.TestConnectionAsync(WebDavUrlBox.Text.Trim(), WebDavUserBox.Text.Trim(), password);
             WebDavStatusText.Text = "连接成功";
         }
         catch (Exception exception) { WebDavStatusText.Text = $"连接失败：{exception.Message}"; }
+    }
+
+    private async void SyncWebDav_Click(object sender, RoutedEventArgs e)
+    {
+        WebDavStatusText.Text = "正在同步历史…";
+        try
+        {
+            await SaveWebDavInputsAsync();
+            var result = await App.Services.SyncHistoryAsync();
+            WebDavStatusText.Text =
+                $"同步成功：远程 {result.DownloadedCount} 条，本地可见 {result.VisibleCount} 条，冲突 {result.ConflictCount} 条";
+        }
+        catch (Exception exception) { WebDavStatusText.Text = $"同步失败：{exception.Message}"; }
+    }
+
+    private async void UploadWebDavBackup_Click(object sender, RoutedEventArgs e)
+    {
+        WebDavStatusText.Text = "正在上传便携备份…";
+        try
+        {
+            var password = await SaveWebDavInputsAsync();
+            await WebDavService.UploadPortableBackupAsync(
+                App.Services.CreatePortableBackup(),
+                WebDavUrlBox.Text.Trim(),
+                WebDavUserBox.Text.Trim(),
+                password);
+            WebDavStatusText.Text = "便携备份已安全上传（不含密码和 API 密钥）";
+        }
+        catch (Exception exception) { WebDavStatusText.Text = $"上传失败：{exception.Message}"; }
+    }
+
+    private async void RestoreWebDavBackup_Click(object sender, RoutedEventArgs e)
+    {
+        WebDavStatusText.Text = "正在下载远程备份…";
+        try
+        {
+            var password = await SaveWebDavInputsAsync();
+            var json = await WebDavService.DownloadPortableBackupAsync(
+                WebDavUrlBox.Text.Trim(),
+                WebDavUserBox.Text.Trim(),
+                password);
+            if (!await ConfirmRestoreAsync("恢复远程便携备份？")) return;
+            var restored = await App.Services.RestorePortableBackupAsync(json);
+            LoadValues();
+            WebDavStatusText.Text =
+                $"恢复完成：导入 {restored.ImportedCount} 条，合并后 {restored.Records.Count} 条，冲突 {restored.ConflictCount} 条";
+        }
+        catch (Exception exception) { WebDavStatusText.Text = $"恢复失败：{exception.Message}"; }
+    }
+
+    private async void ExportLocalBackup_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new FileSavePicker { SuggestedFileName = $"Pythia-backup-{DateTime.Now:yyyyMMdd-HHmm}" };
+        picker.FileTypeChoices.Add("Pythia JSON 备份", [".json"]);
+        if (App.MainAppWindow is null) return;
+        WinRT.Interop.InitializeWithWindow.Initialize(picker,
+            WinRT.Interop.WindowNative.GetWindowHandle(App.MainAppWindow));
+        var file = await picker.PickSaveFileAsync();
+        if (file is null) return;
+        try
+        {
+            await File.WriteAllTextAsync(file.Path, App.Services.CreatePortableBackup());
+            WebDavStatusText.Text = $"本地备份已导出：{file.Name}";
+        }
+        catch (Exception exception) { WebDavStatusText.Text = $"导出失败：{exception.Message}"; }
+    }
+
+    private async void ImportLocalBackup_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new FileOpenPicker();
+        picker.FileTypeFilter.Add(".json");
+        if (App.MainAppWindow is null) return;
+        WinRT.Interop.InitializeWithWindow.Initialize(picker,
+            WinRT.Interop.WindowNative.GetWindowHandle(App.MainAppWindow));
+        var file = await picker.PickSingleFileAsync();
+        if (file is null) return;
+        try
+        {
+            var json = await File.ReadAllTextAsync(file.Path);
+            if (!await ConfirmRestoreAsync("导入并合并本地备份？")) return;
+            var restored = await App.Services.RestorePortableBackupAsync(json);
+            LoadValues();
+            WebDavStatusText.Text =
+                $"导入完成：导入 {restored.ImportedCount} 条，合并后 {restored.Records.Count} 条，冲突 {restored.ConflictCount} 条";
+        }
+        catch (Exception exception) { WebDavStatusText.Text = $"导入失败：{exception.Message}"; }
+    }
+
+    private async Task<string> SaveWebDavInputsAsync()
+    {
+        var settings = App.Services.Settings;
+        settings.WebdavUrl = WebDavUrlBox.Text.Trim();
+        settings.WebdavUsername = WebDavUserBox.Text.Trim();
+        settings.WebdavHistoryAutoSync = WebDavAutoSyncSwitch.IsOn;
+        settings.WebdavHistorySyncIntervalValue = Math.Max(1, (int)SyncIntervalBox.Value);
+        settings.WebdavHistorySyncIntervalUnit = (string)((ComboBoxItem)SyncUnitBox.SelectedItem).Tag;
+        settings.WebdavHistorySyncIntervalMinutes = (int)Math.Min(int.MaxValue,
+            AppServices.GetSyncInterval(settings).TotalMinutes);
+        SaveCredential("webdav.password", WebDavPasswordBox.Password);
+        await App.Services.SaveSettingsAsync();
+        return WebDavPasswordBox.Password.Length > 0
+            ? WebDavPasswordBox.Password
+            : App.Services.Credentials.Read("webdav.password") ?? string.Empty;
+    }
+
+    private async Task<bool> ConfirmRestoreAsync(string title)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = title,
+            Content = "备份中的设置会应用到本机，历史记录按 ID 和更新时间安全合并；现有密码与 API 密钥不会被覆盖。",
+            PrimaryButtonText = "继续",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
+
+    private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateStatusText.Text = "正在检查 GitHub Release…";
+        try
+        {
+            var update = await UpdateService.CheckAsync();
+            if (update is null)
+            {
+                UpdateStatusText.Text = $"当前已是最新版本 {UpdateService.CurrentVersion.ToString(3)}";
+                return;
+            }
+            UpdateStatusText.Text = $"发现新版本 {update.Tag}";
+            var notes = string.IsNullOrWhiteSpace(update.Notes) ? "该版本未提供更新说明。" : update.Notes;
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = $"发现 Pythia {update.Tag}",
+                Content = new ScrollViewer
+                {
+                    MaxHeight = 320,
+                    Content = new TextBlock { Text = notes, TextWrapping = TextWrapping.Wrap },
+                },
+                PrimaryButtonText = "下载并安装",
+                CloseButtonText = "稍后",
+                DefaultButton = ContentDialogButton.Close,
+            };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            var progress = new Progress<double>(value =>
+                UpdateStatusText.Text = $"正在下载 {update.Tag}：{value:P0}");
+            var installer = await UpdateService.DownloadInstallerAsync(update, progress);
+            UpdateStatusText.Text = "校验完成，正在启动安装程序…";
+            UpdateService.LaunchInstaller(installer);
+            if (App.MainAppWindow is MainWindow window) window.ExitApplication();
+        }
+        catch (Exception exception)
+        {
+            UpdateStatusText.Text = $"更新检查失败：{exception.Message}";
+        }
     }
 }

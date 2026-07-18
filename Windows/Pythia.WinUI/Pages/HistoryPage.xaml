@@ -13,11 +13,11 @@
                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="查找、收藏与复用过去的翻译" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                <Button Style="{StaticResource PythiaToolbarButtonStyle}" Click="Export_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="7"><FontIcon Glyph="&#xE898;" /><TextBlock Text="导出" /></StackPanel>
+                <Button Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="导出历史记录" Click="Export_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="SaveLocal" /><TextBlock Text="导出" /></StackPanel>
                 </Button>
-                <Button Style="{StaticResource PythiaToolbarButtonStyle}" Click="ClearAll_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="7"><FontIcon Glyph="&#xE74D;" /><TextBlock Text="清空" /></StackPanel>
+                <Button Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="清空全部历史记录" Click="ClearAll_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="Delete" /><TextBlock Text="清空" /></StackPanel>
                 </Button>
             </StackPanel>
         </Grid>
@@ -25,12 +25,12 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <AutoSuggestBox x:Name="SearchBox" PlaceholderText="搜索原文、译文或翻译服务" TextChanged="SearchBox_TextChanged" QueryIcon="Find" />
             <ToggleButton x:Name="FavoritesOnlyButton" Grid.Column="1" Click="FavoritesOnly_Click">
-                <StackPanel Orientation="Horizontal" Spacing="7"><FontIcon Glyph="&#xE734;" /><TextBlock Text="仅收藏" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="OutlineStar" /><TextBlock Text="仅收藏" /></StackPanel>
             </ToggleButton>
         </Grid>
         <Grid Grid.Row="2">
             <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
-                <FontIcon FontSize="36" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Glyph="&#xE81C;" />
+                <SymbolIcon Symbol="Clock" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="还没有符合条件的历史记录" />
             </StackPanel>
             <ListView x:Name="HistoryList" ItemsSource="{x:Bind FilteredHistory}" SelectionMode="None" Background="Transparent">
@@ -49,9 +49,10 @@
                                         <TextBlock Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="{x:Bind CreatedDisplay}" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="3">
-                                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="收藏" Tag="{x:Bind}" Click="Favorite_Click"><FontIcon Glyph="{x:Bind FavoriteGlyph, Mode=OneWay}" /></Button>
-                                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="复制译文" Tag="{x:Bind}" Click="Copy_Click"><FontIcon Glyph="&#xE8C8;" /></Button>
-                                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="删除" Tag="{x:Bind}" Click="Delete_Click"><FontIcon Glyph="&#xE74D;" /></Button>
+                                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="载入到翻译首页" AutomationProperties.Name="载入历史记录继续翻译" Tag="{x:Bind}" Click="Load_Click"><SymbolIcon Symbol="Forward" /></Button>
+                                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="收藏" AutomationProperties.Name="收藏或取消收藏历史记录" Tag="{x:Bind}" Click="Favorite_Click"><SymbolIcon Symbol="{x:Bind FavoriteSymbol, Mode=OneWay}" /></Button>
+                                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="复制译文" AutomationProperties.Name="复制历史译文" Tag="{x:Bind}" Click="Copy_Click"><SymbolIcon Symbol="Copy" /></Button>
+                                        <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="删除" AutomationProperties.Name="删除历史记录" Tag="{x:Bind}" Click="Delete_Click"><SymbolIcon Symbol="Delete" /></Button>
                                     </StackPanel>
                                 </Grid>
                                 <TextBlock Grid.Row="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" MaxLines="2" Text="{x:Bind SourceText}" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" />

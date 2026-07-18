@@ -27,6 +27,11 @@ public sealed class PythiaSettings
     public bool AlwaysOnTop { get; set; }
     public bool HideOnBlur { get; set; }
     public bool NotificationsEnabled { get; set; } = true;
+    public bool CheckForUpdatesOnStartup { get; set; } = true;
+    public int WindowX { get; set; }
+    public int WindowY { get; set; }
+    public int WindowWidth { get; set; }
+    public int WindowHeight { get; set; }
     public string ShowWindowHotkey { get; set; } = "Ctrl+Alt+P";
     public string SelectionTranslateHotkey { get; set; } = "Ctrl+Alt+D";
     public string ScreenshotTranslateHotkey { get; set; } = "Ctrl+Alt+Shift+D";

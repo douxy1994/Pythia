@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Pythia.Models;
 
@@ -23,9 +24,8 @@ public sealed class HistoryRecord : INotifyPropertyChanged
         {
             if (_isFavorite == value) return;
             _isFavorite = value;
-            UpdatedAt = DateTimeOffset.UtcNow;
             OnPropertyChanged();
-            OnPropertyChanged(nameof(FavoriteGlyph));
+            OnPropertyChanged(nameof(FavoriteSymbol));
         }
     }
     public string DeviceId { get; set; } = string.Empty;
@@ -33,7 +33,7 @@ public sealed class HistoryRecord : INotifyPropertyChanged
     public DateTimeOffset? DeletedAt { get; set; }
     public int SchemaVersion { get; set; } = 1;
 
-    public string FavoriteGlyph => IsFavorite ? "\uE735" : "\uE734";
+    public Symbol FavoriteSymbol => IsFavorite ? Symbol.SolidStar : Symbol.OutlineStar;
     public string ServiceDisplayName => ServiceCatalog.DisplayName(Service);
     public string CreatedDisplay => CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
 

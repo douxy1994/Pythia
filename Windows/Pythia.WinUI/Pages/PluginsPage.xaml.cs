@@ -91,9 +91,10 @@ public sealed partial class PluginsPage : Page
             {
                 control = new PasswordBox
                 {
-                    Password = current.GetValueOrDefault(field.Key) ?? string.Empty,
                     PasswordRevealMode = PasswordRevealMode.Hidden,
-                    PlaceholderText = "安全存储在 Windows Credential Manager",
+                    PlaceholderText = string.IsNullOrWhiteSpace(current.GetValueOrDefault(field.Key))
+                        ? "安全存储在 Windows Credential Manager"
+                        : "已安全保存 · 留空则保留",
                 };
             }
             else if (field.Type.Equals("select", StringComparison.OrdinalIgnoreCase) && field.Options.Count > 0)
@@ -134,7 +135,10 @@ public sealed partial class PluginsPage : Page
                 TextBox text => text.Text,
                 _ => string.Empty,
             }, StringComparer.Ordinal);
-        var missing = plugin.Configuration.Where(field => field.Required && string.IsNullOrWhiteSpace(values.GetValueOrDefault(field.Key))).ToArray();
+        var missing = plugin.Configuration.Where(field => field.Required &&
+            string.IsNullOrWhiteSpace(values.GetValueOrDefault(field.Key)) &&
+            (!field.Type.Equals("secret", StringComparison.OrdinalIgnoreCase) ||
+             string.IsNullOrWhiteSpace(current.GetValueOrDefault(field.Key)))).ToArray();
         if (missing.Length > 0)
         {
             await new ContentDialog
@@ -157,13 +161,8 @@ public sealed partial class PluginsPage : Page
         App.Services.Status.Report($"正在测试 {plugin.Name}…", true);
         try
         {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-            await _service.TranslateAsync(plugin.ServiceId, "Hello", "en", "zh-CN", timeout.Token);
-            App.Services.Status.Report($"{plugin.Name} 连通性测试成功");
-        }
-        catch (OperationCanceledException)
-        {
-            App.Services.Status.Report($"{plugin.Name} 测试失败：60 秒超时");
+            var result = await _service.TestConnectionAsync(plugin);
+            App.Services.Status.Report($"{plugin.Name}：{result.StatusDisplay} · {result.Message}");
         }
         catch (Exception exception)
         {
@@ -182,10 +181,10 @@ public sealed partial class PluginsPage : Page
         }
         else
         {
-            App.Services.Settings.TranslateServiceOrder.RemoveAll(id => id.Equals(plugin.ServiceId, StringComparison.OrdinalIgnoreCase));
-            App.Services.Settings.TranslateServiceOrder.Insert(0, plugin.ServiceId);
+            if (!App.Services.Settings.TranslateServiceOrder.Contains(plugin.ServiceId, StringComparer.OrdinalIgnoreCase))
+                App.Services.Settings.TranslateServiceOrder.Insert(0, plugin.ServiceId);
             App.Services.Settings.EnabledTranslateServices.RemoveAll(id => id.Equals(plugin.ServiceId, StringComparison.OrdinalIgnoreCase));
-            App.Services.Settings.EnabledTranslateServices.Insert(0, plugin.ServiceId);
+            App.Services.Settings.EnabledTranslateServices.Add(plugin.ServiceId);
         }
         await App.Services.SaveSettingsAsync();
         Reload();

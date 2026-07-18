@@ -6,14 +6,14 @@
         <TextBlock Grid.ColumnSpan="2" Style="{StaticResource TitleTextBlockStyle}" Text="设置" />
 
         <ListView x:Name="CategoryList" Grid.Row="1" SelectionChanged="CategoryList_SelectionChanged" SelectionMode="Single">
-            <ListViewItem IsSelected="True" Tag="general"><StackPanel Orientation="Horizontal" Spacing="11"><FontIcon Glyph="&#xE713;" /><TextBlock Text="通用" /></StackPanel></ListViewItem>
-            <ListViewItem Tag="services"><StackPanel Orientation="Horizontal" Spacing="11"><FontIcon Glyph="&#xE774;" /><TextBlock Text="翻译服务" /></StackPanel></ListViewItem>
-            <ListViewItem Tag="plugins"><StackPanel Orientation="Horizontal" Spacing="11"><FontIcon Glyph="&#xEA86;" /><TextBlock Text="插件" /></StackPanel></ListViewItem>
-            <ListViewItem Tag="ocr"><StackPanel Orientation="Horizontal" Spacing="11"><FontIcon Glyph="&#xE91B;" /><TextBlock Text="OCR" /></StackPanel></ListViewItem>
-            <ListViewItem Tag="shortcuts"><StackPanel Orientation="Horizontal" Spacing="11"><FontIcon Glyph="&#xE765;" /><TextBlock Text="快捷键" /></StackPanel></ListViewItem>
-            <ListViewItem Tag="sync"><StackPanel Orientation="Horizontal" Spacing="11"><FontIcon Glyph="&#xE753;" /><TextBlock Text="备份与同步" /></StackPanel></ListViewItem>
-            <ListViewItem Tag="window"><StackPanel Orientation="Horizontal" Spacing="11"><FontIcon Glyph="&#xE8A7;" /><TextBlock Text="窗口" /></StackPanel></ListViewItem>
-            <ListViewItem Tag="about"><StackPanel Orientation="Horizontal" Spacing="11"><FontIcon Glyph="&#xE946;" /><TextBlock Text="关于与更新" /></StackPanel></ListViewItem>
+            <ListViewItem IsSelected="True" Tag="general"><StackPanel Orientation="Horizontal" Spacing="11"><SymbolIcon Symbol="Setting" /><TextBlock Text="通用" /></StackPanel></ListViewItem>
+            <ListViewItem Tag="services"><StackPanel Orientation="Horizontal" Spacing="11"><SymbolIcon Symbol="Globe" /><TextBlock Text="翻译服务" /></StackPanel></ListViewItem>
+            <ListViewItem Tag="plugins"><StackPanel Orientation="Horizontal" Spacing="11"><SymbolIcon Symbol="Repair" /><TextBlock Text="插件" /></StackPanel></ListViewItem>
+            <ListViewItem Tag="ocr"><StackPanel Orientation="Horizontal" Spacing="11"><SymbolIcon Symbol="Scan" /><TextBlock Text="OCR" /></StackPanel></ListViewItem>
+            <ListViewItem Tag="shortcuts"><StackPanel Orientation="Horizontal" Spacing="11"><SymbolIcon Symbol="Keyboard" /><TextBlock Text="快捷键" /></StackPanel></ListViewItem>
+            <ListViewItem Tag="sync"><StackPanel Orientation="Horizontal" Spacing="11"><SymbolIcon Symbol="SyncFolder" /><TextBlock Text="备份与同步" /></StackPanel></ListViewItem>
+            <ListViewItem Tag="window"><StackPanel Orientation="Horizontal" Spacing="11"><SymbolIcon Symbol="NewWindow" /><TextBlock Text="窗口" /></StackPanel></ListViewItem>
+            <ListViewItem Tag="about"><StackPanel Orientation="Horizontal" Spacing="11"><SymbolIcon Symbol="ContactInfo" /><TextBlock Text="关于与更新" /></StackPanel></ListViewItem>
         </ListView>
 
         <Grid Grid.Row="1" Grid.Column="1" RowSpacing="12">
@@ -104,11 +104,11 @@
                         <TextBlock FontSize="20" FontWeight="SemiBold" Text="快捷键" />
                         <Border Style="{StaticResource PythiaCardStyle}">
                             <StackPanel Spacing="12">
-                                <TextBox x:Name="ShowWindowHotkeyBox" Header="显示/隐藏窗口" />
-                                <TextBox x:Name="SelectionHotkeyBox" Header="划词翻译" />
-                                <TextBox x:Name="ScreenshotTranslateHotkeyBox" Header="截图翻译" />
-                                <TextBox x:Name="ScreenshotOcrHotkeyBox" Header="截图 OCR" />
-                                <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="格式示例：Ctrl+Alt+P。保存后会重新注册全局快捷键。" />
+                                <TextBox x:Name="ShowWindowHotkeyBox" Header="显示/隐藏窗口" IsReadOnly="True" PlaceholderText="单击后按组合键" PreviewKeyDown="HotkeyBox_PreviewKeyDown" />
+                                <TextBox x:Name="SelectionHotkeyBox" Header="划词翻译" IsReadOnly="True" PlaceholderText="单击后按组合键" PreviewKeyDown="HotkeyBox_PreviewKeyDown" />
+                                <TextBox x:Name="ScreenshotTranslateHotkeyBox" Header="截图翻译" IsReadOnly="True" PlaceholderText="单击后按组合键" PreviewKeyDown="HotkeyBox_PreviewKeyDown" />
+                                <TextBox x:Name="ScreenshotOcrHotkeyBox" Header="截图 OCR" IsReadOnly="True" PlaceholderText="单击后按组合键" PreviewKeyDown="HotkeyBox_PreviewKeyDown" />
+                                <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="单击输入框后直接按下组合键。保存时会先验证冲突；注册失败会原子恢复原快捷键。" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -125,9 +125,19 @@
                                 <ToggleSwitch x:Name="WebDavAutoSyncSwitch" Header="自动同步翻译历史" OnContent="开启" OffContent="关闭" />
                                 <Grid ColumnSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                     <NumberBox x:Name="SyncIntervalBox" Header="同步间隔" Minimum="1" Maximum="168" SpinButtonPlacementMode="Compact" />
-                                    <ComboBox x:Name="SyncUnitBox" Grid.Column="1" Header="单位" HorizontalAlignment="Stretch"><ComboBoxItem Content="分钟" Tag="minute" /><ComboBoxItem Content="小时" Tag="hour" /><ComboBoxItem Content="天" Tag="day" /></ComboBox>
+                                    <ComboBox x:Name="SyncUnitBox" Grid.Column="1" Header="单位" HorizontalAlignment="Stretch"><ComboBoxItem Content="分钟" Tag="minute" /><ComboBoxItem Content="小时" Tag="hour" /><ComboBoxItem Content="天" Tag="day" /><ComboBoxItem Content="周" Tag="week" /></ComboBox>
                                 </Grid>
-                                <Button HorizontalAlignment="Left" Style="{StaticResource PythiaToolbarButtonStyle}" Click="TestWebDav_Click"><StackPanel Orientation="Horizontal" Spacing="7"><FontIcon Glyph="&#xE73E;" /><TextBlock Text="测试连接" /></StackPanel></Button>
+                                <Grid ColumnSpacing="8" RowSpacing="8">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <Button HorizontalAlignment="Stretch" Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="测试 WebDAV 连接" Click="TestWebDav_Click"><StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="Link" /><TextBlock Text="测试连接" /></StackPanel></Button>
+                                    <Button Grid.Column="1" HorizontalAlignment="Stretch" Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="立即同步历史" Click="SyncWebDav_Click"><StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="Sync" /><TextBlock Text="立即同步历史" /></StackPanel></Button>
+                                    <Button Grid.Row="1" HorizontalAlignment="Stretch" Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="上传便携备份" Click="UploadWebDavBackup_Click"><StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="Upload" /><TextBlock Text="上传便携备份" /></StackPanel></Button>
+                                    <Button Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="恢复远程备份" Click="RestoreWebDavBackup_Click"><StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="Download" /><TextBlock Text="恢复远程备份" /></StackPanel></Button>
+                                    <Button Grid.Row="2" HorizontalAlignment="Stretch" Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="导出本地备份" Click="ExportLocalBackup_Click"><StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="SaveLocal" /><TextBlock Text="导出本地备份" /></StackPanel></Button>
+                                    <Button Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch" Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="导入本地备份" Click="ImportLocalBackup_Click"><StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="OpenFile" /><TextBlock Text="导入本地备份" /></StackPanel></Button>
+                                </Grid>
+                                <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="便携备份包含设置与完整历史，但不会导出密码、API 密钥或其他凭据。同步前会自动保存本地历史快照。" TextWrapping="Wrap" />
                                 <TextBlock x:Name="WebDavStatusText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
@@ -140,11 +150,11 @@
 
                     <StackPanel x:Name="AboutSection" Tag="about" Spacing="10">
                         <TextBlock FontSize="20" FontWeight="SemiBold" Text="关于与更新" />
-                        <Border Style="{StaticResource PythiaCardStyle}"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="72" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Image Width="72" Height="72" Source="/Assets/AppIcon.png" /><StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4"><TextBlock FontSize="22" FontWeight="SemiBold" Text="Pythia" /><TextBlock Text="Windows 原生版 · WinUI 3 · C# 14 · .NET 10" /><HyperlinkButton Padding="0" Content="检查 GitHub 更新" NavigateUri="https://github.com/douxy1994/Pythia/releases" /></StackPanel></Grid></Border>
+                        <Border Style="{StaticResource PythiaCardStyle}"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="72" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Image Width="72" Height="72" Source="/Assets/AppIcon.png" /><StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="7"><TextBlock FontSize="22" FontWeight="SemiBold" Text="Pythia" /><TextBlock Text="Windows 原生版 · WinUI 3 · C# 14 · .NET 10" /><ToggleSwitch x:Name="CheckUpdateOnStartupSwitch" Header="启动时检查更新" OnContent="开启" OffContent="关闭" /><TextBlock x:Name="UpdateStatusText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" /><Button HorizontalAlignment="Left" Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="检查应用更新" Click="CheckUpdate_Click"><StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="Download" /><TextBlock Text="检查更新" /></StackPanel></Button></StackPanel></Grid></Border>
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>
-            <Grid Grid.Row="1" Padding="0,10,8,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock x:Name="SaveStatusText" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /><Button Grid.Column="1" Style="{StaticResource AccentButtonStyle}" CornerRadius="10" Click="Save_Click"><StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE74E;" /><TextBlock Text="保存设置" /></StackPanel></Button></Grid>
+            <Grid Grid.Row="1" Padding="0,10,8,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock x:Name="SaveStatusText" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /><Button Grid.Column="1" Style="{StaticResource AccentButtonStyle}" CornerRadius="10" AutomationProperties.Name="保存全部设置" Click="Save_Click"><StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="Save" /><TextBlock Text="保存设置" /></StackPanel></Button></Grid>
         </Grid>
     </Grid>
 </Page>

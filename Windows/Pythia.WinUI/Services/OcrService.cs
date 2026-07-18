@@ -37,19 +37,17 @@ public static class OcrService
 
     public static async Task<string> RecognizeScreenAsync()
     {
-        using var bitmap = CaptureVirtualScreen();
+        var region = ScreenRegionSelector.Select();
+        if (region is null) throw new OperationCanceledException();
+        using var bitmap = CaptureScreen(region.Value.Left, region.Value.Top, region.Value.Width, region.Value.Height);
         var engine = OcrEngine.TryCreateFromUserProfileLanguages()
             ?? throw new InvalidOperationException("系统未安装可用的 OCR 语言包。");
         var result = await engine.RecognizeAsync(bitmap);
         return result.Text.Trim();
     }
 
-    private static SoftwareBitmap CaptureVirtualScreen()
+    private static SoftwareBitmap CaptureScreen(int left, int top, int width, int height)
     {
-        var left = GetSystemMetrics(76);
-        var top = GetSystemMetrics(77);
-        var width = GetSystemMetrics(78);
-        var height = GetSystemMetrics(79);
         if (width <= 0 || height <= 0) throw new InvalidOperationException("无法获取屏幕尺寸。");
         var screen = GetDC(IntPtr.Zero);
         var memory = CreateCompatibleDC(screen);
@@ -110,7 +108,6 @@ public static class OcrService
         public uint Colors;
     }
 
-    [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
     [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hwnd);
     [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hwnd, IntPtr dc);
     [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr dc);

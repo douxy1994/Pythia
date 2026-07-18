@@ -37,19 +37,37 @@ public partial class App : Application
             {
                 _window?.DispatcherQueue.TryEnqueue(() =>
                 {
-                    _window.AppWindow.Show();
-                    _window.Activate();
+                    if (_window is MainWindow mainWindow) mainWindow.ShowAndActivate();
+                    else
+                    {
+                        _window.AppWindow.Show();
+                        _window.Activate();
+                    }
                 });
             };
             await Services.InitializeAsync();
             _window = new MainWindow();
             MainAppWindow = _window;
-            _window.Activate();
+            ((MainWindow)_window).ShowAndActivate();
+            if (Services.Settings.CheckForUpdatesOnStartup) _ = CheckForStartupUpdateAsync();
         }
         catch (Exception exception)
         {
             LogException(exception);
             throw;
+        }
+    }
+
+    private static async Task CheckForStartupUpdateAsync()
+    {
+        try
+        {
+            var update = await UpdateService.CheckAsync();
+            if (update is not null) Services.Status.Report($"发现新版本 {update.Tag}，可在“设置 → 关于与更新”中安装");
+        }
+        catch
+        {
+            // Startup update checks are best effort and never block the application.
         }
     }
 

@@ -28,6 +28,7 @@
 
         <NavigationView
             x:Name="NavView"
+            AutomationProperties.AutomationId="MainNavigation"
             Grid.Row="1"
             IsBackButtonVisible="Collapsed"
             IsPaneToggleButtonVisible="False"
@@ -37,16 +38,16 @@
             SelectionChanged="NavView_SelectionChanged">
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="翻译" IsSelected="True" Tag="translate">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE8C1;" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="Character" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="历史记录" Tag="history">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE81C;" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="Clock" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="插件" Tag="plugins">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xEA86;" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="Repair" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="关于 Pythia" Tag="about">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE946;" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="ContactInfo" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
             <Frame x:Name="NavFrame" />

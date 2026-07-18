@@ -23,6 +23,7 @@ public sealed class LocalStore
     public string DataDirectory { get; }
     public string SettingsPath => Path.Combine(DataDirectory, "settings.json");
     public string HistoryPath => Path.Combine(DataDirectory, "history.json");
+    public string HistoryBackupPath => Path.Combine(DataDirectory, "Backups", "history-before-sync.json");
     public string DeviceIdPath => Path.Combine(DataDirectory, "device-id.txt");
     public string PluginsDirectory => Path.Combine(DataDirectory, "Plugins");
     public string RuntimeDirectory => Path.Combine(DataDirectory, "Runtime");
@@ -61,6 +62,16 @@ public sealed class LocalStore
 
     public Task SaveHistoryAsync(IEnumerable<HistoryRecord> records) =>
         WriteAtomicAsync(HistoryPath, records.ToArray());
+
+    public async Task BackupHistoryBeforeSyncAsync()
+    {
+        if (!File.Exists(HistoryPath)) return;
+        Directory.CreateDirectory(Path.GetDirectoryName(HistoryBackupPath)!);
+        await using var source = new FileStream(HistoryPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        await using var destination = new FileStream(HistoryBackupPath, FileMode.Create, FileAccess.Write, FileShare.None);
+        await source.CopyToAsync(destination);
+        await destination.FlushAsync();
+    }
 
     public async Task<string> GetDeviceIdAsync()
     {
