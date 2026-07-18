@@ -1,6 +1,7 @@
 namespace Pythia.Models;
 
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 
@@ -59,6 +60,7 @@ public sealed class PluginInfo
     public string VersionDisplay => $"v{Version}";
     public string EnabledDisplay => Enabled ? "已启用" : "已停用";
     public string ToggleDisplay => Enabled ? "停用" : "启用";
+    public Symbol ToggleSymbol => Enabled ? Symbol.Stop : Symbol.Play;
     public string ConfigurationDisplay => Configuration.Count == 0
         ? "无需配置"
         : IsConfigured ? "配置完整" : "配置不完整";

@@ -9,7 +9,7 @@
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
 
-            <CornerRadius x:Key="PythiaCardCornerRadius">16</CornerRadius>
+            <CornerRadius x:Key="PythiaCardCornerRadius">12</CornerRadius>
             <Thickness x:Key="PythiaPagePadding">28,20,28,24</Thickness>
             <Thickness x:Key="PythiaCardPadding">20</Thickness>
 

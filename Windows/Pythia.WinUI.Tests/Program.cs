@@ -81,6 +81,19 @@ if (args.Length >= 2 && args[0] == "--install-repo-plugins")
     return 0;
 }
 
+if (args.Length >= 3 && args[0] == "--translate-plugin")
+{
+    Console.OutputEncoding = System.Text.Encoding.UTF8;
+    var serviceId = args[1];
+    var sourceText = args[2];
+    var store = new LocalStore();
+    var service = new PluginService(store, new CredentialStore(), FindNodeForTests());
+    await service.InitializeAsync();
+    var translated = await service.TranslateAsync(serviceId, sourceText, "en", "zh-CN");
+    Console.WriteLine(translated);
+    return 0;
+}
+
 Check(LanguageOption.FindSource("auto").Name == "自动检测", "source language lookup");
 Check(LanguageOption.FindTarget("zh-CN").Name == "简体中文", "target language lookup");
 
@@ -99,17 +112,34 @@ var homePageXaml = homePageXamlPath is null ? string.Empty : File.ReadAllText(ho
 Check(homePageXaml.Contains("PreviewKeyDown=\"SourceTextBox_PreviewKeyDown\"", StringComparison.Ordinal) &&
       !homePageXaml.Contains("KeyDown=\"SourceTextBox_KeyDown\"", StringComparison.Ordinal),
     "real HomePage TextBox intercepts Enter before multiline handling");
+Check(homePageXaml.Contains("PlaceholderText=\"输入或粘贴需要翻译的内容… Enter 翻译，Shift + Enter 换行\"", StringComparison.Ordinal) &&
+      !homePageXaml.Contains("Text=\"Enter 翻译 · Shift + Enter 换行\"", StringComparison.Ordinal),
+    "Enter guidance lives in the source placeholder instead of the footer");
+Check(homePageXaml.Contains("x:Name=\"PinIcon\"", StringComparison.Ordinal),
+    "pin action exposes a stateful icon");
 var settingsPageXamlPath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Pages", "SettingsPage.xaml"));
 var settingsPageXaml = settingsPageXamlPath is null ? string.Empty : File.ReadAllText(settingsPageXamlPath);
-Check(settingsPageXaml.Contains("<pages:PluginSettingsPanel", StringComparison.Ordinal) &&
-      settingsPageXaml.Contains("Text=\"翻译插件\"", StringComparison.Ordinal),
-    "real SettingsPage embeds the translation plugin control panel");
-var pluginPanelXamlPath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Pages", "PluginSettingsPanel.xaml"));
-var pluginPanelXaml = pluginPanelXamlPath is null ? string.Empty : File.ReadAllText(pluginPanelXamlPath);
-Check(pluginPanelXaml.Contains("AutomationProperties.AutomationId=\"InstalledPluginPicker\"", StringComparison.Ordinal) &&
-      pluginPanelXaml.Contains("保存插件配置", StringComparison.Ordinal) &&
-      pluginPanelXaml.Contains("测试连通性", StringComparison.Ordinal),
-    "plugin settings UI exposes selection, configuration, and connectivity actions");
+Check(!settingsPageXaml.Contains("Tag=\"plugins\"", StringComparison.Ordinal) &&
+      settingsPageXaml.Contains("Tag=\"about\"", StringComparison.Ordinal) &&
+      settingsPageXaml.Contains("TextWrapping=\"Wrap\"", StringComparison.Ordinal),
+    "Settings removes duplicate plugins, retains About, and wraps hint text");
+var mainWindowXamlPath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "MainWindow.xaml"));
+var mainWindowXaml = mainWindowXamlPath is null ? string.Empty : File.ReadAllText(mainWindowXamlPath);
+Check(mainWindowXaml.Contains("Tag=\"plugins\"", StringComparison.Ordinal) &&
+      !mainWindowXaml.Contains("Tag=\"about\"", StringComparison.Ordinal) &&
+      mainWindowXaml.Contains("Subtitle=\"AI 效率助手\"", StringComparison.Ordinal),
+    "main sidebar retains Plugins, moves About into Settings, and uses the neutral product subtitle");
+var selectionServicePath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Services", "SelectionCaptureService.cs"));
+var selectionServiceSource = selectionServicePath is null ? string.Empty : File.ReadAllText(selectionServicePath);
+var mainWindowSourcePath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "MainWindow.xaml.cs"));
+var mainWindowSource = mainWindowSourcePath is null ? string.Empty : File.ReadAllText(mainWindowSourcePath);
+var selectionMethodStart = mainWindowSource.IndexOf("public async Task TranslateSelectionAsync", StringComparison.Ordinal);
+var selectionMethodSource = selectionMethodStart >= 0 ? mainWindowSource[selectionMethodStart..] : string.Empty;
+Check(selectionServiceSource.Contains("WaitForModifierReleaseAsync", StringComparison.Ordinal) &&
+      selectionServiceSource.Contains("GetAsyncKeyState", StringComparison.Ordinal) &&
+      selectionMethodSource.IndexOf("PrepareCapture()", StringComparison.Ordinal) >= 0 &&
+      selectionMethodSource.IndexOf("PrepareCapture()", StringComparison.Ordinal) < selectionMethodSource.IndexOf("AppWindow.Hide()", StringComparison.Ordinal),
+    "selection capture freezes the external target before hiding and waits for hotkey release");
 var startupSettingsRequest = StartupRequest.Parse(["Pythia.exe", "--settings", "plugins"]);
 var startupTextRequest = StartupRequest.Parse(["Pythia.exe", "--text=hello"]);
 var winUiStartupRequest = StartupRequest.Parse(["--settings", "plugins"]);
@@ -157,6 +187,8 @@ Check(PluginService.ClassifyConnectionFailure("PROCESS_EXITED", "crashed", true)
 Check(IconSemantics.Actions.Count >= 25 && IconSemantics.Actions.Values.All(item =>
         item.Symbol != Microsoft.UI.Xaml.Controls.Symbol.Placeholder && !string.IsNullOrWhiteSpace(item.AccessibleName)),
     "semantic icon mapping");
+Check(IconSemantics.Actions["plugin.toggle"].Symbol == Microsoft.UI.Xaml.Controls.Symbol.Stop,
+    "plugin disable action uses a stop icon instead of language switch");
 var expectedHomeIcons = new Dictionary<string, Microsoft.UI.Xaml.Controls.Symbol>
 {
     ["home.services"] = Microsoft.UI.Xaml.Controls.Symbol.Sort,
@@ -254,6 +286,25 @@ var decoded = JsonSerializer.Deserialize<PythiaSettings>(json, new JsonSerialize
 });
 Check(decoded?.ThemeMode == "dark" && decoded.CloseToTray, "legacy settings compatibility");
 
+var concurrentStoreRoot = Path.Combine(Path.GetTempPath(), "Pythia-store-test-" + Guid.NewGuid().ToString("N"));
+try
+{
+    var concurrentStore = new LocalStore(concurrentStoreRoot);
+    await Task.WhenAll(Enumerable.Range(0, 12).Select(index => concurrentStore.SaveSettingsAsync(new PythiaSettings
+    {
+        SourceLanguage = index % 2 == 0 ? "en" : "auto",
+        TargetLanguage = "zh-CN",
+    })));
+    var concurrentReload = await concurrentStore.LoadSettingsAsync();
+    Check(concurrentReload.TargetLanguage == "zh-CN" &&
+          !Directory.EnumerateFiles(concurrentStoreRoot, "*.tmp").Any(),
+        "concurrent settings saves serialize atomically without temp-file collisions");
+}
+finally
+{
+    try { if (Directory.Exists(concurrentStoreRoot)) Directory.Delete(concurrentStoreRoot, true); } catch { }
+}
+
 var historyJson = """
 [{"id":"one","sourceText":"hello","translatedText":"你好","sourceLanguage":"en","targetLanguage":"zh-CN","service":"google","createdAt":"2026-07-18T08:00:00Z","updatedAt":"2026-07-18T08:00:00Z","isFavorite":true,"deviceId":"device","syncStatus":"local","schemaVersion":1}]
 """;
@@ -293,7 +344,7 @@ try
     }
     """);
     await File.WriteAllTextAsync(Path.Combine(packageRoot, "main.js"),
-        "module.exports.translate = async (request) => request.input.text + '-ok';");
+        "module.exports.translate = async (request) => request.input.text + '—你好，世界';");
     var archive = Path.Combine(pluginTestRoot, "runtime-echo.pythia");
     ZipFile.CreateFromDirectory(packageRoot, archive);
     var pluginStore = new LocalStore(Path.Combine(pluginTestRoot, "data"));
@@ -319,13 +370,13 @@ try
     var installed = pluginService.Install(archive);
     Check(installed.ServiceId == "plugin:test.echo.runtime" && installed.Enabled, "plugin install and service registration");
     var pluginOutput = await pluginService.TranslateAsync(installed.ServiceId, "hello", "en", "zh-CN");
-    Check(pluginOutput == "hello-ok", "plugin runtime execution");
+    Check(pluginOutput == "hello—你好，世界", "plugin runtime preserves exact UTF-8 output");
     var connection = await pluginService.TestConnectionAsync(installed, maximumDuration: TimeSpan.FromSeconds(3));
     Check(connection is { Status: PluginConnectionStatus.Success, Attempts: 1 }, "plugin classified connectivity success");
     var pluginCoordinator = new TranslationCoordinator(new CredentialStore(), pluginService);
     var pluginBatch = await pluginCoordinator.TranslateAsync(
         "integrated", "en", "zh-CN", [installed.ServiceId], new PythiaSettings());
-    Check(pluginBatch.Results is [{ IsSuccess: true, Text: "integrated-ok" }], "plugin translation coordinator integration");
+    Check(pluginBatch.Results is [{ IsSuccess: true, Text: "integrated—你好，世界" }], "plugin translation coordinator integration");
 
     var secondRoot = Path.Combine(pluginTestRoot, "package-two");
     Directory.CreateDirectory(secondRoot);
@@ -357,7 +408,7 @@ try
     var orderedBatch = await pluginCoordinator.TranslateAsync(
         "order", "en", "zh-CN", [second.ServiceId, installed.ServiceId], new PythiaSettings());
     Check(orderedBatch.Results.Select(item => item.ServiceId).SequenceEqual([second.ServiceId, installed.ServiceId]) &&
-          orderedBatch.Results.Select(item => item.Text).SequenceEqual(["order-two", "order-ok"]),
+          orderedBatch.Results.Select(item => item.Text).SequenceEqual(["order-two", "order—你好，世界"]),
         "plugin dispatch and result order");
     var persistedOrder = new PythiaSettings
     {

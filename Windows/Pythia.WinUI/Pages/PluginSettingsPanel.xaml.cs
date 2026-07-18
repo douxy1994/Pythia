@@ -71,7 +71,7 @@ public sealed partial class PluginSettingsPanel : UserControl
             Spacing = 6,
             Children =
             {
-                new SymbolIcon { Symbol = Symbol.Switch },
+                new SymbolIcon { Symbol = plugin.Enabled ? Symbol.Stop : Symbol.Play },
                 new TextBlock { Text = plugin.Enabled ? "停用" : "启用" },
             },
         };

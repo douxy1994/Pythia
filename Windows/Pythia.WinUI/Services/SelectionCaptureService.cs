@@ -11,10 +11,13 @@ public enum SelectionCaptureStatus
     Success,
     NoPreviousApplication,
     ForegroundActivationFailed,
+    ModifierKeysStillPressed,
     ClipboardUnavailable,
     CopyFailed,
     EmptySelection,
 }
+
+public sealed record SelectionCaptureRequest(IntPtr TargetWindow);
 
 public sealed record SelectionCaptureResult(
     SelectionCaptureStatus Status,
@@ -28,6 +31,10 @@ public sealed record SelectionCaptureResult(
 public static class SelectionCaptureService
 {
     private const ushort VkControl = 0x11;
+    private const ushort VkShift = 0x10;
+    private const ushort VkMenu = 0x12;
+    private const ushort VkLWin = 0x5B;
+    private const ushort VkRWin = 0x5C;
     private const ushort VkC = 0x43;
     private const uint InputKeyboard = 1;
     private const uint Keyup = 0x0002;
@@ -54,12 +61,23 @@ public static class SelectionCaptureService
             WineventOutOfContext | WineventSkipOwnProcess);
     }
 
-    public static async Task<SelectionCaptureResult> CaptureAsync(CancellationToken cancellationToken = default)
+    public static SelectionCaptureRequest PrepareCapture()
     {
         var current = GetForegroundWindow();
         RememberExternalForeground(current);
-        var target = current != IntPtr.Zero && current != _pythiaWindow ? current : _lastExternalWindow;
-        if (target == IntPtr.Zero || !IsWindow(target))
+        var target = IsEligibleExternalWindow(current) ? GetAncestor(current, 2) : _lastExternalWindow;
+        return new SelectionCaptureRequest(target);
+    }
+
+    public static Task<SelectionCaptureResult> CaptureAsync(CancellationToken cancellationToken = default) =>
+        CaptureAsync(PrepareCapture(), cancellationToken);
+
+    public static async Task<SelectionCaptureResult> CaptureAsync(
+        SelectionCaptureRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var target = request.TargetWindow;
+        if (!IsEligibleExternalWindow(target))
             return new(SelectionCaptureStatus.NoPreviousApplication, null,
                 "没有可返回的外部应用。请先在其他应用中选中文字，再使用划词快捷键。", false);
 
@@ -70,6 +88,14 @@ public static class SelectionCaptureService
         var automationText = ReadWithUiAutomation();
         if (!string.IsNullOrWhiteSpace(automationText))
             return new(SelectionCaptureStatus.Success, automationText.Trim(), "已通过 UI Automation 读取选区。", false);
+
+        if (!await WaitForModifierReleaseAsync(cancellationToken))
+            return new(SelectionCaptureStatus.ModifierKeysStillPressed, null,
+                "快捷键尚未松开。请松开 Ctrl、Alt、Shift 或 Windows 键后重试。", true);
+
+        if (GetForegroundWindow() != target && !await ActivateTargetAsync(target, cancellationToken))
+            return new(SelectionCaptureStatus.ForegroundActivationFailed, null,
+                "复制选区前目标应用失去焦点，请重新选中文字后重试。", true);
 
         if (!TrySnapshotClipboard(out var previousClipboard, out var clipboardWasEmpty))
             return new(SelectionCaptureStatus.ClipboardUnavailable, null,
@@ -104,6 +130,27 @@ public static class SelectionCaptureService
             RestoreClipboard(previousClipboard, clipboardWasEmpty);
         }
     }
+
+    public static void Shutdown()
+    {
+        var hook = Interlocked.Exchange(ref _foregroundHook, IntPtr.Zero);
+        if (hook != IntPtr.Zero) UnhookWinEvent(hook);
+        _pythiaWindow = IntPtr.Zero;
+        _lastExternalWindow = IntPtr.Zero;
+    }
+
+    private static async Task<bool> WaitForModifierReleaseAsync(CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 60; attempt++)
+        {
+            if (!IsKeyDown(VkControl) && !IsKeyDown(VkShift) && !IsKeyDown(VkMenu) &&
+                !IsKeyDown(VkLWin) && !IsKeyDown(VkRWin)) return true;
+            await Task.Delay(25, cancellationToken);
+        }
+        return false;
+    }
+
+    private static bool IsKeyDown(int virtualKey) => (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
 
     private static async Task<bool> ActivateTargetAsync(IntPtr target, CancellationToken cancellationToken)
     {
@@ -209,10 +256,21 @@ public static class SelectionCaptureService
 
     private static void RememberExternalForeground(IntPtr hwnd)
     {
-        if (hwnd == IntPtr.Zero || hwnd == _pythiaWindow || !IsWindow(hwnd)) return;
-        GetWindowThreadProcessId(hwnd, out var processId);
-        if (processId == Environment.ProcessId) return;
-        Interlocked.Exchange(ref _lastExternalWindow, hwnd);
+        if (!IsEligibleExternalWindow(hwnd)) return;
+        Interlocked.Exchange(ref _lastExternalWindow, GetAncestor(hwnd, 2));
+    }
+
+    private static bool IsEligibleExternalWindow(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero || hwnd == _pythiaWindow || !IsWindow(hwnd) || !IsWindowVisible(hwnd)) return false;
+        var root = GetAncestor(hwnd, 2);
+        if (root == IntPtr.Zero || root == _pythiaWindow) return false;
+        GetWindowThreadProcessId(root, out var processId);
+        if (processId == Environment.ProcessId) return false;
+        var className = new char[128];
+        var length = GetClassName(root, className, className.Length);
+        var windowClass = length > 0 ? new string(className, 0, length) : string.Empty;
+        return windowClass is not ("Shell_TrayWnd" or "Shell_SecondaryTrayWnd" or "Progman" or "WorkerW");
     }
 
     private static Input Key(ushort virtualKey, bool up) => new()
@@ -241,13 +299,18 @@ public static class SelectionCaptureService
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
     [DllImport("user32.dll")] private static extern uint GetClipboardSequenceNumber();
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int virtualKey);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hwnd);
     [DllImport("user32.dll")] private static extern bool BringWindowToTop(IntPtr hwnd);
     [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hwnd, int command);
     [DllImport("user32.dll")] private static extern bool AttachThreadInput(uint attachThread, uint attachToThread, bool attach);
     [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr hwnd, char[] className, int maximumCount);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out int processId);
     [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr module,
         WinEventDelegate callback, uint processId, uint threadId, uint flags);
+    [DllImport("user32.dll")] private static extern bool UnhookWinEvent(IntPtr hook);
 }

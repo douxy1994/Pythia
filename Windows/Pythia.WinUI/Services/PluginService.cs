@@ -374,6 +374,8 @@ public sealed class PluginService
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardOutputEncoding = new UTF8Encoding(false, true),
+            StandardErrorEncoding = new UTF8Encoding(false, true),
         };
         startInfo.ArgumentList.Add(RunnerPath);
         startInfo.ArgumentList.Add(plugin.DirectoryPath);
@@ -381,6 +383,8 @@ public sealed class PluginService
         startInfo.Environment["PYTHIA_PLUGIN_REQUEST"] = request;
         startInfo.Environment["PYTHIA_PLUGIN_CONFIG"] = JsonSerializer.Serialize(config);
         startInfo.Environment["PYTHIA_PLUGIN_TIMEOUT_MS"] = ((long)timeout.TotalMilliseconds).ToString();
+        startInfo.Environment["PYTHONUTF8"] = "1";
+        startInfo.Environment["PYTHONIOENCODING"] = "utf-8";
 
         using var process = new Process { StartInfo = startInfo };
         try

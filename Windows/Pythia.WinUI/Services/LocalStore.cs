@@ -5,6 +5,7 @@ namespace Pythia.Services;
 
 public sealed class LocalStore
 {
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -86,16 +87,25 @@ public sealed class LocalStore
         return id;
     }
 
-    private static async Task WriteAtomicAsync<T>(string path, T value)
+    private async Task WriteAtomicAsync<T>(string path, T value)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var temporary = path + ".tmp";
-        await using (var stream = File.Create(temporary))
+        await _writeGate.WaitAsync();
+        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
         {
-            await JsonSerializer.SerializeAsync(stream, value, JsonOptions);
-            await stream.FlushAsync();
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await using (var stream = File.Create(temporary))
+            {
+                await JsonSerializer.SerializeAsync(stream, value, JsonOptions);
+                await stream.FlushAsync();
+            }
+            File.Move(temporary, path, true);
         }
-        File.Move(temporary, path, true);
+        finally
+        {
+            try { if (File.Exists(temporary)) File.Delete(temporary); } catch { }
+            _writeGate.Release();
+        }
     }
 
     private static void BackupUnreadable(string path)

@@ -38,7 +38,11 @@ public sealed partial class MainWindow : Window
         {
             App.Services.Status.Report($"Windows 集成初始化失败：{exception.Message}");
         }
-        Closed += (_, _) => _shell?.Dispose();
+        Closed += (_, _) =>
+        {
+            SelectionCaptureService.Shutdown();
+            _shell?.Dispose();
+        };
         Activated += async (_, args) =>
         {
             WindowsIntegrationService.ApplyTheme(App.Services.Settings.ThemeMode);
@@ -132,6 +136,7 @@ public sealed partial class MainWindow : Window
 
     public async Task TranslateSelectionAsync()
     {
+        var captureRequest = SelectionCaptureService.PrepareCapture();
         App.Services.Status.Report("正在读取选中文本…", true);
         if (AppWindow.IsVisible)
         {
@@ -139,7 +144,7 @@ public sealed partial class MainWindow : Window
             await Task.Delay(180);
         }
         SelectionCaptureResult selection;
-        try { selection = await SelectionCaptureService.CaptureAsync(); }
+        try { selection = await SelectionCaptureService.CaptureAsync(captureRequest); }
         catch (Exception exception)
         {
             ShowWindow();
@@ -175,6 +180,12 @@ public sealed partial class MainWindow : Window
 
     public async Task ShowSettingsAsync(string section = "general")
     {
+        if (section.Equals("plugins", StringComparison.OrdinalIgnoreCase))
+        {
+            ShowAndActivate();
+            SelectNavigationItem("plugins");
+            return;
+        }
         ShowAndActivate();
         await Task.Yield();
         NavView.SelectedItem = NavView.SettingsItem;
@@ -257,7 +268,6 @@ public sealed partial class MainWindow : Window
             "translate" => typeof(HomePage),
             "history" => typeof(HistoryPage),
             "plugins" => typeof(PluginsPage),
-            "about" => typeof(AboutPage),
             _ => null,
         };
         if (page is not null && NavFrame.CurrentSourcePageType != page)

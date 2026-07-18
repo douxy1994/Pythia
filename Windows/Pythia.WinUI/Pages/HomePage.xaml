@@ -27,8 +27,8 @@
             </StackPanel>
             <Button x:Name="PinButton" Grid.Column="1" Margin="0,0,8,0" Style="{StaticResource PythiaToolbarButtonStyle}"
                     AutomationProperties.AutomationId="PinWindowButton"
-                    AutomationProperties.Name="切换窗口置顶" ToolTipService.ToolTip="切换窗口置顶" Click="PinButton_Click">
-                <SymbolIcon Symbol="Pin" />
+                    AutomationProperties.Name="窗口置顶" ToolTipService.ToolTip="窗口置顶" Click="PinButton_Click">
+                <SymbolIcon x:Name="PinIcon" Symbol="Pin" />
             </Button>
             <Button x:Name="ServiceButton" Grid.Column="2" Style="{StaticResource PythiaToolbarButtonStyle}" Click="ServiceButton_Click"
                     AutomationProperties.AutomationId="ServiceOrderButton"
@@ -78,7 +78,7 @@
                     BorderThickness="0"
                     FontSize="17"
                     Padding="18,14"
-                    PlaceholderText="输入或粘贴需要翻译的内容…"
+                    PlaceholderText="输入或粘贴需要翻译的内容… Enter 翻译，Shift + Enter 换行"
                     TextWrapping="Wrap"
                     TextCompositionStarted="SourceTextBox_TextCompositionStarted"
                     TextCompositionEnded="SourceTextBox_TextCompositionEnded"
@@ -157,10 +157,8 @@
             </ListView>
         </Grid>
 
-        <Grid Grid.Row="4" ColumnSpacing="8" Margin="0,2,0,0">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-            <TextBlock VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="Enter 翻译 · Shift + Enter 换行" />
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+        <Grid Grid.Row="4" Margin="0,2,0,0">
+            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="6">
                 <Button Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="复制全部译文" ToolTipService.ToolTip="复制全部译文" Click="CopyAll_Click"><StackPanel Orientation="Horizontal" Spacing="6"><SymbolIcon Symbol="Copy" /><TextBlock Text="复制全部" /></StackPanel></Button>
                 <Button Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="收藏本次翻译" ToolTipService.ToolTip="收藏本次翻译" Click="FavoriteResults_Click"><StackPanel Orientation="Horizontal" Spacing="6"><SymbolIcon Symbol="OutlineStar" /><TextBlock Text="收藏" /></StackPanel></Button>
                 <Button Style="{StaticResource PythiaToolbarButtonStyle}" AutomationProperties.Name="朗读首条译文" ToolTipService.ToolTip="朗读首条译文" Click="Speak_Click"><StackPanel Orientation="Horizontal" Spacing="6"><SymbolIcon Symbol="Volume" /><TextBlock Text="朗读" /></StackPanel></Button>

@@ -185,7 +185,7 @@ public sealed class WindowsShellService : IDisposable
         Flags = NifMessage | NifIcon | NifTip,
         CallbackMessage = WmAppTray,
         Icon = _icon,
-        Tip = "Pythia · 翻译与 OCR",
+        Tip = "Pythia · AI 效率助手",
         Info = string.Empty,
         InfoTitle = string.Empty,
     };

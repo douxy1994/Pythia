@@ -20,7 +20,6 @@ public sealed partial class SettingsPage : Page
         InitializeComponent();
         _sections.Add("general", GeneralSection);
         _sections.Add("services", ServicesSection);
-        _sections.Add("plugins", PluginsSection);
         _sections.Add("ocr", OcrSection);
         _sections.Add("shortcuts", ShortcutsSection);
         _sections.Add("sync", SyncSection);

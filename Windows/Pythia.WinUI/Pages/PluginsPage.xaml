@@ -39,7 +39,7 @@
                         <Border Style="{StaticResource PythiaCardStyle}">
                             <Grid ColumnSpacing="15">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="48" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <Border Width="48" Height="48" Background="{ThemeResource AccentFillColorSecondaryBrush}" CornerRadius="12">
+                                <Border Width="48" Height="48" Background="{ThemeResource AccentFillColorSecondaryBrush}" CornerRadius="{StaticResource PythiaCardCornerRadius}">
                                     <Grid>
                                         <Image Margin="7" Source="{x:Bind IconSource}" Stretch="Uniform" Visibility="{x:Bind IconVisibility}" />
                                         <Image Margin="7" Source="/Assets/AppIcon.png" Stretch="Uniform" Visibility="{x:Bind FallbackIconVisibility}" />
@@ -62,7 +62,7 @@
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
                                     <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="配置插件" AutomationProperties.Name="配置插件" Tag="{x:Bind}" Click="Configure_Click"><SymbolIcon Symbol="Setting" /></Button>
                                     <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="运行最长 30 秒的连通性测试" AutomationProperties.Name="测试插件连通性" Tag="{x:Bind}" Click="Test_Click"><SymbolIcon Symbol="Play" /></Button>
-                                    <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="{x:Bind ToggleDisplay}" AutomationProperties.Name="启用或停用插件" Tag="{x:Bind}" Click="Toggle_Click"><SymbolIcon Symbol="Switch" /></Button>
+                                    <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="{x:Bind ToggleDisplay}" AutomationProperties.Name="启用或停用插件" Tag="{x:Bind}" Click="Toggle_Click"><SymbolIcon Symbol="{x:Bind ToggleSymbol}" /></Button>
                                     <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="卸载插件" AutomationProperties.Name="卸载插件" Tag="{x:Bind}" Click="Remove_Click"><SymbolIcon Symbol="Delete" /></Button>
                                 </StackPanel>
                             </Grid>

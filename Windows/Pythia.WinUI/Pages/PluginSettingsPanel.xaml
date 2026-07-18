@@ -48,7 +48,7 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Border Width="52" Height="52" Background="{ThemeResource AccentFillColorSecondaryBrush}" CornerRadius="13">
+                    <Border Width="52" Height="52" Background="{ThemeResource AccentFillColorSecondaryBrush}" CornerRadius="{StaticResource PythiaCardCornerRadius}">
                         <Grid>
                             <Image x:Name="PluginIconImage" Margin="8" Stretch="Uniform" />
                             <Image x:Name="PluginFallbackImage" Margin="8" Source="/Assets/AppIcon.png" Stretch="Uniform" />

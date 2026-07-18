@@ -17,7 +17,7 @@
         <TitleBar
             x:Name="AppTitleBar"
             Title="Pythia"
-            Subtitle="翻译与 OCR 工具"
+            Subtitle="AI 效率助手"
             IsBackButtonVisible="False"
             IsPaneToggleButtonVisible="True"
             PaneToggleRequested="TitleBar_PaneToggleRequested">
@@ -45,9 +45,6 @@
                 </NavigationViewItem>
                 <NavigationViewItem Content="插件" Tag="plugins">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Repair" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="关于 Pythia" Tag="about">
-                    <NavigationViewItem.Icon><SymbolIcon Symbol="ContactInfo" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
             <Frame x:Name="NavFrame" />

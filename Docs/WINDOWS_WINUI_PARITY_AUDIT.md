@@ -12,8 +12,10 @@
 
 ## Implemented parity work
 
-- The real multiline input now intercepts Enter through `PreviewKeyDown` before WinUI consumes it as a line break; Shift+Enter, IME composition, repeat suppression, and single-flight duplicate prevention remain explicit.
-- Settings now displays one category at a time and embeds a real translation-plugin console with installed-plugin selection, icons, enable/disable, install/remove, manifest-driven fields, credential preservation, configuration save, and connectivity testing.
+- The real multiline input now intercepts Enter through `PreviewKeyDown` before WinUI consumes it as a line break; Shift+Enter, IME composition, repeat suppression, and single-flight duplicate prevention remain explicit. Shortcut guidance is shown in the input placeholder instead of a separate footer.
+- Plugins now have one canonical main-sidebar page with install/remove, manifest-driven configuration, enable/disable, provider icons, and connectivity testing. About and updates live only in Settings.
+- Selection capture freezes the external target before hiding Pythia, waits for hotkey modifiers to be released, filters shell windows, restores clipboard contents, and unhooks its foreground listener on shutdown.
+- Plugin process stdout/stderr is decoded as strict UTF-8; deterministic smoke coverage asserts exact Chinese output.
 - Native drag reorder plus keyboard reorder; enabled services and order share one persisted model.
 - Smart auto-language direction for pure Chinese, pure English, and mixed Chinese/English.
 - Audited Fluent action icons, accessible names/tooltips, synchronized application icon, packaged plugin icons, and Pythia fallback icon.
@@ -36,7 +38,7 @@ The final rewrite regression passed after the real XAML event and settings contr
 - Native smoke suite: passed.
 - Exact homepage icon mapping assertions: passed.
 - Enter/Shift/IME/repeat/dedup policy assertions and the real `HomePage.xaml` `PreviewKeyDown` binding contract: passed.
-- The real `SettingsPage.xaml` plugin-console contract, dynamic configuration actions, and startup navigation routes: passed.
+- The sidebar/Settings uniqueness contract, responsive wrapped hints, and startup navigation routes: passed.
 - First-to-last, last-to-first, invalid/cancelled reorder and persistence assertions: passed.
 - Plugin protocol, timeout, redaction, unsafe archive, ordered dispatch, icon discovery, and classifier assertions: passed.
 - History newest-wins, tombstone-wins, conflict, backup omission, schedule, and favorite timestamp assertions: passed.
@@ -74,7 +76,7 @@ Five packages contain provider artwork and render that file; SenseNova has no pa
 
 ## Environment-dependent acceptance still requiring a human/live account
 
-- The Windows desktop automation helper activated the final installed executable and verified the rendered plugin settings page, including the installed provider, dynamic fields, save action, and connectivity action. Its keyboard injection did not deliver characters or Return to WinUI controls, so a human must still press Enter once and check Microsoft Pinyin candidate confirmation. Drag reorder, selection capture, screenshot overlay, hotkey dispatch, audio, and visual DPI review also remain human desktop checks.
+- The Windows desktop automation helper previously activated the installed executable and verified its WinUI controls. Final selection-hotkey, Enter, pin-state, navigation, and settings-layout acceptance is repeated after each packaged fix; Microsoft Pinyin candidate confirmation and multi-display DPI review remain human desktop checks.
 - Credentialed built-in providers and missing/invalid plugin credentials need valid accounts before a success result is possible.
 - WebDAV manual/periodic/cross-device sync needs a real WebDAV endpoint.
 - Production updater acceptance needs a signed GitHub Release installer; the local candidate is not signed and was not pushed.

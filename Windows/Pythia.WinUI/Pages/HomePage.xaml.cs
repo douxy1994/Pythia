@@ -30,6 +30,7 @@ public sealed partial class HomePage : Page
         SourceLanguageBox.SelectedItem = LanguageOption.FindSource(Services.Settings.SourceLanguage);
         TargetLanguageBox.SelectedItem = LanguageOption.FindTarget(Services.Settings.TargetLanguage);
         UpdateServiceLabel();
+        UpdatePinButtonVisual();
         Results.CollectionChanged += (_, _) => EmptyResultsText.Visibility = Results.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -357,8 +358,19 @@ public sealed partial class HomePage : Page
         if (App.MainAppWindow?.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
             presenter.IsAlwaysOnTop = Services.Settings.AlwaysOnTop;
         await Services.SaveSettingsAsync();
-        ToolTipService.SetToolTip(PinButton, Services.Settings.AlwaysOnTop ? "取消窗口置顶" : "窗口置顶");
+        UpdatePinButtonVisual();
         Services.Status.Report(Services.Settings.AlwaysOnTop ? "窗口已置顶" : "已取消窗口置顶");
+    }
+
+    private void UpdatePinButtonVisual()
+    {
+        var pinned = Services.Settings.AlwaysOnTop;
+        PinIcon.Symbol = pinned ? Symbol.UnPin : Symbol.Pin;
+        PinButton.Style = (Style)Application.Current.Resources[
+            pinned ? "AccentButtonStyle" : "PythiaToolbarButtonStyle"];
+        var label = pinned ? "取消窗口置顶（当前已置顶）" : "窗口置顶（当前未置顶）";
+        ToolTipService.SetToolTip(PinButton, label);
+        AutomationProperties.SetName(PinButton, label);
     }
 
     private async void RetryResult_Click(object sender, RoutedEventArgs e)
