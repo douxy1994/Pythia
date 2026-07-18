@@ -21,6 +21,13 @@ Core/PythiaCore/.build/
 # Local release artifacts
 release/
 Windows/Pythia.Windows/dist/
+Windows/Pythia.WinUI/dist/
+Windows/Pythia.WinUI/publish/
+Windows/Pythia.WinUI/publish-test/
+
+# .NET / WinUI
+**/bin/
+**/obj/
 
 # User credentials and plugin configuration
 **/credentials.json

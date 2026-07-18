@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Pythia.Pages.PluginsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:Pythia.Models">
+    <Grid Padding="{StaticResource PythiaPagePadding}" RowSpacing="16">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+        <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel Spacing="3">
+                <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="插件" />
+                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="扩展 Pythia 的翻译服务" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <Button Style="{StaticResource PythiaToolbarButtonStyle}" Click="OpenFolder_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="7"><FontIcon Glyph="&#xE838;" /><TextBlock Text="打开目录" /></StackPanel>
+                </Button>
+                <Button Style="{StaticResource AccentButtonStyle}" CornerRadius="10" Click="Install_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="7"><FontIcon Glyph="&#xE896;" /><TextBlock Text="安装插件" /></StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+        <InfoBar Grid.Row="1" IsOpen="True" IsClosable="False" Severity="Informational" Title="兼容现有插件">
+            <TextBlock Text="支持 Pythia .pythia 插件包；安装前会校验清单、入口文件和压缩包路径。" TextWrapping="Wrap" />
+        </InfoBar>
+        <Grid Grid.Row="2">
+            <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                <FontIcon FontSize="40" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Glyph="&#xEA86;" />
+                <TextBlock FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" Text="尚未安装插件" />
+                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="可通过右上角安装 .pythia 插件包" />
+            </StackPanel>
+            <ListView x:Name="PluginList" ItemsSource="{x:Bind Plugins}" SelectionMode="None" Background="Transparent">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,10" /></Style>
+                </ListView.ItemContainerStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="models:PluginInfo">
+                        <Border Style="{StaticResource PythiaCardStyle}">
+                            <Grid ColumnSpacing="15">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="48" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <Border Width="48" Height="48" Background="{ThemeResource AccentFillColorSecondaryBrush}" CornerRadius="12">
+                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20" FontWeight="SemiBold" Text="{x:Bind NameInitial}" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="{x:Bind Name}" />
+                                        <TextBlock Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="{x:Bind VersionDisplay}" />
+                                    </StackPanel>
+                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Description}" TextWrapping="Wrap" />
+                                    <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="{x:Bind Author}" />
+                                </StackPanel>
+                                <Button Grid.Column="2" Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="卸载插件" Tag="{x:Bind}" Click="Remove_Click"><FontIcon Glyph="&#xE74D;" /></Button>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Grid>
+    </Grid>
+</Page>
