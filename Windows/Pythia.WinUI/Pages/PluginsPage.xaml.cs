@@ -10,7 +10,7 @@ namespace Pythia.Pages;
 
 public sealed partial class PluginsPage : Page
 {
-    private readonly PluginService _service = new(App.Services.Store);
+    private readonly PluginService _service = App.Services.Plugins;
 
     public PluginsPage()
     {
@@ -39,6 +39,11 @@ public sealed partial class PluginsPage : Page
         try
         {
             var plugin = _service.Install(file.Path);
+            App.Services.Settings.TranslateServiceOrder.RemoveAll(id => id.Equals(plugin.ServiceId, StringComparison.OrdinalIgnoreCase));
+            App.Services.Settings.TranslateServiceOrder.Insert(0, plugin.ServiceId);
+            App.Services.Settings.EnabledTranslateServices.RemoveAll(id => id.Equals(plugin.ServiceId, StringComparison.OrdinalIgnoreCase));
+            App.Services.Settings.EnabledTranslateServices.Insert(0, plugin.ServiceId);
+            await App.Services.SaveSettingsAsync();
             Reload();
             App.Services.Status.Report($"已安装插件：{plugin.Name} {plugin.Version}");
         }
@@ -61,8 +66,130 @@ public sealed partial class PluginsPage : Page
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         _service.Remove(plugin);
+        App.Services.Settings.TranslateServiceOrder.RemoveAll(id => id.Equals(plugin.ServiceId, StringComparison.OrdinalIgnoreCase));
+        App.Services.Settings.EnabledTranslateServices.RemoveAll(id => id.Equals(plugin.ServiceId, StringComparison.OrdinalIgnoreCase));
+        await App.Services.SaveSettingsAsync();
         Reload();
         App.Services.Status.Report($"已卸载插件：{plugin.Name}");
+    }
+
+    private async void Configure_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is not PluginInfo plugin) return;
+        var current = _service.GetConfiguration(plugin);
+        var controls = new Dictionary<string, Control>(StringComparer.Ordinal);
+        var panel = new StackPanel { Spacing = 12, MinWidth = 460 };
+        foreach (var field in plugin.Configuration)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = field.Required ? $"{field.Label} *" : field.Label,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            });
+            Control control;
+            if (field.Type.Equals("secret", StringComparison.OrdinalIgnoreCase))
+            {
+                control = new PasswordBox
+                {
+                    Password = current.GetValueOrDefault(field.Key) ?? string.Empty,
+                    PasswordRevealMode = PasswordRevealMode.Hidden,
+                    PlaceholderText = "安全存储在 Windows Credential Manager",
+                };
+            }
+            else if (field.Type.Equals("select", StringComparison.OrdinalIgnoreCase) && field.Options.Count > 0)
+            {
+                var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
+                foreach (var option in field.Options)
+                    combo.Items.Add(new ComboBoxItem { Content = option.Value, Tag = option.Key });
+                var selected = current.GetValueOrDefault(field.Key) ?? field.DefaultValue;
+                combo.SelectedItem = combo.Items.OfType<ComboBoxItem>().FirstOrDefault(item => (string)item.Tag == selected)
+                    ?? combo.Items.FirstOrDefault();
+                control = combo;
+            }
+            else
+            {
+                control = new TextBox { Text = current.GetValueOrDefault(field.Key) ?? field.DefaultValue ?? string.Empty };
+            }
+            controls[field.Key] = control;
+            panel.Children.Add(control);
+        }
+        if (plugin.Configuration.Count == 0)
+            panel.Children.Add(new TextBlock { Text = "此插件无需配置。" });
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = $"配置 {plugin.Name}",
+            Content = new ScrollViewer { Content = panel, MaxHeight = 560 },
+            PrimaryButtonText = "保存",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        var values = controls.ToDictionary(
+            item => item.Key,
+            item => item.Value switch
+            {
+                PasswordBox password => password.Password,
+                ComboBox combo when combo.SelectedItem is ComboBoxItem option => (string)option.Tag,
+                TextBox text => text.Text,
+                _ => string.Empty,
+            }, StringComparer.Ordinal);
+        var missing = plugin.Configuration.Where(field => field.Required && string.IsNullOrWhiteSpace(values.GetValueOrDefault(field.Key))).ToArray();
+        if (missing.Length > 0)
+        {
+            await new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = "配置不完整",
+                Content = $"请填写：{string.Join("、", missing.Select(item => item.Label))}",
+                CloseButtonText = "确定",
+            }.ShowAsync();
+            return;
+        }
+        _service.SaveConfiguration(plugin, values);
+        Reload();
+        App.Services.Status.Report($"已保存 {plugin.Name} 的配置");
+    }
+
+    private async void Test_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is not PluginInfo plugin) return;
+        App.Services.Status.Report($"正在测试 {plugin.Name}…", true);
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            await _service.TranslateAsync(plugin.ServiceId, "Hello", "en", "zh-CN", timeout.Token);
+            App.Services.Status.Report($"{plugin.Name} 连通性测试成功");
+        }
+        catch (OperationCanceledException)
+        {
+            App.Services.Status.Report($"{plugin.Name} 测试失败：60 秒超时");
+        }
+        catch (Exception exception)
+        {
+            App.Services.Status.Report($"{plugin.Name} 测试失败：{exception.Message}");
+        }
+        Reload();
+    }
+
+    private async void Toggle_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is not PluginInfo plugin) return;
+        _service.SetEnabled(plugin, !plugin.Enabled);
+        if (plugin.Enabled)
+        {
+            App.Services.Settings.EnabledTranslateServices.RemoveAll(id => id.Equals(plugin.ServiceId, StringComparison.OrdinalIgnoreCase));
+        }
+        else
+        {
+            App.Services.Settings.TranslateServiceOrder.RemoveAll(id => id.Equals(plugin.ServiceId, StringComparison.OrdinalIgnoreCase));
+            App.Services.Settings.TranslateServiceOrder.Insert(0, plugin.ServiceId);
+            App.Services.Settings.EnabledTranslateServices.RemoveAll(id => id.Equals(plugin.ServiceId, StringComparison.OrdinalIgnoreCase));
+            App.Services.Settings.EnabledTranslateServices.Insert(0, plugin.ServiceId);
+        }
+        await App.Services.SaveSettingsAsync();
+        Reload();
+        App.Services.Status.Report($"{plugin.Name} 已{(plugin.Enabled ? "停用" : "启用")}");
     }
 
     private void OpenFolder_Click(object sender, RoutedEventArgs e)

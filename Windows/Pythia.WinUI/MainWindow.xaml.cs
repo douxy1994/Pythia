@@ -51,14 +51,7 @@ public sealed partial class MainWindow : Window
                     if (AppWindow.IsVisible) AppWindow.Hide(); else ShowWindow();
                     break;
                 case PythiaHotkeyAction.SelectionTranslate:
-                    App.Services.Status.Report("正在读取选中文本…", true);
-                    var selection = await SelectionCaptureService.CaptureAsync();
-                    if (string.IsNullOrWhiteSpace(selection))
-                    {
-                        ShowWindow();
-                        App.Services.Status.Report("未读取到选中文本");
-                    }
-                    else await ShowHomeTextAsync(selection, true);
+                    await TranslateSelectionAsync();
                     break;
                 case PythiaHotkeyAction.ScreenshotTranslate:
                     await CaptureScreenTextAsync(true);
@@ -87,6 +80,24 @@ public sealed partial class MainWindow : Window
             return;
         }
         await ShowHomeTextAsync(text, translate);
+    }
+
+    public async Task TranslateSelectionAsync()
+    {
+        App.Services.Status.Report("正在读取选中文本…", true);
+        if (AppWindow.IsVisible)
+        {
+            AppWindow.Hide();
+            await Task.Delay(180);
+        }
+        var selection = await SelectionCaptureService.CaptureAsync();
+        if (string.IsNullOrWhiteSpace(selection))
+        {
+            ShowWindow();
+            App.Services.Status.Report("未读取到选中文本，请先在其他应用中选中文字");
+            return;
+        }
+        await ShowHomeTextAsync(selection, true);
     }
 
     private async Task ShowHomeTextAsync(string text, bool translate)

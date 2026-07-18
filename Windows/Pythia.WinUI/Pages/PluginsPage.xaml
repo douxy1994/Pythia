@@ -14,10 +14,10 @@
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
                 <Button Style="{StaticResource PythiaToolbarButtonStyle}" Click="OpenFolder_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="7"><FontIcon Glyph="&#xE838;" /><TextBlock Text="打开目录" /></StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="OpenLocal" /><TextBlock Text="打开目录" /></StackPanel>
                 </Button>
                 <Button Style="{StaticResource AccentButtonStyle}" CornerRadius="10" Click="Install_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="7"><FontIcon Glyph="&#xE896;" /><TextBlock Text="安装插件" /></StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="7"><SymbolIcon Symbol="Download" /><TextBlock Text="安装插件" /></StackPanel>
                 </Button>
             </StackPanel>
         </Grid>
@@ -48,9 +48,18 @@
                                         <TextBlock Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="{x:Bind VersionDisplay}" />
                                     </StackPanel>
                                     <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Description}" TextWrapping="Wrap" />
-                                    <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="{x:Bind Author}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="{x:Bind Author}" />
+                                        <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="{x:Bind EnabledDisplay}" />
+                                        <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="{x:Bind ConfigurationDisplay}" />
+                                    </StackPanel>
                                 </StackPanel>
-                                <Button Grid.Column="2" Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="卸载插件" Tag="{x:Bind}" Click="Remove_Click"><FontIcon Glyph="&#xE74D;" /></Button>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                                    <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="配置插件" Tag="{x:Bind}" Click="Configure_Click"><SymbolIcon Symbol="Setting" /></Button>
+                                    <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="连通性测试" Tag="{x:Bind}" Click="Test_Click"><SymbolIcon Symbol="Sync" /></Button>
+                                    <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="{x:Bind ToggleDisplay}" Tag="{x:Bind}" Click="Toggle_Click"><SymbolIcon Symbol="Switch" /></Button>
+                                    <Button Style="{StaticResource PythiaToolbarButtonStyle}" ToolTipService.ToolTip="卸载插件" Tag="{x:Bind}" Click="Remove_Click"><SymbolIcon Symbol="Delete" /></Button>
+                                </StackPanel>
                             </Grid>
                         </Border>
                     </DataTemplate>

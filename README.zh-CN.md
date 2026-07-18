@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-Pythia 是一款面向 macOS 和 Windows 的现代桌面翻译软件。macOS 端使用原生 Swift/AppKit，Windows 端使用 Flutter 和独立 Win32 宿主。两个平台共用历史记录、WebDAV、语言路由、备份和 `.pythia` 插件契约。
+Pythia 是一款面向 macOS 和 Windows 的现代桌面翻译软件。macOS 端使用原生 Swift/AppKit，Windows 端使用 C# 14、.NET 10、WinUI 3 和 Windows App SDK。两个平台共用历史记录、WebDAV、语言路由、备份和 `.pythia` 插件契约。
 
 当前版本：**1.0.0**
 
@@ -47,7 +47,7 @@ Pythia 应用和安装包不会捆绑第三方插件。仓库的 [`Plugins/`](Pl
 | SiliconFlow | [`.pythia`](Plugins/siliconflow-1.0.0.pythia) | SiliconFlow API Key |
 | Xiaomi MiMo | [`.pythia`](Plugins/xiaomi-mimo-1.0.0.pythia) | Xiaomi MiMo API Key |
 
-安装方式：打开 **设置 > 插件 > 安装插件**，选择下载的 `.pythia` 文件，安装后再在 Pythia 中填写自己的凭据。公开插件包不包含用户配置、API Key、WebDAV 信息、历史记录或本机路径。
+安装方式：打开 Windows 版侧栏的 **插件 > 安装插件**，选择下载的 `.pythia` 文件，安装后在插件卡片中配置凭据。公开插件包不包含用户配置、API Key、WebDAV 信息、历史记录或本机路径。
 
 插件说明、来源和 SHA-256 位于 [插件目录说明](Plugins/README.md)。
 
@@ -102,13 +102,13 @@ hdiutil verify release/Pythia/Pythia.dmg
 
 ## Windows 开发
 
-Windows 客户端只支持 x64/AMD64，源码位于 [`Windows/Pythia.Windows`](Windows/Pythia.Windows/README.md)，包括：
+Windows 客户端只支持 x64/AMD64，当前原生源码位于 [`Windows/Pythia.WinUI`](Windows/Pythia.WinUI/README.md)，包括：
 
-- Flutter UI 和核心逻辑。
-- Credential Manager、划词、截图 OCR、快捷键、托盘、启动项、通知、更新安装和窗口行为的 Win32 平台通道。
-- Inno Setup 安装包。
-- 强制 PE machine `0x8664` 并排除插件和私密材料的发布门禁。
-- 真实构建、安装、启动、卸载和上传候选包的 Windows CI。
+- Windows 11 原生 WinUI 3 界面和 C# 翻译核心。
+- Credential Manager、UI Automation/剪贴板划词、Windows OCR、全局快捷键、托盘和启动项集成。
+- 与 macOS 字节一致的隔离 JavaScript 插件运行器，以及 `.pythia` 配置和秘密字段兼容。
+- 自包含 x64 发布和 Inno Setup 安装包。
+- `Windows/Pythia.Windows` 保留为旧 Flutter/Win32 实现和兼容性参考。
 
 交给 Windows 端 Codex 的完整开发交接文档是：
 
@@ -119,18 +119,14 @@ Windows 客户端只支持 x64/AMD64，源码位于 [`Windows/Pythia.Windows`](W
 Windows 基本命令：
 
 ```powershell
-Set-Location Windows\Pythia.Windows
-flutter pub get
+Set-Location Windows\Pythia.WinUI
 node ..\..\script\validate_pythia_plugins.mjs
-flutter analyze
-flutter test
-.\tool\prepare_plugin_runtime.ps1
-flutter build windows --release
-dart run tool\verify_release_package.dart build\windows\x64\runner\Release
-.\tool\build_windows_installer.ps1
+dotnet build .\Pythia.WinUI.csproj -c Release -r win-x64
+dotnet run --project ..\Pythia.WinUI.Tests\Pythia.WinUI.Tests.csproj -c Release
+.\tool\build-installer.ps1 -Version 1.0.0
 ```
 
-本机 Windows 11 开发验收于 2026-07-18 完成最终复验，现已通过 114 项 Flutter 测试、MSVC 原生几何/托盘/x64 检查、AMD64 release/发布门禁、安装包与 SHA-256 生成，以及启动、重启、静默安装、启动、启动项清理和卸载冒烟；详见 [Windows 本机验收记录](Docs/WINDOWS_ACCEPTANCE_2026-07-16.md)。正式发布前仍需使用生产 Authenticode 证书签名，并完成文档列出的真实输入法、网络服务、同步和多屏人工场景。
+本机 Windows 11 原生客户端已完成 x64 编译、插件沙箱测试、公开插件校验、安装包与 SHA-256 生成、静默安装和启动验证。正式发布前仍需使用生产 Authenticode 证书签名，并完成真实输入法、多屏和跨设备 WebDAV 人工场景。
 
 ## 插件契约验证
 

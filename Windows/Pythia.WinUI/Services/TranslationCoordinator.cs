@@ -6,7 +6,7 @@ using Pythia.Models;
 
 namespace Pythia.Services;
 
-public sealed class TranslationCoordinator(CredentialStore credentials)
+public sealed class TranslationCoordinator(CredentialStore credentials, PluginService? plugins = null)
 {
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
@@ -35,13 +35,16 @@ public sealed class TranslationCoordinator(CredentialStore credentials)
                     "openai-compatible" => await TranslateOpenAiAsync(normalizedText, pair.Source, pair.Target, settings, cancellationToken),
                     "deepl" => await TranslateDeepLAsync(normalizedText, pair.Source, pair.Target, settings, cancellationToken),
                     "libretranslate" => await TranslateLibreAsync(normalizedText, pair.Source, pair.Target, settings, cancellationToken),
+                    _ when id.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase) && plugins is not null =>
+                        new TranslationResult(id, plugins.DisplayName(id),
+                            await plugins.TranslateAsync(id, normalizedText, pair.Source, pair.Target, cancellationToken)),
                     _ => new TranslationResult(id, ServiceCatalog.DisplayName(id), string.Empty, Error: "当前版本不支持此翻译服务。"),
                 };
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception exception)
             {
-                return new TranslationResult(id, ServiceCatalog.DisplayName(id), string.Empty,
+                return new TranslationResult(id, plugins?.DisplayName(id) ?? ServiceCatalog.DisplayName(id), string.Empty,
                     Error: SafeError(exception));
             }
         });

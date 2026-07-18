@@ -12,9 +12,9 @@ public sealed class LocalStore
         WriteIndented = true,
     };
 
-    public LocalStore()
+    public LocalStore(string? dataDirectory = null)
     {
-        DataDirectory = Path.Combine(
+        DataDirectory = dataDirectory ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "DouXY", "Pythia", "Pythia");
         Directory.CreateDirectory(DataDirectory);

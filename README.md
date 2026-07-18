@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-Pythia is a modern desktop translation application for macOS and Windows. The macOS client is a native Swift/AppKit application. The Windows client uses Flutter with a dedicated Win32 host for desktop integrations. Both clients share the same history, WebDAV, language-routing, backup, and `.pythia` plugin contracts.
+Pythia is a modern desktop translation application for macOS and Windows. The macOS client is a native Swift/AppKit application. The Windows client uses C# 14, .NET 10, WinUI 3, and Windows App SDK. Both clients share the same history, WebDAV, language-routing, backup, and `.pythia` plugin contracts.
 
 Current version: **1.0.0**
 
@@ -47,7 +47,7 @@ Pythia does not bundle third-party plugins in the application or installer. The 
 | SiliconFlow | [`.pythia`](Plugins/siliconflow-1.0.0.pythia) | SiliconFlow API Key |
 | Xiaomi MiMo | [`.pythia`](Plugins/xiaomi-mimo-1.0.0.pythia) | Xiaomi MiMo API Key |
 
-Install a package from **Settings > Plugins > Install Plugin**. Configure credentials inside Pythia after installation. The packages contain no user credentials, API keys, WebDAV settings, history, or local machine paths.
+Install a package from **Plugins > Install Plugin** in the Windows navigation pane, then configure credentials from its plugin card. The packages contain no user credentials, API keys, WebDAV settings, history, or local machine paths.
 
 See the [plugin catalog and checksums](Plugins/README.md) for package details.
 
@@ -102,13 +102,13 @@ hdiutil verify release/Pythia/Pythia.dmg
 
 ## Windows Development
 
-The Windows client is x64/AMD64 only. It is under [`Windows/Pythia.Windows`](Windows/Pythia.Windows/README.md) and includes:
+The Windows client is x64/AMD64 only. Its current native source is under [`Windows/Pythia.WinUI`](Windows/Pythia.WinUI/README.md) and includes:
 
-- Flutter UI and core logic.
-- Win32 platform channels for Credential Manager, selected text, screenshot OCR, hotkeys, tray, startup, notifications, update installation, and window behavior.
-- Inno Setup packaging.
-- A release verifier that requires PE machine `0x8664` and rejects plugins and private material.
-- A Windows CI workflow that builds, installs, starts, uninstalls, and uploads a verified candidate.
+- A native Windows 11 WinUI 3 interface and C# translation core.
+- Credential Manager, UI Automation/clipboard selection, Windows OCR, global hotkeys, tray, and startup integration.
+- A byte-identical isolated JavaScript plugin runner plus compatible `.pythia` configuration and secret handling.
+- Self-contained x64 publishing and Inno Setup packaging.
+- `Windows/Pythia.Windows` retained as the older Flutter/Win32 implementation and compatibility reference.
 
 The complete continuation document for a Windows Codex agent is:
 
@@ -119,18 +119,14 @@ It includes the exact branch baseline, toolchain, source map, native MethodChann
 Basic Windows commands:
 
 ```powershell
-Set-Location Windows\Pythia.Windows
-flutter pub get
+Set-Location Windows\Pythia.WinUI
 node ..\..\script\validate_pythia_plugins.mjs
-flutter analyze
-flutter test
-.\tool\prepare_plugin_runtime.ps1
-flutter build windows --release
-dart run tool\verify_release_package.dart build\windows\x64\runner\Release
-.\tool\build_windows_installer.ps1
+dotnet build .\Pythia.WinUI.csproj -c Release -r win-x64
+dotnet run --project ..\Pythia.WinUI.Tests\Pythia.WinUI.Tests.csproj -c Release
+.\tool\build-installer.ps1 -Version 1.0.0
 ```
 
-The local Windows 11 development acceptance, last verified on 2026-07-18, now passes 114 Flutter tests, native MSVC geometry/tray/x64 checks, the AMD64 release/package gate, installer and SHA-256 creation, and raw start/restart plus silent install/start/startup-cleanup/uninstall smoke tests. See the [local Windows acceptance record](Docs/WINDOWS_ACCEPTANCE_2026-07-16.md). Production still requires Authenticode signing and the documented user-driven IME, live-service, sync, and multi-display scenarios.
+The native Windows 11 client now passes x64 compilation, plugin sandbox tests, public-plugin validation, installer and SHA-256 creation, silent installation, and launch verification. Production still requires Authenticode signing and user-driven IME, multi-display, and cross-device WebDAV scenarios.
 
 ## Plugin Contract Verification
 

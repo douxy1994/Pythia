@@ -1,5 +1,7 @@
 namespace Pythia.Models;
 
+using Microsoft.UI.Xaml;
+
 public sealed class TranslationResult
 {
     public TranslationResult(string ServiceId, string ServiceName, string Text, string? Model = null, string? Error = null)
@@ -18,6 +20,8 @@ public sealed class TranslationResult
     public string? Error { get; set; }
     public bool IsSuccess => Error is null;
     public string DisplayText => Error ?? Text;
+    public bool IsPlugin => ServiceId.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase);
+    public Visibility RetryVisibility => IsPlugin ? Visibility.Visible : Visibility.Collapsed;
 }
 
 public sealed record TranslationBatch(

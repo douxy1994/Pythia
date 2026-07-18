@@ -5,11 +5,16 @@ namespace Pythia.Services;
 
 public sealed class AppServices
 {
-    public AppServices() => Translator = new TranslationCoordinator(Credentials);
+    public AppServices()
+    {
+        Plugins = new PluginService(Store, Credentials);
+        Translator = new TranslationCoordinator(Credentials, Plugins);
+    }
 
     public StatusService Status { get; } = new();
     public LocalStore Store { get; } = new();
     public CredentialStore Credentials { get; } = new();
+    public PluginService Plugins { get; }
     public TranslationCoordinator Translator { get; }
     public ObservableCollection<HistoryRecord> History { get; } = [];
     public PythiaSettings Settings { get; private set; } = new();
@@ -23,6 +28,7 @@ public sealed class AppServices
         Status.Report("正在载入设置…", true);
         Directory.CreateDirectory(Store.PluginsDirectory);
         Directory.CreateDirectory(Store.RuntimeDirectory);
+        await Plugins.InitializeAsync();
         Settings = await Store.LoadSettingsAsync();
         DeviceId = await Store.GetDeviceIdAsync();
         var records = await Store.LoadHistoryAsync();
@@ -30,6 +36,11 @@ public sealed class AppServices
             History.Add(record);
         Status.Report("已就绪");
     }
+
+    public IReadOnlyList<(string Id, string Name)> TranslationServices =>
+        ServiceCatalog.All
+            .Concat(Plugins.LoadInstalled().Where(item => item.Enabled).Select(item => (item.ServiceId, item.Name)))
+            .ToArray();
 
     public async Task SaveSettingsAsync()
     {
