@@ -67,6 +67,12 @@ grep -F '/DChineseLanguageFile=' \
   "$ROOT/tool/build_windows_installer.ps1" >/dev/null
 grep -F 'MessagesFile: "{#ChineseLanguageFile}"' \
   "$ROOT/installer/Pythia.iss" >/dev/null
+grep -F 'Filename: "{sys}\reg.exe"; Parameters: "delete ""HKCU\Software\Microsoft\Windows\CurrentVersion\Run"" /v ""Pythia"" /f"' \
+  "$ROOT/installer/Pythia.iss" >/dev/null
+grep -F 'Name: "{userprograms}\Pythia"' \
+  "$ROOT/installer/Pythia.iss" >/dev/null
+grep -F 'RunOnceId: "RemoveStartup"' \
+  "$ROOT/installer/Pythia.iss" >/dev/null
 test -f "$ROOT/tool/smoke_windows_release.ps1"
 grep -F 'Assert-PythiaProcessHealthy' \
   "$ROOT/tool/smoke_windows_release.ps1" >/dev/null
@@ -79,6 +85,10 @@ grep -F 'Start-Transcript' \
 grep -F '/VERYSILENT' \
   "$ROOT/tool/smoke_windows_release.ps1" >/dev/null
 grep -F 'unins000.exe' \
+  "$ROOT/tool/smoke_windows_release.ps1" >/dev/null
+grep -F 'startup Run value remained after uninstall' \
+  "$ROOT/tool/smoke_windows_release.ps1" >/dev/null
+grep -F 'Start menu shortcut remained after uninstall' \
   "$ROOT/tool/smoke_windows_release.ps1" >/dev/null
 grep -F 'smoke_windows_release.ps1' \
   "$ROOT/../../.github/workflows/windows-x64.yml" >/dev/null

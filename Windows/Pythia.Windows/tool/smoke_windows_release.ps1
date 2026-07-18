@@ -21,6 +21,12 @@ $installDirectory = Join-Path $smokeRoot "Installed"
 $runtimeLog = Join-Path $smokeRoot "runtime.log"
 $installLog = Join-Path $smokeRoot "install.log"
 $uninstallLog = Join-Path $smokeRoot "uninstall.log"
+$runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+$runValueWasPresent = $false
+$runValueBefore = $null
+$startMenuShortcut = Join-Path ([Environment]::GetFolderPath("Programs")) "Pythia.lnk"
+$startMenuShortcutBackup = Join-Path $smokeRoot "pre-existing-Pythia.lnk"
+$startMenuShortcutWasPresent = $false
 
 if ($StartupSeconds -lt 2 -or $StartupSeconds -gt 30) {
     throw "StartupSeconds must be between 2 and 30."
@@ -77,6 +83,19 @@ function Assert-PythiaProcessHealthy {
 
 $transcriptStarted = $false
 try {
+    try {
+        $runValueBefore = Get-ItemPropertyValue -Path $runKey -Name "Pythia" -ErrorAction Stop
+        $runValueWasPresent = $true
+    } catch [System.Management.Automation.ItemNotFoundException] {
+        $runValueWasPresent = $false
+    } catch [System.Management.Automation.PSArgumentException] {
+        $runValueWasPresent = $false
+    }
+    $startMenuShortcutWasPresent = Test-Path $startMenuShortcut -PathType Leaf
+    if ($startMenuShortcutWasPresent) {
+        Copy-Item $startMenuShortcut $startMenuShortcutBackup -Force
+    }
+
     Start-Transcript -Path $runtimeLog -Force | Out-Null
     $transcriptStarted = $true
     Stop-PythiaProcesses
@@ -96,9 +115,14 @@ try {
     if ($installProcess.ExitCode -ne 0) {
         throw "Pythia installer failed with exit code $($installProcess.ExitCode). See $installLog"
     }
+    if (-not (Test-Path $startMenuShortcut -PathType Leaf)) {
+        throw "Pythia installer did not create the expected Start menu shortcut: $startMenuShortcut"
+    }
 
     $installedExecutable = Join-Path $installDirectory "Pythia.exe"
     Assert-PythiaProcessHealthy -Executable $installedExecutable -Label "Installed Pythia start"
+
+    Set-ItemProperty -Path $runKey -Name "Pythia" -Value ('"' + $installedExecutable + '"')
 
     $uninstaller = Join-Path $installDirectory "unins000.exe"
     if (-not (Test-Path $uninstaller -PathType Leaf)) {
@@ -108,6 +132,8 @@ try {
         "/VERYSILENT",
         "/SUPPRESSMSGBOXES",
         "/NORESTART",
+        "/CLOSEAPPLICATIONS",
+        "/FORCECLOSEAPPLICATIONS",
         "/LOG=$uninstallLog"
     ) -Wait -PassThru
     if ($uninstallProcess.ExitCode -ne 0) {
@@ -116,10 +142,34 @@ try {
     if (Test-Path $installedExecutable) {
         throw "Pythia.exe remained after uninstall: $installedExecutable"
     }
+    if (Test-Path $startMenuShortcut -PathType Leaf) {
+        throw "Pythia Start menu shortcut remained after uninstall: $startMenuShortcut"
+    }
+    $runValueAfter = $null
+    try {
+        $runValueAfter = Get-ItemPropertyValue -Path $runKey -Name "Pythia" -ErrorAction Stop
+    } catch [System.Management.Automation.ItemNotFoundException] {
+        $runValueAfter = $null
+    } catch [System.Management.Automation.PSArgumentException] {
+        $runValueAfter = $null
+    }
+    if ($null -ne $runValueAfter) {
+        throw "Pythia startup Run value remained after uninstall."
+    }
 
-    Write-Host "Pythia Windows runtime, restart, install, launch, and uninstall smoke test passed."
+    Write-Host "Pythia Windows runtime, restart, install, launch, startup cleanup, and uninstall smoke test passed."
 } finally {
     Stop-PythiaProcesses
+    if ($runValueWasPresent) {
+        Set-ItemProperty -Path $runKey -Name "Pythia" -Value $runValueBefore
+    } else {
+        Remove-ItemProperty -Path $runKey -Name "Pythia" -ErrorAction SilentlyContinue
+    }
+    if ($startMenuShortcutWasPresent -and (Test-Path $startMenuShortcutBackup -PathType Leaf)) {
+        Copy-Item $startMenuShortcutBackup $startMenuShortcut -Force
+    } elseif (-not $startMenuShortcutWasPresent) {
+        Remove-Item $startMenuShortcut -Force -ErrorAction SilentlyContinue
+    }
     if ($transcriptStarted) {
         Stop-Transcript | Out-Null
     }
