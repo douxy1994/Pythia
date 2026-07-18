@@ -320,8 +320,7 @@ class OpenAICompatibleTranslationProvider implements TranslationProvider {
         )
         .timeout(const Duration(seconds: 120));
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-          '$displayName HTTP ${response.statusCode}: ${response.body}');
+      throw _providerHttpFailure(displayName, response.statusCode);
     }
     final payload = jsonDecode(response.body) as Map<String, Object?>;
     final choices = payload['choices'] as List<Object?>? ?? const [];
@@ -390,8 +389,7 @@ class DeepLTranslationProvider implements TranslationProvider {
         )
         .timeout(const Duration(seconds: 120));
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-          '$displayName HTTP ${response.statusCode}: ${response.body}');
+      throw _providerHttpFailure(displayName, response.statusCode);
     }
     final payload = jsonDecode(response.body) as Map<String, Object?>;
     final translations = payload['translations'] as List<Object?>? ?? const [];
@@ -443,8 +441,7 @@ class LibreTranslateTranslationProvider implements TranslationProvider {
         )
         .timeout(const Duration(seconds: 120));
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-          '$displayName HTTP ${response.statusCode}: ${response.body}');
+      throw _providerHttpFailure(displayName, response.statusCode);
     }
     final payload = jsonDecode(response.body) as Map<String, Object?>;
     final text = payload['translatedText'] as String? ?? '';
@@ -477,6 +474,17 @@ String _libreLanguage(String code) {
   final normalized = code.toLowerCase().replaceAll('_', '-');
   if (normalized.startsWith('zh-')) return 'zh';
   return normalized.split('-').first;
+}
+
+StateError _providerHttpFailure(String displayName, int statusCode) {
+  final hint = switch (statusCode) {
+    401 || 403 => '认证失败，请检查凭据',
+    408 => '请求超时，请稍后重试',
+    429 => '请求过于频繁，请稍后重试',
+    >= 500 => '服务暂时不可用',
+    _ => '请求失败',
+  };
+  return StateError('$displayName $hint（HTTP $statusCode）');
 }
 
 String _baiduLanguage(String code) {

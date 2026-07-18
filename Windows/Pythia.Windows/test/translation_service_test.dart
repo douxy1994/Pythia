@@ -178,6 +178,37 @@ void main() {
     );
   });
 
+  test('provider HTTP errors do not expose response bodies', () async {
+    final provider = OpenAICompatibleTranslationProvider(
+      id: 'openai-compatible',
+      displayName: 'Test Provider',
+      baseUrl: 'https://example.com/v1',
+      model: 'test-model',
+      credentialStore: MemoryCredentialStore({
+        'provider.openai-compatible.apiKey': 'test-secret',
+      }),
+      httpClient: MockClient(
+        (request) async => http.Response(
+          'private-upstream-detail-with-token',
+          401,
+        ),
+      ),
+    );
+
+    try {
+      await provider.translate(const PythiaTranslationRequest(
+        text: 'hello',
+        sourceLanguage: 'auto',
+        targetLanguage: 'zh-CN',
+        serviceId: 'openai-compatible',
+      ));
+      fail('Expected provider failure.');
+    } catch (error) {
+      expect(error.toString(), contains('HTTP 401'));
+      expect(error.toString(), isNot(contains('private-upstream-detail')));
+    }
+  });
+
   test('DeepL provider uses Credential Store and maps Chinese target',
       () async {
     Uri? requestedUri;
