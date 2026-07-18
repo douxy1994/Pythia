@@ -52,29 +52,79 @@ class PythiaWindowsApp extends StatefulWidget {
   State<PythiaWindowsApp> createState() => _PythiaWindowsAppState();
 }
 
-class _PythiaWindowsAppState extends State<PythiaWindowsApp> {
+class _PythiaWindowsAppState extends State<PythiaWindowsApp>
+    with WidgetsBindingObserver {
   final store = PythiaLocalStore();
+  final appearanceService = const MethodChannelWindowsPlatformService();
   PythiaSettings settings = const PythiaSettings();
   bool loaded = false;
+  Color accentColor = const Color(0xFF5C9A37);
+  bool animationsEnabled = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _load() async {
     final next = (await store.readSettings()).normalized();
+    WindowsSystemPreferences? preferences;
+    try {
+      preferences = await appearanceService.getSystemPreferences();
+    } catch (_) {
+      // Flutter tests and older hosts use the documented visual fallback.
+    }
+    if (!mounted) return;
     setState(() {
       settings = next;
+      if (preferences != null) {
+        accentColor = Color(preferences.accentArgb);
+        animationsEnabled = preferences.animationsEnabled;
+      }
       loaded = true;
     });
+    await _applyWindowAppearance();
   }
 
   Future<void> _save(PythiaSettings next) async {
     final normalized = next.normalized();
     await store.writeSettings(normalized);
     setState(() => settings = normalized);
+    await _applyWindowAppearance();
+  }
+
+  bool get _usesDarkAppearance => switch (settings.themeMode) {
+        PythiaThemeMode.light => false,
+        PythiaThemeMode.dark => true,
+        PythiaThemeMode.system =>
+          WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+              Brightness.dark,
+      };
+
+  Future<void> _applyWindowAppearance() async {
+    try {
+      await appearanceService.applyWindowAppearance(
+        darkMode: _usesDarkAppearance,
+      );
+    } catch (_) {
+      // Native Mica/dark-titlebar support is optional and has a safe fallback.
+    }
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    if (settings.themeMode == PythiaThemeMode.system) {
+      setState(() {});
+      unawaited(_applyWindowAppearance());
+    }
   }
 
   @override
@@ -88,8 +138,21 @@ class _PythiaWindowsAppState extends State<PythiaWindowsApp> {
       debugShowCheckedModeBanner: false,
       title: 'Pythia',
       themeMode: themeMode,
-      theme: pythiaWindowsTheme(Brightness.light),
-      darkTheme: pythiaWindowsTheme(Brightness.dark),
+      theme: pythiaWindowsTheme(
+        Brightness.light,
+        accentColor: accentColor,
+      ),
+      darkTheme: pythiaWindowsTheme(
+        Brightness.dark,
+        accentColor: accentColor,
+      ),
+      builder: (context, child) {
+        final media = MediaQuery.of(context);
+        return MediaQuery(
+          data: media.copyWith(disableAnimations: !animationsEnabled),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       home: loaded
           ? PythiaHomePage(
               store: store,
@@ -130,6 +193,9 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
   late final TrayActionDispatcher trayActionDispatcher;
   List<PythiaTranslationResult> results = const [];
   List<PythiaHistoryRecord> history = const [];
+  String? latestSavedHistoryId;
+  String? latestSavedSourceText;
+  String? latestSavedTranslatedText;
   String status = '就绪';
   bool translating = false;
   bool syncing = false;
@@ -191,8 +257,10 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
         oldWidget.settings.selectionTranslateHotkey !=
             widget.settings.selectionTranslateHotkey ||
         oldWidget.settings.screenshotTranslateHotkey !=
-            widget.settings.screenshotTranslateHotkey) {
-      _registerHotkeys();
+            widget.settings.screenshotTranslateHotkey ||
+        oldWidget.settings.screenshotOcrHotkey !=
+            widget.settings.screenshotOcrHotkey) {
+      unawaited(_registerHotkeys(fallback: oldWidget.settings));
     }
   }
 
@@ -243,6 +311,9 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
     setState(() {
       translating = true;
       status = '翻译中...';
+      latestSavedHistoryId = null;
+      latestSavedSourceText = null;
+      latestSavedTranslatedText = null;
     });
     try {
       final languages = TranslationServiceRegistry.resolvedLanguages(
@@ -262,8 +333,9 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
       final successful = translated.where((item) => item.isSuccess).toList();
       if (widget.settings.saveHistory) {
         final now = DateTime.now().toUtc();
+        final historyId = now.microsecondsSinceEpoch.toString();
         await widget.store.addHistory(PythiaHistoryRecord(
-          id: now.microsecondsSinceEpoch.toString(),
+          id: historyId,
           sourceText: text,
           translatedText: successful.map((item) => item.text).join('\n\n'),
           sourceLanguage: languages.source,
@@ -273,6 +345,10 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
           updatedAt: now,
           deviceId: await widget.store.deviceId(),
         ));
+        latestSavedHistoryId = historyId;
+        latestSavedSourceText = text;
+        latestSavedTranslatedText =
+            successful.map((item) => item.text).join('\n\n');
         historyChangeSyncScheduler.historyChanged();
       }
       await _loadHistory();
@@ -341,8 +417,13 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
       sourceController.text = text;
       setState(() {
         selectedPage = 0;
-        status = 'OCR 完成，已填入原文';
+        status = widget.settings.screenshotOcrAutoTranslate
+            ? 'OCR 完成，正在翻译...'
+            : 'OCR 完成，已填入原文';
       });
+      if (widget.settings.screenshotOcrAutoTranslate) {
+        await _translate();
+      }
       sourceFocusNode.requestFocus();
     } on PlatformException catch (error) {
       setState(() {
@@ -419,6 +500,16 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
       setState(() => status = '请先完成翻译，再加入生词本');
       return;
     }
+    final savedId = latestSavedHistoryId;
+    if (savedId != null &&
+        latestSavedSourceText == source &&
+        latestSavedTranslatedText == target) {
+      await widget.store.setFavorite(savedId, true);
+      historyChangeSyncScheduler.historyChanged();
+      await _loadHistory();
+      if (mounted) setState(() => status = '已收藏到本地历史');
+      return;
+    }
     final now = DateTime.now().toUtc();
     await widget.store.addHistory(PythiaHistoryRecord(
       id: 'favorite-${now.microsecondsSinceEpoch}',
@@ -445,6 +536,9 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
     setState(() {
       results = const [];
       status = '已清空';
+      latestSavedHistoryId = null;
+      latestSavedSourceText = null;
+      latestSavedTranslatedText = null;
     });
     sourceFocusNode.requestFocus();
   }
@@ -454,6 +548,21 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
       await platformService.setAlwaysOnTop(enabled);
     } catch (error) {
       if (mounted) setState(() => status = '窗口置顶设置待 Windows 通道接入：$error');
+    }
+  }
+
+  Future<void> _toggleAlwaysOnTop() async {
+    final enabled = !widget.settings.alwaysOnTop;
+    try {
+      await platformService.setAlwaysOnTop(enabled);
+      await widget.onSettingsChanged(
+        widget.settings.copyWith(alwaysOnTop: enabled),
+      );
+      if (mounted) {
+        setState(() => status = enabled ? '窗口已置顶' : '已取消窗口置顶');
+      }
+    } catch (error) {
+      if (mounted) setState(() => status = '窗口置顶设置失败：$error');
     }
   }
 
@@ -519,39 +628,42 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
     }
   }
 
-  Future<List<String>> _registerHotkeys() async {
+  Future<List<String>> _registerHotkeys({PythiaSettings? fallback}) async {
     final warnings = <String>[];
 
-    Future<void> attempt(String label, Future<void> Function() action) async {
-      try {
-        await action();
-      } catch (error) {
-        warnings.add('$label：$error');
-      }
+    Future<void> registerSet(PythiaSettings settings) async {
+      await platformService.unregisterAll();
+      await platformService.register(
+        'window.show',
+        settings.showWindowHotkey,
+      );
+      await platformService.register(
+        'selection.translate',
+        settings.selectionTranslateHotkey,
+      );
+      await platformService.register(
+        'screenshot.translate',
+        settings.screenshotTranslateHotkey,
+      );
+      await platformService.register(
+        'screenshot.recognize',
+        settings.screenshotOcrHotkey,
+      );
     }
 
-    await attempt('清理旧热键', platformService.unregisterAll);
-    await attempt(
-      '显示窗口快捷键',
-      () => platformService.register(
-        'window.show',
-        widget.settings.showWindowHotkey,
-      ),
-    );
-    await attempt(
-      '划词翻译快捷键',
-      () => platformService.register(
-        'selection.translate',
-        widget.settings.selectionTranslateHotkey,
-      ),
-    );
-    await attempt(
-      '截图翻译快捷键',
-      () => platformService.register(
-        'screenshot.translate',
-        widget.settings.screenshotTranslateHotkey,
-      ),
-    );
+    try {
+      await registerSet(widget.settings);
+    } catch (error) {
+      warnings.add('快捷键注册失败：$error');
+      if (fallback != null) {
+        try {
+          await registerSet(fallback);
+          warnings.add('已恢复修改前的快捷键');
+        } catch (rollbackError) {
+          warnings.add('恢复旧快捷键失败：$rollbackError');
+        }
+      }
+    }
     if (warnings.isNotEmpty && mounted) {
       setState(() => status = warnings.join('；'));
     }
@@ -572,6 +684,8 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
         await _translateSelection();
       case 'screenshot.translate':
         await _screenshotTranslate();
+      case 'screenshot.recognize':
+        await _screenshotRecognize();
       default:
         if (mounted) setState(() => status = '未知快捷键动作：$action');
     }
@@ -965,6 +1079,13 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
           title: Text(selectedPage == 0 ? 'Pythia' : '历史记录'),
           actions: [
             IconButton(
+              tooltip: widget.settings.alwaysOnTop ? '取消窗口置顶' : '窗口置顶',
+              onPressed: _toggleAlwaysOnTop,
+              isSelected: widget.settings.alwaysOnTop,
+              selectedIcon: const Icon(Icons.push_pin),
+              icon: const Icon(Icons.push_pin_outlined),
+            ),
+            IconButton(
               tooltip: '历史同步',
               onPressed: syncing ? null : () => _syncHistory(),
               icon: const Icon(Icons.sync),
@@ -1091,7 +1212,9 @@ class _PythiaHomePageState extends State<PythiaHomePage> {
                 icon: const Icon(Icons.text_fields),
               ),
               IconButton(
-                tooltip: '截图 OCR',
+                tooltip: widget.settings.screenshotOcrAutoTranslate
+                    ? '截图 OCR（完成后自动翻译）'
+                    : '截图 OCR',
                 onPressed: translating ? null : _screenshotRecognize,
                 icon: const Icon(Icons.document_scanner_outlined),
               ),
@@ -1330,11 +1453,13 @@ class SettingsDialog extends StatefulWidget {
 class _SettingsDialogState extends State<SettingsDialog> {
   static const settingsSections = [
     ('通用', Icons.tune),
-    ('快捷键', Icons.keyboard_outlined),
-    ('插件', Icons.extension_outlined),
     ('翻译服务', Icons.translate_outlined),
+    ('插件', Icons.extension_outlined),
+    ('OCR', Icons.document_scanner_outlined),
+    ('快捷键', Icons.keyboard_outlined),
     ('备份与同步', Icons.cloud_sync_outlined),
-    ('关于', Icons.info_outline),
+    ('窗口', Icons.web_asset_outlined),
+    ('关于与更新', Icons.info_outline),
   ];
 
   int selectedSettingsSection = 0;
@@ -1346,6 +1471,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late bool alwaysOnTop = widget.settings.alwaysOnTop;
   late bool hideOnBlur = widget.settings.hideOnBlur;
   late bool notificationsEnabled = widget.settings.notificationsEnabled;
+  late bool screenshotOcrAutoTranslate =
+      widget.settings.screenshotOcrAutoTranslate;
   late bool autoSync = widget.settings.webdavHistoryAutoSync;
   late WebDavSyncIntervalUnit syncIntervalUnit =
       widget.settings.webdavSyncSchedule.unit;
@@ -1365,6 +1492,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
   );
   late final screenshotTranslateHotkey = TextEditingController(
     text: widget.settings.screenshotTranslateHotkey,
+  );
+  late final screenshotOcrHotkey = TextEditingController(
+    text: widget.settings.screenshotOcrHotkey,
   );
   late final openAICompatibleName = TextEditingController(
     text: widget.settings.openAICompatibleName,
@@ -1412,6 +1542,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     showWindowHotkey.dispose();
     selectionTranslateHotkey.dispose();
     screenshotTranslateHotkey.dispose();
+    screenshotOcrHotkey.dispose();
     openAICompatibleName.dispose();
     openAICompatibleBaseUrl.dispose();
     openAICompatibleModel.dispose();
@@ -1534,32 +1665,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                 },
                               ),
                               SwitchListTile(
-                                value: launchAtStartup,
-                                title: const Text('开机启动'),
-                                subtitle:
-                                    const Text('保存后立即注册到当前 Windows 用户的启动项。'),
-                                onChanged: (value) =>
-                                    setState(() => launchAtStartup = value),
-                              ),
-                              SwitchListTile(
-                                value: closeToTray,
-                                title: const Text('关闭后最小化到托盘'),
-                                onChanged: (value) =>
-                                    setState(() => closeToTray = value),
-                              ),
-                              SwitchListTile(
-                                value: alwaysOnTop,
-                                title: const Text('翻译窗口置顶'),
-                                onChanged: (value) =>
-                                    setState(() => alwaysOnTop = value),
-                              ),
-                              SwitchListTile(
-                                value: hideOnBlur,
-                                title: const Text('失焦后隐藏翻译窗口'),
-                                onChanged: (value) =>
-                                    setState(() => hideOnBlur = value),
-                              ),
-                              SwitchListTile(
                                 value: notificationsEnabled,
                                 title: const Text('系统通知'),
                                 subtitle:
@@ -1568,7 +1673,27 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                     () => notificationsEnabled = value),
                               ),
                             ],
-                            if (selectedSettingsSection == 1) ...[
+                            if (selectedSettingsSection == 3) ...[
+                              SwitchListTile(
+                                value: screenshotOcrAutoTranslate,
+                                title: const Text('截图 OCR 后自动翻译'),
+                                subtitle: const Text(
+                                  '开启后，“截图 OCR”和对应快捷键会在识别文字后立即执行翻译；“截图翻译”始终直接翻译。',
+                                ),
+                                onChanged: (value) => setState(
+                                  () => screenshotOcrAutoTranslate = value,
+                                ),
+                              ),
+                              const ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(Icons.info_outline),
+                                title: Text('Windows OCR 语言包'),
+                                subtitle: Text(
+                                  'Pythia 使用系统已安装的 Windows.Media.Ocr 语言包，并支持多显示器虚拟桌面区域选择；按 Esc 或右键可取消。',
+                                ),
+                              ),
+                            ],
+                            if (selectedSettingsSection == 4) ...[
                               HotkeyRecorderField(
                                 controller: showWindowHotkey,
                                 label: '显示窗口快捷键',
@@ -1580,6 +1705,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
                               HotkeyRecorderField(
                                 controller: screenshotTranslateHotkey,
                                 label: '截图翻译快捷键',
+                              ),
+                              HotkeyRecorderField(
+                                controller: screenshotOcrHotkey,
+                                label: '截图 OCR 快捷键',
                               ),
                               if (hotkeyStatus.isNotEmpty)
                                 Align(
@@ -1618,7 +1747,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                 },
                               ),
                             ],
-                            if (selectedSettingsSection == 3) ...[
+                            if (selectedSettingsSection == 1) ...[
                               SwitchListTile(
                                 value: googleEnabled,
                                 title: const Text('启用 Google 翻译'),
@@ -1767,7 +1896,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                 ),
                               ),
                             ],
-                            if (selectedSettingsSection == 4) ...[
+                            if (selectedSettingsSection == 5) ...[
                               Align(
                                 alignment: Alignment.centerLeft,
                                 child: Text(
@@ -1945,7 +2074,45 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                 'API Key 与 WebDAV 密码必须通过 Windows Credential Manager/DPAPI 平台通道保存，不写入 settings.json。',
                               ),
                             ],
-                            if (selectedSettingsSection == 5) ...[
+                            if (selectedSettingsSection == 6) ...[
+                              SwitchListTile(
+                                value: launchAtStartup,
+                                title: const Text('开机启动'),
+                                subtitle: const Text(
+                                  '保存后立即注册到当前 Windows 用户的启动项；卸载时自动清理。',
+                                ),
+                                onChanged: (value) =>
+                                    setState(() => launchAtStartup = value),
+                              ),
+                              SwitchListTile(
+                                value: closeToTray,
+                                title: const Text('关闭后最小化到托盘'),
+                                onChanged: (value) =>
+                                    setState(() => closeToTray = value),
+                              ),
+                              SwitchListTile(
+                                value: alwaysOnTop,
+                                title: const Text('翻译窗口置顶'),
+                                subtitle: const Text('主窗口标题栏也提供快速切换按钮。'),
+                                onChanged: (value) =>
+                                    setState(() => alwaysOnTop = value),
+                              ),
+                              SwitchListTile(
+                                value: hideOnBlur,
+                                title: const Text('失焦后隐藏翻译窗口'),
+                                onChanged: (value) =>
+                                    setState(() => hideOnBlur = value),
+                              ),
+                              const ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(Icons.monitor_outlined),
+                                title: Text('窗口位置与高 DPI'),
+                                subtitle: Text(
+                                  '窗口位置会按当前用户保存，恢复时限制在可见显示器内；界面支持 Per-Monitor V2 DPI。',
+                                ),
+                              ),
+                            ],
+                            if (selectedSettingsSection == 7) ...[
                               Align(
                                 alignment: Alignment.centerLeft,
                                 child: Text(
@@ -1997,17 +2164,17 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  if (selectedSettingsSection == 5)
+                  if (selectedSettingsSection == 7)
                     TextButton(
                       onPressed: checkingUpdate ? null : _checkForUpdates,
                       child: const Text('检查更新'),
                     ),
-                  if (selectedSettingsSection == 4)
+                  if (selectedSettingsSection == 5)
                     TextButton(
                       onPressed: _clearWebDavConfig,
                       child: const Text('清除 WebDAV'),
                     ),
-                  if (selectedSettingsSection == 4)
+                  if (selectedSettingsSection == 5)
                     TextButton(
                       onPressed:
                           testingConnection ? null : _testWebDavConnection,
@@ -2141,6 +2308,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
                               screenshotTranslateHotkey.text.trim().isEmpty
                                   ? 'Ctrl+Alt+S'
                                   : screenshotTranslateHotkey.text.trim(),
+                          screenshotOcrHotkey:
+                              screenshotOcrHotkey.text.trim().isEmpty
+                                  ? 'Ctrl+Alt+Shift+R'
+                                  : screenshotOcrHotkey.text.trim(),
+                          screenshotOcrAutoTranslate:
+                              screenshotOcrAutoTranslate,
                           enabledTranslateServices: enabledServices,
                           translateServiceOrder: enabledServices,
                           googleEnabled: googleEnabled,
@@ -2193,6 +2366,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       '显示窗口': showWindowHotkey,
       '划词翻译': selectionTranslateHotkey,
       '截图翻译': screenshotTranslateHotkey,
+      '截图 OCR': screenshotOcrHotkey,
     };
     try {
       for (final controller in controllers.values) {

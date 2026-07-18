@@ -37,6 +37,21 @@ abstract interface class WindowBehaviorService {
   Future<void> saveWindowPlacement();
 }
 
+class WindowsSystemPreferences {
+  final int accentArgb;
+  final bool animationsEnabled;
+
+  const WindowsSystemPreferences({
+    required this.accentArgb,
+    required this.animationsEnabled,
+  });
+}
+
+abstract interface class WindowsAppearanceService {
+  Future<WindowsSystemPreferences> getSystemPreferences();
+  Future<void> applyWindowAppearance({required bool darkMode});
+}
+
 abstract interface class UpdateInstallerService {
   Future<void> launchUpdateInstaller(String path);
 }
@@ -63,6 +78,7 @@ class MethodChannelWindowsPlatformService
         TextToSpeechService,
         TrayService,
         WindowBehaviorService,
+        WindowsAppearanceService,
         UpdateInstallerService,
         SystemNotificationService,
         ApplicationLifecycleService {
@@ -102,8 +118,8 @@ class MethodChannelWindowsPlatformService
       return _channel.invokeMethod<T>(method, arguments);
     } on MissingPluginException catch (error) {
       throw UnsupportedError('Windows 平台能力尚未注册：$method。$error');
-    } on PlatformException catch (error) {
-      throw StateError(error.message ?? '$method 执行失败。');
+    } on PlatformException {
+      rethrow;
     }
   }
 
@@ -197,6 +213,23 @@ class MethodChannelWindowsPlatformService
   }
 
   @override
+  Future<WindowsSystemPreferences> getSystemPreferences() async {
+    final raw = await _invoke<Map<Object?, Object?>>(
+          'theme.getSystemPreferences',
+        ) ??
+        const <Object?, Object?>{};
+    return WindowsSystemPreferences(
+      accentArgb: raw['accentArgb'] as int? ?? 0xFF5C9A37,
+      animationsEnabled: raw['animationsEnabled'] as bool? ?? true,
+    );
+  }
+
+  @override
+  Future<void> applyWindowAppearance({required bool darkMode}) async {
+    await _invoke<void>('theme.applyWindowAppearance', {'darkMode': darkMode});
+  }
+
+  @override
   Future<void> launchUpdateInstaller(String path) async {
     await _invoke<void>('update.launchInstaller', {'path': path});
   }
@@ -227,6 +260,7 @@ class MissingWindowsPlatformService
         ScreenshotOcrService,
         TrayService,
         WindowBehaviorService,
+        WindowsAppearanceService,
         UpdateInstallerService,
         SystemNotificationService,
         ApplicationLifecycleService {
@@ -308,6 +342,16 @@ class MissingWindowsPlatformService
   @override
   Future<void> saveWindowPlacement() async {
     _missing('Window behavior');
+  }
+
+  @override
+  Future<WindowsSystemPreferences> getSystemPreferences() async {
+    _missing('Windows appearance');
+  }
+
+  @override
+  Future<void> applyWindowAppearance({required bool darkMode}) async {
+    _missing('Windows appearance');
   }
 
   @override

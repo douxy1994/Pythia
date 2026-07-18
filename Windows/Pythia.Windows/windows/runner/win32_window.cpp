@@ -1,10 +1,28 @@
 #include "win32_window.h"
 
+#include <dwmapi.h>
 #include <windowsx.h>
 
 namespace {
 
 constexpr wchar_t kWindowClassName[] = L"PYTHIA_WINDOW";
+constexpr DWORD kDwmwaWindowCornerPreference = 33;
+constexpr DWORD kDwmwaSystemBackdropType = 38;
+constexpr DWORD kDwmwcpRound = 2;
+constexpr DWORD kDwmsbtMainWindow = 2;
+
+void ApplyWindows11Backdrop(HWND window) {
+  // These attributes are ignored by older Windows versions, leaving the
+  // standard opaque Flutter surface as the supported fallback.
+  const DWORD corner = kDwmwcpRound;
+  ::DwmSetWindowAttribute(
+      window, static_cast<DWMWINDOWATTRIBUTE>(kDwmwaWindowCornerPreference),
+      &corner, sizeof(corner));
+  const DWORD backdrop = kDwmsbtMainWindow;
+  ::DwmSetWindowAttribute(
+      window, static_cast<DWMWINDOWATTRIBUTE>(kDwmwaSystemBackdropType),
+      &backdrop, sizeof(backdrop));
+}
 
 WNDCLASS RegisterWindowClass() {
   WNDCLASS window_class{};
@@ -85,6 +103,7 @@ LRESULT Win32Window::MessageHandler(HWND window, UINT const message,
   switch (message) {
     case WM_CREATE:
       window_handle_ = window;
+      ApplyWindows11Backdrop(window);
       return OnCreate() ? 0 : -1;
     case WM_DESTROY:
       OnDestroy();
@@ -100,6 +119,13 @@ LRESULT Win32Window::MessageHandler(HWND window, UINT const message,
                        SWP_NOZORDER | SWP_NOACTIVATE);
       }
       return 0;
+    case WM_GETMINMAXINFO: {
+      auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
+      const UINT dpi = ::GetDpiForWindow(window);
+      info->ptMinTrackSize.x = ::MulDiv(720, dpi == 0 ? 96 : dpi, 96);
+      info->ptMinTrackSize.y = ::MulDiv(480, dpi == 0 ? 96 : dpi, 96);
+      return 0;
+    }
   }
   return ::DefWindowProc(window, message, wparam, lparam);
 }

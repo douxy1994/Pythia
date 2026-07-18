@@ -35,6 +35,8 @@ class PythiaSettings {
   final String showWindowHotkey;
   final String selectionTranslateHotkey;
   final String screenshotTranslateHotkey;
+  final String screenshotOcrHotkey;
+  final bool screenshotOcrAutoTranslate;
   final String webdavUrl;
   final String webdavUsername;
   final bool webdavHistoryAutoSync;
@@ -70,6 +72,8 @@ class PythiaSettings {
     this.showWindowHotkey = 'Ctrl+Alt+P',
     this.selectionTranslateHotkey = 'Ctrl+Alt+E',
     this.screenshotTranslateHotkey = 'Ctrl+Alt+S',
+    this.screenshotOcrHotkey = 'Ctrl+Alt+Shift+R',
+    this.screenshotOcrAutoTranslate = false,
     this.webdavUrl = '',
     this.webdavUsername = '',
     this.webdavHistoryAutoSync = false,
@@ -106,6 +110,8 @@ class PythiaSettings {
     String? showWindowHotkey,
     String? selectionTranslateHotkey,
     String? screenshotTranslateHotkey,
+    String? screenshotOcrHotkey,
+    bool? screenshotOcrAutoTranslate,
     String? webdavUrl,
     String? webdavUsername,
     bool? webdavHistoryAutoSync,
@@ -150,6 +156,9 @@ class PythiaSettings {
           selectionTranslateHotkey ?? this.selectionTranslateHotkey,
       screenshotTranslateHotkey:
           screenshotTranslateHotkey ?? this.screenshotTranslateHotkey,
+      screenshotOcrHotkey: screenshotOcrHotkey ?? this.screenshotOcrHotkey,
+      screenshotOcrAutoTranslate:
+          screenshotOcrAutoTranslate ?? this.screenshotOcrAutoTranslate,
       webdavUrl: webdavUrl ?? this.webdavUrl,
       webdavUsername: webdavUsername ?? this.webdavUsername,
       webdavHistoryAutoSync:
@@ -201,6 +210,10 @@ class PythiaSettings {
           json['selectionTranslateHotkey'] as String? ?? 'Ctrl+Alt+E',
       screenshotTranslateHotkey:
           json['screenshotTranslateHotkey'] as String? ?? 'Ctrl+Alt+S',
+      screenshotOcrHotkey:
+          json['screenshotOcrHotkey'] as String? ?? 'Ctrl+Alt+Shift+R',
+      screenshotOcrAutoTranslate:
+          json['screenshotOcrAutoTranslate'] as bool? ?? false,
       webdavUrl: json['webdavUrl'] as String? ?? '',
       webdavUsername: json['webdavUsername'] as String? ?? '',
       webdavHistoryAutoSync: json['webdavHistoryAutoSync'] as bool? ?? false,
@@ -239,6 +252,8 @@ class PythiaSettings {
         'showWindowHotkey': showWindowHotkey,
         'selectionTranslateHotkey': selectionTranslateHotkey,
         'screenshotTranslateHotkey': screenshotTranslateHotkey,
+        'screenshotOcrHotkey': screenshotOcrHotkey,
+        'screenshotOcrAutoTranslate': screenshotOcrAutoTranslate,
         'webdavUrl': webdavUrl,
         'webdavUsername': webdavUsername,
         'webdavHistoryAutoSync': webdavHistoryAutoSync,

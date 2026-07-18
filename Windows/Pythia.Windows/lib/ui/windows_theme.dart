@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
-ThemeData pythiaWindowsTheme(Brightness brightness) {
+ThemeData pythiaWindowsTheme(
+  Brightness brightness, {
+  Color accentColor = const Color(0xFF5C9A37),
+}) {
   final colors = ColorScheme.fromSeed(
-    seedColor: const Color(0xFF5C9A37),
+    seedColor: accentColor,
     brightness: brightness,
   );
   const controlRadius = BorderRadius.all(Radius.circular(8));
@@ -10,7 +13,8 @@ ThemeData pythiaWindowsTheme(Brightness brightness) {
     useMaterial3: true,
     brightness: brightness,
     colorScheme: colors,
-    fontFamily: 'Segoe UI',
+    fontFamily: 'Segoe UI Variable',
+    fontFamilyFallback: const ['Segoe UI', 'Arial'],
     visualDensity: VisualDensity.standard,
     scaffoldBackgroundColor: colors.surface,
     canvasColor: colors.surface,
@@ -42,14 +46,14 @@ ThemeData pythiaWindowsTheme(Brightness brightness) {
       space: 1,
     ),
     cardTheme: CardThemeData(
-      color: colors.surfaceContainer,
+      color: colors.surfaceContainerLow,
       surfaceTintColor: Colors.transparent,
       elevation: 1,
       shape: const RoundedRectangleBorder(borderRadius: controlRadius),
       margin: const EdgeInsets.symmetric(vertical: 4),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: colors.surface,
+      backgroundColor: colors.surface.withValues(alpha: 0.98),
       surfaceTintColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.all(Radius.circular(12)),
@@ -63,6 +67,36 @@ ThemeData pythiaWindowsTheme(Brightness brightness) {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         shape: const RoundedRectangleBorder(borderRadius: controlRadius),
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: ButtonStyle(
+        shape: const WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: controlRadius),
+        ),
+        overlayColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.pressed)) {
+            return colors.primary.withValues(alpha: 0.18);
+          }
+          if (states.contains(WidgetState.hovered)) {
+            return colors.primary.withValues(alpha: 0.10);
+          }
+          return null;
+        }),
+      ),
+    ),
+    navigationRailTheme: NavigationRailThemeData(
+      backgroundColor: colors.surfaceContainerLowest,
+      indicatorColor: colors.primaryContainer,
+      indicatorShape: const RoundedRectangleBorder(
+        borderRadius: controlRadius,
+      ),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: colors.surfaceContainerLowest,
+      indicatorColor: colors.primaryContainer,
+      indicatorShape: const RoundedRectangleBorder(
+        borderRadius: controlRadius,
       ),
     ),
   );

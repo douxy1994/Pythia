@@ -21,6 +21,31 @@ class _HistoryRepository implements HistoryRepository {
 }
 
 void main() {
+  for (final scale in <double>[1.0, 1.25, 1.5, 2.0]) {
+    testWidgets('settings shell does not overflow at ${scale * 100}% DPI',
+        (tester) async {
+      tester.view.devicePixelRatio = scale;
+      tester.view.physicalSize = const Size(1180, 760);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SettingsDialog(
+            settings: const PythiaSettings(),
+            credentialStore: const UnsupportedCredentialStore(),
+            historyRepository: _HistoryRepository(),
+            pluginManager: null,
+          ),
+        ),
+      ));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Pythia 设置'), findsOneWidget);
+      expect(find.text('保存历史记录'), findsOneWidget);
+    });
+  }
+
   testWidgets(
       'settings uses navigable sections without overflowing at 150% DPI',
       (tester) async {
@@ -42,6 +67,7 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Pythia 设置'), findsOneWidget);
+    expect(find.text('OCR'), findsOneWidget);
     expect(find.text('保存历史记录'), findsOneWidget);
     expect(find.text('启用 Google 翻译'), findsNothing);
 

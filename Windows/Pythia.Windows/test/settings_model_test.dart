@@ -2,6 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pythia_windows/core/settings_model.dart';
 
 void main() {
+  test('uses a non-conflicting screenshot OCR default hotkey', () {
+    expect(const PythiaSettings().screenshotOcrHotkey, 'Ctrl+Alt+Shift+R');
+    expect(
+      PythiaSettings.fromJson(const {}).screenshotOcrHotkey,
+      'Ctrl+Alt+Shift+R',
+    );
+  });
+
   test('persists the Windows notification preference', () {
     const settings = PythiaSettings(notificationsEnabled: false);
 
@@ -92,6 +100,8 @@ void main() {
       showWindowHotkey: 'Ctrl+Alt+P',
       selectionTranslateHotkey: 'Ctrl+Shift+E',
       screenshotTranslateHotkey: 'Ctrl+Shift+S',
+      screenshotOcrHotkey: 'Ctrl+Shift+R',
+      screenshotOcrAutoTranslate: true,
     );
 
     final restored = PythiaSettings.fromJson(settings.toJson());
@@ -102,5 +112,7 @@ void main() {
     expect(restored.showWindowHotkey, 'Ctrl+Alt+P');
     expect(restored.selectionTranslateHotkey, 'Ctrl+Shift+E');
     expect(restored.screenshotTranslateHotkey, 'Ctrl+Shift+S');
+    expect(restored.screenshotOcrHotkey, 'Ctrl+Shift+R');
+    expect(restored.screenshotOcrAutoTranslate, isTrue);
   });
 }

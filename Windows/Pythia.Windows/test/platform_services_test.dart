@@ -88,6 +88,53 @@ void main() {
     );
   });
 
+  test('system appearance methods use the stable native contract', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      if (call.method == 'theme.getSystemPreferences') {
+        return <Object?, Object?>{
+          'accentArgb': 0xFF0078D4,
+          'animationsEnabled': false,
+        };
+      }
+      return null;
+    });
+    const service = MethodChannelWindowsPlatformService();
+
+    final preferences = await service.getSystemPreferences();
+    await service.applyWindowAppearance(darkMode: true);
+
+    expect(preferences.accentArgb, 0xFF0078D4);
+    expect(preferences.animationsEnabled, isFalse);
+    expect(calls.map((call) => call.method), [
+      'theme.getSystemPreferences',
+      'theme.applyWindowAppearance',
+    ]);
+    expect(calls.last.arguments, {'darkMode': true});
+  });
+
+  test('platform error codes remain available to OCR callers', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      throw PlatformException(
+        code: 'ocr_cancelled',
+        message: 'Capture cancelled.',
+      );
+    });
+    const service = MethodChannelWindowsPlatformService();
+
+    expect(
+      service.captureAndRecognize(translateAfterRecognition: false),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          'ocr_cancelled',
+        ),
+      ),
+    );
+  });
+
   test('update installer uses the native launch contract', () async {
     MethodCall? received;
     messenger.setMockMethodCallHandler(channel, (call) async {

@@ -3,6 +3,7 @@
 #include <flutter/encodable_value.h>
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
+#include <dwmapi.h>
 #include <shellapi.h>
 #include <sapi.h>
 #include <softpub.h>
@@ -46,6 +47,7 @@ constexpr wchar_t kWindowPlacementValueName[] = L"WindowPlacement";
 constexpr UINT_PTR kTrayIconId = 1;
 constexpr UINT kTrayCallbackMessage = WM_APP + 0x504;
 constexpr int kHotKeyBaseId = 0x5040;
+constexpr DWORD kDwmwaUseImmersiveDarkMode = 20;
 
 HWND g_window = nullptr;
 WNDPROC g_original_wnd_proc = nullptr;
@@ -355,6 +357,47 @@ std::wstring Utf8ToWide(const std::string& value) {
   return result;
 }
 
+void GetSystemPreferences(
+    std::unique_ptr<MethodResult<EncodableValue>> result) {
+  DWORD colorization = 0xFF5C9A37;
+  BOOL opaque = FALSE;
+  if (FAILED(::DwmGetColorizationColor(&colorization, &opaque))) {
+    colorization = 0xFF5C9A37;
+  }
+  colorization = 0xFF000000 | (colorization & 0x00FFFFFF);
+
+  BOOL animations_enabled = TRUE;
+  if (!::SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0,
+                               &animations_enabled, 0)) {
+    animations_enabled = TRUE;
+  }
+
+  EncodableMap preferences;
+  preferences[EncodableValue("accentArgb")] =
+      EncodableValue(static_cast<int64_t>(colorization));
+  preferences[EncodableValue("animationsEnabled")] =
+      EncodableValue(animations_enabled == TRUE);
+  result->Success(EncodableValue(preferences));
+}
+
+void ApplyWindowAppearance(
+    HWND window, const MethodCall<EncodableValue>& call,
+    std::unique_ptr<MethodResult<EncodableValue>> result) {
+  const auto dark_mode = BoolArg(call.arguments(), "darkMode");
+  if (!dark_mode.has_value()) {
+    result->Error("invalid_args", "Missing darkMode flag.");
+    return;
+  }
+  const BOOL enabled = *dark_mode ? TRUE : FALSE;
+  // Older Windows versions safely ignore this Windows 10/11 DWM attribute.
+  ::DwmSetWindowAttribute(
+      window, static_cast<DWMWINDOWATTRIBUTE>(kDwmwaUseImmersiveDarkMode),
+      &enabled, sizeof(enabled));
+  ::RedrawWindow(window, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_FRAME | RDW_UPDATENOW);
+  result->Success();
+}
+
 void SpeakText(const MethodCall<EncodableValue>& call,
                std::unique_ptr<MethodResult<EncodableValue>> result) {
   const auto text = StringArg(call.arguments(), "text");
@@ -611,27 +654,33 @@ bool EnsurePlacementVisible(WINDOWPLACEMENT* placement) {
     return false;
   }
   RECT rect = placement->rcNormalPosition;
-  if (::MonitorFromRect(&rect, MONITOR_DEFAULTTONULL) != nullptr) {
-    return true;
-  }
-
   MONITORINFO monitor_info = {};
   monitor_info.cbSize = sizeof(MONITORINFO);
-  if (!::GetMonitorInfoW(::MonitorFromWindow(nullptr, MONITOR_DEFAULTTOPRIMARY),
-                         &monitor_info)) {
+  const HMONITOR monitor =
+      ::MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST);
+  if (monitor == nullptr || !::GetMonitorInfoW(monitor, &monitor_info)) {
     return false;
   }
 
-  const LONG width = rect.right - rect.left;
-  const LONG height = rect.bottom - rect.top;
   const RECT work = monitor_info.rcWork;
-  placement->rcNormalPosition.left = work.left + 80;
-  placement->rcNormalPosition.top = work.top + 80;
-  placement->rcNormalPosition.right =
-      placement->rcNormalPosition.left + std::max<LONG>(width, 800);
-  placement->rcNormalPosition.bottom =
-      placement->rcNormalPosition.top + std::max<LONG>(height, 520);
-  placement->showCmd = SW_SHOWNORMAL;
+  const LONG available_width = work.right - work.left;
+  const LONG available_height = work.bottom - work.top;
+  const LONG minimum_width = std::min<LONG>(720, available_width);
+  const LONG minimum_height = std::min<LONG>(480, available_height);
+  const LONG width =
+      std::clamp<LONG>(rect.right - rect.left, minimum_width, available_width);
+  const LONG height =
+      std::clamp<LONG>(rect.bottom - rect.top, minimum_height, available_height);
+  const LONG left =
+      std::clamp<LONG>(rect.left, work.left, work.right - width);
+  const LONG top =
+      std::clamp<LONG>(rect.top, work.top, work.bottom - height);
+  placement->rcNormalPosition = {left, top, left + width, top + height};
+  if (placement->showCmd == SW_SHOWMINIMIZED ||
+      placement->showCmd == SW_MINIMIZE ||
+      placement->showCmd == SW_SHOWMINNOACTIVE) {
+    placement->showCmd = SW_SHOWNORMAL;
+  }
   return true;
 }
 
@@ -829,8 +878,11 @@ void RegisterHotKeyAction(
   EnsureWindowSubclass(window);
   const int id = g_next_hotkey_id++;
   if (!::RegisterHotKey(window, id, parsed->first, parsed->second)) {
+    const DWORD error = ::GetLastError();
     result->Error("hotkey_register_failed",
-                  "Unable to register Windows global hotkey.");
+                  "Unable to register Windows global hotkey '" +
+                      *accelerator + "'. It may already be in use.",
+                  EncodableValue(static_cast<int64_t>(error)));
     return;
   }
   g_hotkey_actions[id] = *action;
@@ -912,6 +964,10 @@ void RegisterPythiaPlatformChannel(flutter::BinaryMessenger* messenger,
           RestoreWindowPlacement(window, std::move(result));
         } else if (method == "window.savePlacement") {
           SaveWindowPlacement(window, std::move(result));
+        } else if (method == "theme.getSystemPreferences") {
+          GetSystemPreferences(std::move(result));
+        } else if (method == "theme.applyWindowAppearance") {
+          ApplyWindowAppearance(window, call, std::move(result));
         } else if (method == "screenshot.captureAndRecognize") {
           const auto ocr = CaptureSelectionAndRecognize(window);
           if (ocr.succeeded()) {
