@@ -16,6 +16,66 @@ const longText = Array.from({ length: 96 }, (_, index) => (
   + "so the splitter can choose a semantic boundary instead of cutting a Unicode character."
 )).join("\n\n");
 
+const wrapperSource = readFileSync(
+  join(pluginsRoot, "Sources", "shared", "long-text-wrapper.js"),
+  "utf8",
+);
+let observedChunks = [];
+const wrapperModule = { exports: {} };
+const wrapperSandbox = vm.createContext({
+  module: wrapperModule,
+  exports: wrapperModule.exports,
+  translate: async (text) => {
+    observedChunks.push(text);
+    return text;
+  },
+  console,
+  URL,
+  URLSearchParams,
+  TextEncoder,
+  TextDecoder,
+  AbortController,
+  AbortSignal,
+  Headers,
+  setTimeout,
+  clearTimeout,
+});
+new vm.Script(wrapperSource, { filename: "long-text-wrapper.js" }).runInContext(wrapperSandbox);
+
+for (const numericToken of [
+  "1.24",
+  "-1.24",
+  ".24",
+  "1,240.50",
+  "1\u202F240,50",
+  "2026-07-19",
+  "6.02e-23",
+]) {
+  observedChunks = [];
+  const prefixLength = 1798;
+  const source = `${"A".repeat(prefixLength)}${numericToken}${"B".repeat(1900)}`;
+  const result = await wrapperModule.exports.translate({
+    schemaVersion: "1.0",
+    requestId: `numeric-boundary-${numericToken}`,
+    type: "translate",
+    input: {
+      text: source,
+      sourceLanguage: "en",
+      targetLanguage: "zh-CN",
+      detectedLanguage: "en",
+    },
+  }, {
+    config: Object.freeze({}),
+    signal: new AbortController().signal,
+    fetch: async () => { throw new Error("fixture must not use fetch"); },
+  });
+  assert.equal(result, source, `${numericToken} changed during chunk recombination`);
+  assert.ok(
+    observedChunks.some((chunk) => chunk.includes(numericToken)),
+    `${numericToken} was split across translation chunks`,
+  );
+}
+
 function defaultConfiguration(manifest) {
   return Object.fromEntries(manifest.configuration.map((field) => [
     field.key,
