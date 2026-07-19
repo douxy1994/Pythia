@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-16",
+  "generatedAt": "2026-07-19",
   "pythiaVersion": "1.0.0",
   "containsCredentials": false,
   "packages": [
     {
       "id": "plugin.com.pot-app.aliyun-qwen3-5-35b-a3b",
       "name": "阿里云 Qwen3.5-35B-A3B",
-      "version": "1.1.0",
-      "file": "aliyun-qwen3.5-35b-a3b-1.1.0.pythia",
-      "sha256": "b88e3cec01465d9c633f726df96b6af5fc3520c11b7b118341b535e351c3456e",
+      "version": "1.1.1",
+      "file": "aliyun-qwen3.5-35b-a3b-1.1.1.pythia",
+      "sha256": "6d741a87726be5a0357146399d1ad02b88c4894d105c555ebd5654e574a9fda1",
       "supportedPlatforms": [
         "macos",
         "windows"
@@ -18,9 +18,9 @@
     {
       "id": "plugin.com.TzuLao.deepseek",
       "name": "DeepSeek",
-      "version": "1.1.0",
-      "file": "deepseek-1.1.0.pythia",
-      "sha256": "645a7cff955869621214794ca4d84aff6389c67603ca67de69cbe59fde3c91af",
+      "version": "1.1.1",
+      "file": "deepseek-1.1.1.pythia",
+      "sha256": "84bb00d0b97bcdbae504d30cc3cee751681d5aa915bb8bfe84b8ef65080d539c",
       "supportedPlatforms": [
         "macos",
         "windows"
@@ -30,9 +30,9 @@
     {
       "id": "plugin.com.pot-app.qiniu-glm-4-5-air-free",
       "name": "七牛 GLM 4.5 Air (free)",
-      "version": "1.1.0",
-      "file": "qiniu-glm-4.5-air-free-1.1.0.pythia",
-      "sha256": "e217bd4cb42354f3e961ca0b32f5783ebaf84d8aca2dbfab0d1b1e2915459edb",
+      "version": "1.1.1",
+      "file": "qiniu-glm-4.5-air-free-1.1.1.pythia",
+      "sha256": "2ea5cf4a6a6424458d3a0b1e83816fc361fed6dd070d8c21b45540c1f58728f9",
       "supportedPlatforms": [
         "macos",
         "windows"
@@ -41,9 +41,9 @@
     {
       "id": "plugin.com.pot-app.sensenova",
       "name": "SenseNova",
-      "version": "1.1.0",
-      "file": "sensenova-1.1.0.pythia",
-      "sha256": "d138d23c52b4a2a1e1e3ed8a02011efe12e2c9f4dfc350a797c320a2a56edb39",
+      "version": "1.1.1",
+      "file": "sensenova-1.1.1.pythia",
+      "sha256": "bd1a34b5fed474a0105fd9a7308c23ffa43791cde6b9d84747c9f8e41de0472c",
       "supportedPlatforms": [
         "macos",
         "windows"
@@ -53,9 +53,9 @@
     {
       "id": "plugin.com.xuabi.siliconflow",
       "name": "SiliconFlow",
-      "version": "1.1.0",
-      "file": "siliconflow-1.1.0.pythia",
-      "sha256": "b63777aafe5a8e432a51b44f99ceccf3f19f240fd41759f646f8b9fca8bd835c",
+      "version": "1.1.1",
+      "file": "siliconflow-1.1.1.pythia",
+      "sha256": "a06fd5af3bb6e63866d1a28fd3fa613c84f8493f536517ab21f7172528f353af",
       "supportedPlatforms": [
         "macos",
         "windows"
@@ -65,9 +65,9 @@
     {
       "id": "plugin.com.xiaomi.mimo",
       "name": "Xiaomi MiMo",
-      "version": "1.1.0",
-      "file": "xiaomi-mimo-1.1.0.pythia",
-      "sha256": "acc2ef098cafc492bab618720c341b968731a0827365d0cecaafc73ee474fac0",
+      "version": "1.1.1",
+      "file": "xiaomi-mimo-1.1.1.pythia",
+      "sha256": "0aaa058dddb81f230bdc49a19a32712b4ceb2928c31e126b72ff4d219b741a5a",
       "supportedPlatforms": [
         "macos",
         "windows"
