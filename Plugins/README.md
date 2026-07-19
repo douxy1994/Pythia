@@ -4,7 +4,7 @@
 
 ## English
 
-This directory contains separately downloadable `.pythia` translation plugins for Pythia 1.0.0. They are not bundled with the Pythia application or installer. Version 1.1.0 translates long documents in bounded semantic chunks and retries transient network, timeout, rate-limit, and provider 5xx failures without changing plugin IDs or configuration keys.
+This directory contains separately downloadable `.pythia` translation plugins for Pythia 1.0.0. They are not bundled with the Pythia application or installer. Version 1.1.1 translates long documents in bounded semantic chunks, keeps decimal numbers, dates, times, versions, and scientific notation intact at chunk boundaries, and retries transient network, timeout, rate-limit, and provider 5xx failures without changing plugin IDs or configuration keys.
 
 Each package was rebuilt from a locally converted compatibility plugin and contains only:
 
@@ -29,12 +29,12 @@ The packages do **not** contain API keys, passwords, WebDAV credentials, user hi
 
 | Plugin | Package | SHA-256 | Source attribution |
 | --- | --- | --- | --- |
-| Alibaba Cloud Qwen3.5-35B-A3B | [Download](aliyun-qwen3.5-35b-a3b-1.1.0.pythia) | `b88e3cec01465d9c633f726df96b6af5fc3520c11b7b118341b535e351c3456e` | Legacy metadata: `pot-app` |
-| DeepSeek | [Download](deepseek-1.1.0.pythia) | `645a7cff955869621214794ca4d84aff6389c67603ca67de69cbe59fde3c91af` | [Tzulao55](https://github.com/Tzulao55/pot-app-translate-plugin-deepseek) |
-| Qiniu GLM 4.5 Air (free) | [Download](qiniu-glm-4.5-air-free-1.1.0.pythia) | `e217bd4cb42354f3e961ca0b32f5783ebaf84d8aca2dbfab0d1b1e2915459edb` | Legacy metadata: `pot-app` |
-| SenseNova | [Download](sensenova-1.1.0.pythia) | `d138d23c52b4a2a1e1e3ed8a02011efe12e2c9f4dfc350a797c320a2a56edb39` | [SenseNova Platform](https://platform.sensenova.cn) |
-| SiliconFlow | [Download](siliconflow-1.1.0.pythia) | `b63777aafe5a8e432a51b44f99ceccf3f19f240fd41759f646f8b9fca8bd835c` | [xubai2001](https://github.com/xubai2001/pot-app-translate-plugin-siliconflow) |
-| Xiaomi MiMo | [Download](xiaomi-mimo-1.1.0.pythia) | `acc2ef098cafc492bab618720c341b968731a0827365d0cecaafc73ee474fac0` | [Xiaomi MiMo API](https://platform.xiaomimimo.com/docs/zh-CN/api/chat/openai-api) |
+| Alibaba Cloud Qwen3.5-35B-A3B | [Download](aliyun-qwen3.5-35b-a3b-1.1.1.pythia) | `6d741a87726be5a0357146399d1ad02b88c4894d105c555ebd5654e574a9fda1` | Legacy metadata: `pot-app` |
+| DeepSeek | [Download](deepseek-1.1.1.pythia) | `84bb00d0b97bcdbae504d30cc3cee751681d5aa915bb8bfe84b8ef65080d539c` | [Tzulao55](https://github.com/Tzulao55/pot-app-translate-plugin-deepseek) |
+| Qiniu GLM 4.5 Air (free) | [Download](qiniu-glm-4.5-air-free-1.1.1.pythia) | `2ea5cf4a6a6424458d3a0b1e83816fc361fed6dd070d8c21b45540c1f58728f9` | Legacy metadata: `pot-app` |
+| SenseNova | [Download](sensenova-1.1.1.pythia) | `bd1a34b5fed474a0105fd9a7308c23ffa43791cde6b9d84747c9f8e41de0472c` | [SenseNova Platform](https://platform.sensenova.cn) |
+| SiliconFlow | [Download](siliconflow-1.1.1.pythia) | `a06fd5af3bb6e63866d1a28fd3fa613c84f8493f536517ab21f7172528f353af` | [xubai2001](https://github.com/xubai2001/pot-app-translate-plugin-siliconflow) |
+| Xiaomi MiMo | [Download](xiaomi-mimo-1.1.1.pythia) | `0aaa058dddb81f230bdc49a19a32712b4ceb2928c31e126b72ff4d219b741a5a` | [Xiaomi MiMo API](https://platform.xiaomimimo.com/docs/zh-CN/api/chat/openai-api) |
 
 The machine-readable catalog is [`catalog.json`](catalog.json).
 
@@ -43,13 +43,13 @@ The machine-readable catalog is [`catalog.json`](catalog.json).
 PowerShell:
 
 ```powershell
-(Get-FileHash -Algorithm SHA256 .\deepseek-1.1.0.pythia).Hash.ToLowerInvariant()
+(Get-FileHash -Algorithm SHA256 .\deepseek-1.1.1.pythia).Hash.ToLowerInvariant()
 ```
 
 macOS:
 
 ```sh
-shasum -a 256 deepseek-1.1.0.pythia
+shasum -a 256 deepseek-1.1.1.pythia
 ```
 
 ### Scope and Support
@@ -64,7 +64,7 @@ shasum -a 256 deepseek-1.1.0.pythia
 
 ## 简体中文
 
-本目录提供可单独下载的 Pythia 1.0.0 `.pythia` 翻译插件。它们不会捆绑在 Pythia 应用或安装程序中。1.1.0 版会把长文按语义边界分成受控片段顺序翻译，并自动重试瞬时网络错误、超时、限流和服务端 5xx；插件 ID 与配置字段保持不变。
+本目录提供可单独下载的 Pythia 1.0.0 `.pythia` 翻译插件。它们不会捆绑在 Pythia 应用或安装程序中。1.1.1 版会把长文按语义边界分成受控片段顺序翻译，确保小数、日期、时间、版本号和科学计数法不会在片段边界被拆开，并自动重试瞬时网络错误、超时、限流和服务端 5xx；插件 ID 与配置字段保持不变。
 
 每个包都从本机已经转换的兼容插件重新整理，只包含：
 
@@ -89,12 +89,12 @@ shasum -a 256 deepseek-1.1.0.pythia
 
 | 插件 | 下载 | SHA-256 | 来源说明 |
 | --- | --- | --- | --- |
-| 阿里云 Qwen3.5-35B-A3B | [下载](aliyun-qwen3.5-35b-a3b-1.1.0.pythia) | `b88e3cec01465d9c633f726df96b6af5fc3520c11b7b118341b535e351c3456e` | 旧插件元数据：`pot-app` |
-| DeepSeek | [下载](deepseek-1.1.0.pythia) | `645a7cff955869621214794ca4d84aff6389c67603ca67de69cbe59fde3c91af` | [Tzulao55](https://github.com/Tzulao55/pot-app-translate-plugin-deepseek) |
-| 七牛 GLM 4.5 Air（free） | [下载](qiniu-glm-4.5-air-free-1.1.0.pythia) | `e217bd4cb42354f3e961ca0b32f5783ebaf84d8aca2dbfab0d1b1e2915459edb` | 旧插件元数据：`pot-app` |
-| SenseNova | [下载](sensenova-1.1.0.pythia) | `d138d23c52b4a2a1e1e3ed8a02011efe12e2c9f4dfc350a797c320a2a56edb39` | [SenseNova 平台](https://platform.sensenova.cn) |
-| SiliconFlow | [下载](siliconflow-1.1.0.pythia) | `b63777aafe5a8e432a51b44f99ceccf3f19f240fd41759f646f8b9fca8bd835c` | [xubai2001](https://github.com/xubai2001/pot-app-translate-plugin-siliconflow) |
-| Xiaomi MiMo | [下载](xiaomi-mimo-1.1.0.pythia) | `acc2ef098cafc492bab618720c341b968731a0827365d0cecaafc73ee474fac0` | [Xiaomi MiMo API](https://platform.xiaomimimo.com/docs/zh-CN/api/chat/openai-api) |
+| 阿里云 Qwen3.5-35B-A3B | [下载](aliyun-qwen3.5-35b-a3b-1.1.1.pythia) | `6d741a87726be5a0357146399d1ad02b88c4894d105c555ebd5654e574a9fda1` | 旧插件元数据：`pot-app` |
+| DeepSeek | [下载](deepseek-1.1.1.pythia) | `84bb00d0b97bcdbae504d30cc3cee751681d5aa915bb8bfe84b8ef65080d539c` | [Tzulao55](https://github.com/Tzulao55/pot-app-translate-plugin-deepseek) |
+| 七牛 GLM 4.5 Air（free） | [下载](qiniu-glm-4.5-air-free-1.1.1.pythia) | `2ea5cf4a6a6424458d3a0b1e83816fc361fed6dd070d8c21b45540c1f58728f9` | 旧插件元数据：`pot-app` |
+| SenseNova | [下载](sensenova-1.1.1.pythia) | `bd1a34b5fed474a0105fd9a7308c23ffa43791cde6b9d84747c9f8e41de0472c` | [SenseNova 平台](https://platform.sensenova.cn) |
+| SiliconFlow | [下载](siliconflow-1.1.1.pythia) | `a06fd5af3bb6e63866d1a28fd3fa613c84f8493f536517ab21f7172528f353af` | [xubai2001](https://github.com/xubai2001/pot-app-translate-plugin-siliconflow) |
+| Xiaomi MiMo | [下载](xiaomi-mimo-1.1.1.pythia) | `0aaa058dddb81f230bdc49a19a32712b4ceb2928c31e126b72ff4d219b741a5a` | [Xiaomi MiMo API](https://platform.xiaomimimo.com/docs/zh-CN/api/chat/openai-api) |
 
 机器可读目录是 [`catalog.json`](catalog.json)。
 
@@ -103,13 +103,13 @@ shasum -a 256 deepseek-1.1.0.pythia
 PowerShell：
 
 ```powershell
-(Get-FileHash -Algorithm SHA256 .\deepseek-1.1.0.pythia).Hash.ToLowerInvariant()
+(Get-FileHash -Algorithm SHA256 .\deepseek-1.1.1.pythia).Hash.ToLowerInvariant()
 ```
 
 macOS：
 
 ```sh
-shasum -a 256 deepseek-1.1.0.pythia
+shasum -a 256 deepseek-1.1.1.pythia
 ```
 
 ### 范围与说明

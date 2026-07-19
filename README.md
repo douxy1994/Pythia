@@ -40,12 +40,12 @@ Pythia does not bundle third-party plugins in the application or installer. The 
 
 | Plugin | Download | Credentials required |
 | --- | --- | --- |
-| Alibaba Cloud Qwen3.5-35B-A3B | [`.pythia`](Plugins/aliyun-qwen3.5-35b-a3b-1.1.0.pythia) | Alibaba Cloud Model Studio API Key |
-| DeepSeek | [`.pythia`](Plugins/deepseek-1.1.0.pythia) | DeepSeek API Key |
-| Qiniu GLM 4.5 Air (free) | [`.pythia`](Plugins/qiniu-glm-4.5-air-free-1.1.0.pythia) | Qiniu API Key |
-| SenseNova | [`.pythia`](Plugins/sensenova-1.1.0.pythia) | SenseNova API Key |
-| SiliconFlow | [`.pythia`](Plugins/siliconflow-1.1.0.pythia) | SiliconFlow API Key |
-| Xiaomi MiMo | [`.pythia`](Plugins/xiaomi-mimo-1.1.0.pythia) | Xiaomi MiMo API Key |
+| Alibaba Cloud Qwen3.5-35B-A3B | [`.pythia`](Plugins/aliyun-qwen3.5-35b-a3b-1.1.1.pythia) | Alibaba Cloud Model Studio API Key |
+| DeepSeek | [`.pythia`](Plugins/deepseek-1.1.1.pythia) | DeepSeek API Key |
+| Qiniu GLM 4.5 Air (free) | [`.pythia`](Plugins/qiniu-glm-4.5-air-free-1.1.1.pythia) | Qiniu API Key |
+| SenseNova | [`.pythia`](Plugins/sensenova-1.1.1.pythia) | SenseNova API Key |
+| SiliconFlow | [`.pythia`](Plugins/siliconflow-1.1.1.pythia) | SiliconFlow API Key |
+| Xiaomi MiMo | [`.pythia`](Plugins/xiaomi-mimo-1.1.1.pythia) | Xiaomi MiMo API Key |
 
 Install a package from **Settings > Plugins > Install Plugin**. Configure credentials inside Pythia after installation. The packages contain no user credentials, API keys, WebDAV settings, history, or local machine paths.
 

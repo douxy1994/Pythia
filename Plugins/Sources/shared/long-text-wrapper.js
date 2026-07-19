@@ -64,6 +64,79 @@ function __pythiaSleep(delay, signal) {
   });
 }
 
+function __pythiaIsDigit(character) {
+  return typeof character === "string" && /^\p{Nd}$/u.test(character);
+}
+
+function __pythiaIsNumericSeparator(character) {
+  return typeof character === "string"
+    && ".,，．:/：／-－'’ \u00A0\u202F".includes(character);
+}
+
+function __pythiaIsNumericSign(character) {
+  return typeof character === "string" && "+-−＋－".includes(character);
+}
+
+function __pythiaWouldSplitNumber(text, index) {
+  const before = text[index - 1] || "";
+  const after = text[index] || "";
+  const beforeBefore = text[index - 2] || "";
+  const afterAfter = text[index + 1] || "";
+  const threeBefore = text[index - 3] || "";
+  const twoAfter = text[index + 2] || "";
+
+  if (__pythiaIsDigit(before) && __pythiaIsDigit(after)) return true;
+
+  // Keep decimal points, thousands separators, dates, times and version-like
+  // numeric paths intact on both sides of the separator.
+  if (__pythiaIsDigit(before) && __pythiaIsNumericSeparator(after) && __pythiaIsDigit(afterAfter)) {
+    return true;
+  }
+  if (__pythiaIsNumericSeparator(before) && __pythiaIsDigit(beforeBefore) && __pythiaIsDigit(after)) {
+    return true;
+  }
+  if (".,，．".includes(before) && __pythiaIsDigit(after)) return true;
+  if (__pythiaIsNumericSign(before) && __pythiaIsDigit(after)) return true;
+
+  // Scientific notation is one numeric token as well: 6.02e-23.
+  if (__pythiaIsDigit(before) && /[eE]/.test(after)
+      && (__pythiaIsDigit(afterAfter) || (/[+-]/.test(afterAfter) && __pythiaIsDigit(twoAfter)))) {
+    return true;
+  }
+  if (/[eE]/.test(before) && __pythiaIsDigit(beforeBefore)
+      && (__pythiaIsDigit(after) || (/[+-]/.test(after) && __pythiaIsDigit(afterAfter)))) {
+    return true;
+  }
+  if (/[+-]/.test(before) && /[eE]/.test(beforeBefore)
+      && __pythiaIsDigit(threeBefore) && __pythiaIsDigit(after)) {
+    return true;
+  }
+
+  return false;
+}
+
+function __pythiaIsSafeSplitPoint(text, index) {
+  if (index <= 0 || index >= text.length) return true;
+  const previous = text.charCodeAt(index - 1);
+  const next = text.charCodeAt(index);
+  if (previous >= 0xD800 && previous <= 0xDBFF && next >= 0xDC00 && next <= 0xDFFF) {
+    return false;
+  }
+  return !__pythiaWouldSplitNumber(text, index);
+}
+
+function __pythiaSafeChunkEnd(text, cursor, proposedEnd) {
+  let end = proposedEnd;
+  while (end > cursor && !__pythiaIsSafeSplitPoint(text, end)) end -= 1;
+  if (end > cursor) return end;
+
+  // A pathological numeric token may itself exceed the nominal limit. In
+  // that case preserving its meaning is more important than the soft limit.
+  end = proposedEnd;
+  while (end < text.length && !__pythiaIsSafeSplitPoint(text, end)) end += 1;
+  return end;
+}
+
 function __pythiaSplitText(text, limit = __PYTHIA_CHUNK_LIMIT) {
   if (text.length <= limit) return [text];
   const chunks = [];
@@ -82,16 +155,15 @@ function __pythiaSplitText(text, limit = __PYTHIA_CHUNK_LIMIT) {
     let preferredEnd = -1;
     while ((match = boundaryPattern.exec(window)) !== null) {
       const candidate = match.index + match[0].length;
-      if (candidate >= minimumBoundary) preferredEnd = candidate;
+      const absoluteCandidate = cursor + candidate;
+      if (candidate >= minimumBoundary && __pythiaIsSafeSplitPoint(text, absoluteCandidate)) {
+        preferredEnd = candidate;
+      }
       if (match[0].length === 0) boundaryPattern.lastIndex += 1;
     }
 
     let end = preferredEnd > 0 ? cursor + preferredEnd : hardEnd;
-    const previous = text.charCodeAt(end - 1);
-    const next = text.charCodeAt(end);
-    if (previous >= 0xD800 && previous <= 0xDBFF && next >= 0xDC00 && next <= 0xDFFF) {
-      end -= 1;
-    }
+    end = __pythiaSafeChunkEnd(text, cursor, end);
     if (end <= cursor) end = hardEnd;
     chunks.push(text.slice(cursor, end));
     cursor = end;
