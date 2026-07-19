@@ -1123,6 +1123,48 @@ final class PluginManager {
         }
     }
 
+    // MARK: - Plugin language mapping
+
+    /// Pot-style language-table keys use snake_case (`zh_cn`), while the host
+    /// UI uses BCP-47 (`zh-CN`). Alias the host codes onto the plugin keys.
+    private static let pluginLanguageKeyAliases: [String: String] = [
+        "zh-cn": "zh_cn", "zh-hans": "zh_cn", "zh-hans-cn": "zh_cn",
+        "zh-tw": "zh_tw", "zh-hant": "zh_tw", "zh-hk": "zh_tw", "zh-mo": "zh_tw",
+        "pt": "pt_pt", "pt-pt": "pt_pt", "pt-br": "pt_br",
+        "nb": "nb_no", "nb-no": "nb_no", "nn": "nn_no", "nn-no": "nn_no",
+        "mn-cy": "mn_cy", "mn-mo": "mn_mo",
+    ]
+
+    /// Natural-language names for every language code the host UI can produce;
+    /// used when a plugin bundle carries no info.json language table.
+    private static let hostLanguageNames: [String: String] = [
+        "auto": "auto",
+        "zh-CN": "Simplified Chinese", "zh-TW": "Traditional Chinese",
+        "en": "English", "ja": "Japanese", "ko": "Korean", "fr": "French",
+        "de": "German", "es": "Spanish", "it": "Italian", "pt": "Portuguese",
+        "ru": "Russian", "ar": "Arabic", "hi": "Hindi",
+    ]
+
+    private static func legacyLanguageTable(in directory: URL) -> [String: String] {
+        guard let data = try? Data(contentsOf: directory.appendingPathComponent("info.json")),
+              let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let language = info["language"] as? [String: String] else {
+            return [:]
+        }
+        return language
+    }
+
+    static func mapLanguageForPlugin(_ code: String, languageTable: [String: String]) -> String {
+        guard !code.isEmpty else { return code }
+        if let mapped = languageTable[code] { return mapped }
+        let lowered = code.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "-")
+        let normalized = pluginLanguageKeyAliases[lowered] ?? lowered.replacingOccurrences(of: "-", with: "_")
+        if let mapped = languageTable[normalized] { return mapped }
+        return hostLanguageNames[code] ?? code
+    }
+
     private func runPythiaPlugin(
         _ plugin: CommandPlugin,
         text: String,
@@ -1147,6 +1189,14 @@ final class PluginManager {
                 ) else {
                     throw TranslationError.requestFailed("未找到 Node.js 运行环境，无法执行 .pythia JavaScript 插件。")
                 }
+                // The .pythia pipeline forwards request languages verbatim,
+                // bypassing the legacy runner's info.json language table. Map
+                // codes to natural-language names here, or plugin prompts
+                // receive a bare code like "zh-CN" that some models ignore
+                // (echoing the source language instead of translating).
+                let languageTable = Self.legacyLanguageTable(in: URL(fileURLWithPath: directory))
+                let mappedSource = Self.mapLanguageForPlugin(sourceLanguage, languageTable: languageTable)
+                let mappedTarget = Self.mapLanguageForPlugin(targetLanguage, languageTable: languageTable)
                 let requestID = UUID().uuidString
                 let request: [String: Any] = [
                     "schemaVersion": "1.0",
@@ -1154,9 +1204,9 @@ final class PluginManager {
                     "type": "translate",
                     "input": [
                         "text": text,
-                        "sourceLanguage": sourceLanguage,
-                        "targetLanguage": targetLanguage,
-                        "detectedLanguage": sourceLanguage,
+                        "sourceLanguage": mappedSource,
+                        "targetLanguage": mappedTarget,
+                        "detectedLanguage": mappedSource,
                     ],
                     "context": [
                         "platform": "macos",
@@ -1567,8 +1617,34 @@ final class PluginManager {
         (async () => {
           const fn = eval(`${script}\\n${info.plugin_type}`);
           const language = info.language || {};
-          const mappedFrom = language[from] || from;
-          const mappedTo = language[to] || to;
+          // Host codes (zh-CN, zh-TW, pt, ...) rarely match the pot-style keys
+          // plugins declare (zh_cn, zh_tw, pt_pt). Normalize before lookup and
+          // fall back to readable names, so a plugin prompt never receives a
+          // bare code like "zh-CN" as the target language (models sometimes
+          // ignore the code and echo the source language instead).
+          const langKeyAliases = {
+            'zh-cn': 'zh_cn', 'zh-hans': 'zh_cn', 'zh-hans-cn': 'zh_cn',
+            'zh-tw': 'zh_tw', 'zh-hant': 'zh_tw', 'zh-hk': 'zh_tw', 'zh-mo': 'zh_tw',
+            'pt': 'pt_pt', 'pt-pt': 'pt_pt', 'pt-br': 'pt_br',
+            'nb': 'nb_no', 'nb-no': 'nb_no', 'nn': 'nn_no', 'nn-no': 'nn_no',
+            'mn-cy': 'mn_cy', 'mn-mo': 'mn_mo'
+          };
+          const hostLanguageNames = {
+            'zh-CN': 'Simplified Chinese', 'zh-TW': 'Traditional Chinese',
+            'en': 'English', 'ja': 'Japanese', 'ko': 'Korean', 'fr': 'French',
+            'de': 'German', 'es': 'Spanish', 'it': 'Italian', 'pt': 'Portuguese',
+            'ru': 'Russian', 'ar': 'Arabic', 'hi': 'Hindi', 'auto': 'auto'
+          };
+          const lookupLanguage = (code) => {
+            if (!code) return code;
+            if (language[code]) return language[code];
+            const lower = String(code).trim().toLowerCase().replace(/_/g, '-');
+            const normalized = langKeyAliases[lower] || lower.replace(/-/g, '_');
+            if (language[normalized]) return language[normalized];
+            return hostLanguageNames[code] || code;
+          };
+          const mappedFrom = lookupLanguage(from);
+          const mappedTo = lookupLanguage(to);
           // Config (apiKey/model/...) is passed from the host via env var.
           let config = { enable: 'true' };
           try {
