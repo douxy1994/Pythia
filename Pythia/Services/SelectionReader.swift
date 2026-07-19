@@ -10,6 +10,19 @@ final class SelectionReader {
         let items: [[NSPasteboard.PasteboardType: Data]]
     }
 
+    /// Apps whose Accessibility selection is unreliable: Microsoft Word's
+    /// AXSelectedText silently drops everything before a page break when the
+    /// selection spans pages, so for these apps copy via ⌘C first and only
+    /// fall back to the Accessibility tree when the copy reads nothing.
+    private static let clipboardFirstBundleIDs: Set<String> = [
+        "com.microsoft.Word",
+    ]
+
+    private func prefersClipboardCopy(for app: NSRunningApplication?) -> Bool {
+        guard let bundleID = app?.bundleIdentifier else { return false }
+        return Self.clipboardFirstBundleIDs.contains(bundleID)
+    }
+
     func selectedText(targetApplication: NSRunningApplication? = nil, completion: @escaping (String) -> Void) {
         guard accessibilityTrusted() else {
             completion("")
@@ -19,6 +32,16 @@ final class SelectionReader {
         let target = validExternalApplication(targetApplication)
         let read: () -> Void = { [weak self] in
             guard let self else { completion(""); return }
+            if self.prefersClipboardCopy(for: target) {
+                self.readClipboardFallback(targetApplication: target) { text in
+                    if !text.isEmpty {
+                        completion(text)
+                        return
+                    }
+                    completion(self.readAccessibilitySelection(targetApplication: target) ?? "")
+                }
+                return
+            }
             if let text = self.readAccessibilitySelection(targetApplication: target), !text.isEmpty {
                 completion(text)
                 return

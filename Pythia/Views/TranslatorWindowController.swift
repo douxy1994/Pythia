@@ -18,6 +18,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private var resultOrder: [String] = []
     private var resultHeightConstraints: [String: NSLayoutConstraint] = [:]
     private var resultCollapseButtons: [String: NSButton] = [:]
+    private var resultRetranslateButtons: [String: NSButton] = [:]
     private var collapsedResultKeys = Set<String>()
     private var failedResultKeys = Set<String>()
     private let servicePicker = TranslationServicePickerButton()
@@ -266,6 +267,8 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
             guard !finishedServices.contains(service) else { return }
             finishedServices.insert(service)
             completed += 1
+            // A finished service (success or failure) may be re-translated.
+            self.resultRetranslateButtons[service]?.isEnabled = true
             let displayName = PluginManager.shared.displayName(forServiceIdentifier: service)
             switch result {
             case .success(let output):
@@ -567,6 +570,85 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         status("已复制 \(PluginManager.shared.displayName(forServiceIdentifier: key)) 译文")
+    }
+
+    @objc private func retranslateResultForService(_ sender: NSButton) {
+        guard let key = sender.identifier?.rawValue else { return }
+        retranslateService(key)
+    }
+
+    /// Re-runs a single service card with the current input and language
+    /// settings, without disturbing the other cards.
+    private func retranslateService(_ service: String) {
+        let input = sourceView.textView.string
+        guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            status("没有可翻译的文本")
+            return
+        }
+        guard resultViews[service] != nil else { return }
+        // Resolve languages exactly as translate() does so the retry uses the
+        // same effective source/target languages.
+        let requestedSourceLanguage = Preferences.shared.sourceLanguage
+        var requestedTargetLanguage = Preferences.shared.targetLanguage
+        if requestedSourceLanguage.lowercased() == "auto" {
+            requestedTargetLanguage = AutomaticLanguagePolicy.targetLanguage(
+                for: input,
+                selectedTarget: requestedTargetLanguage
+            )
+        }
+        let effectiveLanguages = TranslationService.resolvedLanguages(
+            text: input,
+            sourceLanguage: requestedSourceLanguage,
+            targetLanguage: requestedTargetLanguage
+        )
+        let displayName = PluginManager.shared.displayName(forServiceIdentifier: service)
+        resultRetranslateButtons[service]?.isEnabled = false
+        failedResultKeys.remove(service)
+        setResult("等待 \(displayName) 返回...", for: service)
+        status("正在重新翻译 \(displayName)...")
+
+        var finished = false
+        let finishOnce: (Result<String, Error>) -> Void = { [weak self] result in
+            guard let self, !finished else { return }
+            finished = true
+            self.resultRetranslateButtons[service]?.isEnabled = true
+            switch result {
+            case .success(let output):
+                self.failedResultKeys.remove(service)
+                let finalOutput = Preferences.shared.translateDeleteNewline ? Self.compactWhitespace(output) : output
+                self.setResult(finalOutput, for: service)
+                HistoryStore.shared.add(PythiaHistoryRecord(
+                    sourceText: input,
+                    translatedText: finalOutput,
+                    sourceLanguage: effectiveLanguages.source,
+                    targetLanguage: effectiveLanguages.target,
+                    service: displayName,
+                    deviceId: ""
+                ))
+                self.status("已重新翻译 \(displayName)")
+            case .failure(let error):
+                self.failedResultKeys.insert(service)
+                self.setResult(error.localizedDescription, for: service)
+                self.status("重新翻译失败：\(displayName)")
+            }
+        }
+
+        let serviceTimeout = timeoutInterval(forServiceIdentifier: service, text: input)
+        let timeout = DispatchWorkItem {
+            finishOnce(.failure(TranslationError.requestFailed("服务超时：\(displayName) 未在 \(Int(serviceTimeout)) 秒内返回。")))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + serviceTimeout, execute: timeout)
+        TranslationService.shared.translateService(
+            identifier: service,
+            text: input,
+            sourceLanguage: effectiveLanguages.source,
+            targetLanguage: effectiveLanguages.target
+        ) { result in
+            DispatchQueue.main.async {
+                timeout.cancel()
+                finishOnce(result)
+            }
+        }
     }
 
     func clearInput() {
@@ -1062,7 +1144,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
             height.isActive = true
             resultHeightConstraints[service] = height
 
-            makeResultSection(key: service, title: displayName, textView: textView)
+            makeResultSection(key: service, title: displayName, textView: textView, showRetranslate: true)
             resultViews[service] = textView
             resultOrder.append(service)
             scheduleResultHeightRefresh()
@@ -1073,7 +1155,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     /// Builds one independent translation-result card. Each service gets its
     /// own MaterialCard, copy action, and disclosure control so multi-service
     /// output does not visually collapse into one shared translation box.
-    private func makeResultSection(key: String, title: String, textView: PythiaTextView) {
+    private func makeResultSection(key: String, title: String, textView: PythiaTextView, showRetranslate: Bool = false) {
         let card = MaterialCardView()
         card.translatesAutoresizingMaskIntoConstraints = false
         card.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -1105,6 +1187,15 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         headerRow.addArrangedSubview(collapseButton)
         headerRow.addArrangedSubview(titleLabel)
         headerRow.addArrangedSubview(NSView())
+        if showRetranslate {
+            // Re-translate this service with the current input. Enabled only
+            // after the service has returned a result (or an error).
+            let retranslateButton = makeIconButton(systemName: "arrow.clockwise", accessibility: "重新翻译", action: #selector(retranslateResultForService))
+            retranslateButton.identifier = NSUserInterfaceItemIdentifier(key)
+            retranslateButton.isEnabled = false
+            resultRetranslateButtons[key] = retranslateButton
+            headerRow.addArrangedSubview(retranslateButton)
+        }
         headerRow.addArrangedSubview(copyButton)
 
         content.addArrangedSubview(headerRow)
@@ -1210,6 +1301,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         NSLayoutConstraint.deactivate(Array(resultHeightConstraints.values))
         resultHeightConstraints.removeAll()
         resultCollapseButtons.removeAll()
+        resultRetranslateButtons.removeAll()
         collapsedResultKeys.removeAll()
         resultHeightRefreshWorkItem?.cancel()
         resultHeightRefreshWorkItem = nil

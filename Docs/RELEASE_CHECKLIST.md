@@ -2,7 +2,7 @@
 
 ## Shared
 
-- Version is `1.0.0`.
+- Version is `1.0.1`.
 - Update checks point to `https://github.com/douxy1994/Pythia/releases`.
 - Release artifacts are named `Pythia`.
 - Release artifacts contain no bundled plugins.
