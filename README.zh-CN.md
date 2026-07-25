@@ -4,18 +4,18 @@
 
 Pythia 是一款面向 macOS 和 Windows 的现代桌面翻译软件。macOS 端使用原生 Swift/AppKit，Windows 端使用 Flutter 和独立 Win32 宿主。两个平台共用历史记录、WebDAV、语言路由、备份和 `.pythia` 插件契约。
 
-当前版本：**1.0.1**
+当前版本：**1.0.2**
 
 ## 下载
 
 ### macOS
 
-[下载 Pythia 1.0.1 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.0.1/Pythia-1.0.1-macos-arm64.dmg)
+[下载 Pythia 1.0.2 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.0.2/Pythia-1.0.2-macos-arm64.dmg)
 
 - 需要 macOS 26 或更高版本。
 - 仅支持 Apple silicon（`arm64`）。
 - 当前构建使用项目稳定的本地代码签名身份，尚未使用 Apple Developer ID 进行公证。
-- DMG 和 SHA-256 校验文件同时发布在 [v1.0.1 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.0.1)。
+- DMG 和 SHA-256 校验文件同时发布在 [v1.0.2 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.0.2)。
 
 ### Windows
 
@@ -26,7 +26,7 @@ Windows x64 源码、原生宿主、安装包流水线和自动测试已经在�
 - 在主窗口中同时显示多个翻译服务的独立译文卡片。
 - 每张译文卡片在服务翻译完成后，可通过复制按钮左侧的“重新翻译”按钮单独重译该服务。
 - 在 Microsoft Word 中跨页划词时不再丢失前一页文字。
-- 支持源语言、目标语言选择和中英文混合文本的目标语言优先路由。
+- 支持源语言、目标语言选择和中英文混合文本的主导语言路由（中文里夹杂少量英文术语不会再被误判成英文）。
 - 通过平台辅助功能或 UI Automation 读取选中文本，并提供剪贴板回退。
 - 支持截图 OCR 和截图翻译。
 - 支持历史记录搜索、收藏和删除状态。
@@ -179,7 +179,7 @@ WINDOWS_CODEX_HANDOFF.md Windows 完整交接文档
 ## 文档
 
 - [Windows Codex 完整交接](WINDOWS_CODEX_HANDOFF.md)
-- [Pythia 1.0.1 发布说明](Docs/RELEASE_NOTES_1.0.1.md)
+- [Pythia 1.0.2 发布说明](Docs/RELEASE_NOTES_1.0.2.md)
 - [Pythia 插件开发指南](Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md)
 - [公开插件目录](Plugins/README.md)
 - [跨平台架构](Docs/ARCHITECTURE.md)

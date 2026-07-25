@@ -4,18 +4,18 @@
 
 Pythia is a modern desktop translation application for macOS and Windows. The macOS client is a native Swift/AppKit application. The Windows client uses Flutter with a dedicated Win32 host for desktop integrations. Both clients share the same history, WebDAV, language-routing, backup, and `.pythia` plugin contracts.
 
-Current version: **1.0.1**
+Current version: **1.0.2**
 
 ## Download
 
 ### macOS
 
-[Download Pythia 1.0.1 for macOS Apple silicon](https://github.com/douxy1994/Pythia/releases/download/v1.0.1/Pythia-1.0.1-macos-arm64.dmg)
+[Download Pythia 1.0.2 for macOS Apple silicon](https://github.com/douxy1994/Pythia/releases/download/v1.0.2/Pythia-1.0.2-macos-arm64.dmg)
 
 - Requires macOS 26 or later.
 - Apple silicon (`arm64`) only.
 - The current build uses the project's stable local code-signing identity and is not Apple Developer ID notarized.
-- The DMG and its SHA-256 checksum are published together on the [v1.0.1 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.0.1).
+- The DMG and its SHA-256 checksum are published together on the [v1.0.2 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.0.2).
 
 ### Windows
 
@@ -26,7 +26,7 @@ The Windows x64 source, native host, installer pipeline, and automated tests are
 - Shows independent translation result cards from multiple services at the same time.
 - Re-translates a single service card on demand with the re-translate button next to that card's copy button, once the service has finished.
 - Reads selected text in Microsoft Word across page breaks without dropping earlier pages.
-- Supports source and target language selection and target-first Chinese/English mixed-text routing.
+- Supports source and target language selection and dominant-script Chinese/English mixed-text routing (a few embedded English terms no longer flip Chinese text onto the Chinese target).
 - Reads selected text through platform accessibility/UI Automation APIs with clipboard fallback.
 - Provides screenshot OCR and screenshot translation.
 - Stores searchable translation history with favorite and deletion state.
@@ -179,7 +179,7 @@ WINDOWS_CODEX_HANDOFF.md Complete Windows continuation document
 ## Documentation
 
 - [Windows Codex handoff](WINDOWS_CODEX_HANDOFF.md)
-- [Pythia 1.0.1 release notes](Docs/RELEASE_NOTES_1.0.1.md)
+- [Pythia 1.0.2 release notes](Docs/RELEASE_NOTES_1.0.2.md)
 - [Pythia plugin development guide](Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md)
 - [Public plugin catalog](Plugins/README.md)
 - [Architecture](Docs/ARCHITECTURE.md)

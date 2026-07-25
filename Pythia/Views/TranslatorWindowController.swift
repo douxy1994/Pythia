@@ -38,6 +38,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private weak var backgroundView: LiquidGlassBackgroundView?
     private var dynamicTranslateWorkItem: DispatchWorkItem?
     private var resultHeightRefreshWorkItem: DispatchWorkItem?
+    private var closeOnBlurWorkItem: DispatchWorkItem?
     private var hasPresentedWindow = false
     private var isApplyingWindowPlacement = false
     private var contentMode: ContentMode = .translation
@@ -199,7 +200,24 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         case .recognition:
             guard preferences.recognizeCloseOnBlur else { return }
         }
-        window?.orderOut(nil)
+        // Defer hiding so transient key-window changes (update alert panels,
+        // third-party IME candidate windows, menu tracking) don't make the
+        // window vanish while the user is typing. A pending hide is cancelled
+        // if this window becomes key again, and it only fires when no window
+        // of this app holds key status anymore (a genuine blur to another app).
+        closeOnBlurWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, let window = self.window else { return }
+            guard !window.isKeyWindow, NSApp.keyWindow == nil else { return }
+            window.orderOut(nil)
+        }
+        closeOnBlurWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        closeOnBlurWorkItem?.cancel()
+        closeOnBlurWorkItem = nil
     }
 
     func translate(_ text: String? = nil, completion: ((Result<String, Error>) -> Void)? = nil) {
@@ -230,8 +248,9 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         }
         let requestedSourceLanguage = Preferences.shared.sourceLanguage
         var requestedTargetLanguage = Preferences.shared.targetLanguage
-        // Automatic direction: pure Chinese -> English, pure English -> Chinese;
-        // mixed Chinese/English keeps the target selected by the user.
+        // Automatic direction: dominant Chinese -> English, dominant
+        // English -> Chinese (embedded terms/abbreviations don't flip it);
+        // ties keep the target selected by the user.
         if requestedSourceLanguage.lowercased() == "auto" {
             let smartTarget = AutomaticLanguagePolicy.targetLanguage(
                 for: input,
