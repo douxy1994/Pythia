@@ -4,18 +4,18 @@
 
 Pythia 是一款面向 macOS 和 Windows 的现代桌面翻译软件。macOS 端使用原生 Swift/AppKit，Windows 端使用 Flutter 和独立 Win32 宿主。两个平台共用历史记录、WebDAV、语言路由、备份和 `.pythia` 插件契约。
 
-当前版本：**1.0.2**
+当前版本：**1.0.3**
 
 ## 下载
 
 ### macOS
 
-[下载 Pythia 1.0.2 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.0.2/Pythia-1.0.2-macos-arm64.dmg)
+[下载 Pythia 1.0.3 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.0.3/Pythia-1.0.3-macos-arm64.dmg)
 
 - 需要 macOS 26 或更高版本。
 - 仅支持 Apple silicon（`arm64`）。
 - 当前构建使用项目稳定的本地代码签名身份，尚未使用 Apple Developer ID 进行公证。
-- DMG 和 SHA-256 校验文件同时发布在 [v1.0.2 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.0.2)。
+- DMG 和 SHA-256 校验文件同时发布在 [v1.0.3 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.0.3)。
 
 ### Windows
 
@@ -179,7 +179,7 @@ WINDOWS_CODEX_HANDOFF.md Windows 完整交接文档
 ## 文档
 
 - [Windows Codex 完整交接](WINDOWS_CODEX_HANDOFF.md)
-- [Pythia 1.0.2 发布说明](Docs/RELEASE_NOTES_1.0.2.md)
+- [Pythia 1.0.3 发布说明](Docs/RELEASE_NOTES_1.0.3.md)
 - [Pythia 插件开发指南](Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md)
 - [公开插件目录](Plugins/README.md)
 - [跨平台架构](Docs/ARCHITECTURE.md)

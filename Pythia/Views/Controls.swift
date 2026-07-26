@@ -88,7 +88,13 @@ final class PythiaTextView: NSScrollView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        applyTextAppearance()
+        // Defer to the next runloop turn: AppKit delivers this inside the
+        // display cycle, and mutating the text storage (the full-text
+        // addAttribute below) while TextKit 2 is enumerating viewport
+        // elements crashes with NSRLEArray objectAtRunIndex:length:.
+        DispatchQueue.main.async { [weak self] in
+            self?.applyTextAppearance()
+        }
     }
 
     override func layout() {
@@ -181,27 +187,26 @@ final class PythiaTextView: NSScrollView {
     }
 
     func fittingHeight(for width: CGFloat) -> CGFloat {
-        guard let container = textView.textContainer, let lm = textView.layoutManager else { return 44 }
-        // NSTextView lays text out inside its horizontal text-container insets.
-        // Measuring against the whole scroll-view width makes a paragraph look
-        // one line shorter than it really is and clips the final line.
+        // Measure with a private, offscreen TextKit 1 stack. Driving the live
+        // text view's layout manager (invalidateLayout/ensureLayout through
+        // the TextKit 1 compatibility shim) forces synchronous TextKit 2
+        // viewport layout and can interleave with the display cycle, which
+        // crashed with NSRLEArray objectAtRunIndex:length:.
         let contentWidth = max(1, width - textView.textContainerInset.width * 2)
-        let originalTracksWidth = container.widthTracksTextView
-        container.widthTracksTextView = false
-        container.containerSize = NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
-        let characterCount = textView.textStorage?.length ?? 0
-        lm.invalidateLayout(
-            forCharacterRange: NSRange(location: 0, length: characterCount),
-            actualCharacterRange: nil
+        let measurementStorage = NSTextStorage(attributedString: textView.attributedString())
+        let measurementLayout = NSLayoutManager()
+        let measurementContainer = NSTextContainer(
+            size: NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
         )
-        lm.ensureLayout(for: container)
+        measurementContainer.lineFragmentPadding = textView.textContainer?.lineFragmentPadding ?? 0
+        measurementLayout.addTextContainer(measurementContainer)
+        measurementStorage.addLayoutManager(measurementLayout)
+        measurementLayout.ensureLayout(for: measurementContainer)
         // usedRect includes complete line fragments (leading and descenders),
         // unlike a glyph bounding box, which can underestimate the last line.
-        let usedHeight = lm.usedRect(for: container).maxY
+        let usedHeight = measurementLayout.usedRect(for: measurementContainer).maxY
         let font = textView.font ?? NSFont.systemFont(ofSize: 15)
-        let trailingLineHeight = textView.string.hasSuffix("\n") ? lm.defaultLineHeight(for: font) : 0
-        container.widthTracksTextView = originalTracksWidth
-        container.containerSize = NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
+        let trailingLineHeight = textView.string.hasSuffix("\n") ? measurementLayout.defaultLineHeight(for: font) : 0
         return max(
             44,
             ceil(usedHeight + trailingLineHeight + textView.textContainerInset.height * 2 + 4)

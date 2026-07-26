@@ -1274,7 +1274,9 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private func setResult(_ text: String, for provider: String) {
         guard let textView = resultViews[provider] else { return }
         textView.setPlainText(text)
-        updateResultHeight(for: provider)
+        // Height is reconciled by the coalesced refresh: multiple services
+        // finishing back-to-back then produce a single measure+layout pass
+        // instead of interleaved forced layouts of the live TextKit 2 views.
         scheduleResultHeightRefresh()
     }
 

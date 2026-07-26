@@ -4,18 +4,18 @@
 
 Pythia is a modern desktop translation application for macOS and Windows. The macOS client is a native Swift/AppKit application. The Windows client uses Flutter with a dedicated Win32 host for desktop integrations. Both clients share the same history, WebDAV, language-routing, backup, and `.pythia` plugin contracts.
 
-Current version: **1.0.2**
+Current version: **1.0.3**
 
 ## Download
 
 ### macOS
 
-[Download Pythia 1.0.2 for macOS Apple silicon](https://github.com/douxy1994/Pythia/releases/download/v1.0.2/Pythia-1.0.2-macos-arm64.dmg)
+[Download Pythia 1.0.3 for macOS Apple silicon](https://github.com/douxy1994/Pythia/releases/download/v1.0.3/Pythia-1.0.3-macos-arm64.dmg)
 
 - Requires macOS 26 or later.
 - Apple silicon (`arm64`) only.
 - The current build uses the project's stable local code-signing identity and is not Apple Developer ID notarized.
-- The DMG and its SHA-256 checksum are published together on the [v1.0.2 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.0.2).
+- The DMG and its SHA-256 checksum are published together on the [v1.0.3 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.0.3).
 
 ### Windows
 
@@ -179,7 +179,7 @@ WINDOWS_CODEX_HANDOFF.md Complete Windows continuation document
 ## Documentation
 
 - [Windows Codex handoff](WINDOWS_CODEX_HANDOFF.md)
-- [Pythia 1.0.2 release notes](Docs/RELEASE_NOTES_1.0.2.md)
+- [Pythia 1.0.3 release notes](Docs/RELEASE_NOTES_1.0.3.md)
 - [Pythia plugin development guide](Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md)
 - [Public plugin catalog](Plugins/README.md)
 - [Architecture](Docs/ARCHITECTURE.md)
