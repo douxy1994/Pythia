@@ -17,7 +17,7 @@
   [English](README.md) | [简体中文](README.zh-CN.md)
 
   <br>
-  <img src="./Docs/images/hero.svg" width="920" alt="Pythia product overview">
+  <img src="./Docs/images/screenshot-macos.png" width="920" alt="Pythia translator window on macOS">
 </div>
 
 ## What is Pythia?
