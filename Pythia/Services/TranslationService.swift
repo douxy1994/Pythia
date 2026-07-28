@@ -466,13 +466,13 @@ final class TranslationService {
         request.httpMethod = "POST"
         request.setValue("DeepL-Auth-Key \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        let deeplTarget = targetLanguage.replacingOccurrences(of: "-", with: "_").uppercased()
+        let deeplTarget = normalizeDeepLTargetLanguage(targetLanguage)
         var items = [
             URLQueryItem(name: "text", value: text),
             URLQueryItem(name: "target_lang", value: deeplTarget),
         ]
         if !sourceLanguage.isEmpty, sourceLanguage.lowercased() != "auto" {
-            items.append(URLQueryItem(name: "source_lang", value: sourceLanguage.uppercased()))
+            items.append(URLQueryItem(name: "source_lang", value: normalizeDeepLSourceLanguage(sourceLanguage)))
         }
         var components = URLComponents()
         components.queryItems = items
@@ -565,7 +565,7 @@ final class TranslationService {
         var components = URLComponents(string: "https://openapi.youdao.com/api")!
         components.queryItems = [
             URLQueryItem(name: "q", value: text),
-            URLQueryItem(name: "from", value: sourceLanguage.isEmpty ? "auto" : sourceLanguage),
+            URLQueryItem(name: "from", value: sourceLanguage.isEmpty ? "auto" : normalizeYoudaoLanguage(sourceLanguage)),
             URLQueryItem(name: "to", value: targetLanguage.isEmpty ? "zh-CHS" : normalizeYoudaoLanguage(targetLanguage)),
             URLQueryItem(name: "appKey", value: preferences.youdaoAppKey),
             URLQueryItem(name: "salt", value: salt),
@@ -610,7 +610,7 @@ final class TranslationService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body: [String: Any] = [
             "q": text,
-            "source": sourceLanguage.isEmpty ? "auto" : sourceLanguage,
+            "source": sourceLanguage.isEmpty ? "auto" : normalizeSimpleLanguage(sourceLanguage),
             "target": normalizeSimpleLanguage(targetLanguage),
             "format": "text",
             "api_key": preferences.libreTranslateKey,
@@ -622,8 +622,13 @@ final class TranslationService {
                 return
             }
             if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                let message = data.flatMap { String(data: $0, encoding: .utf8) } ?? "HTTP \(http.statusCode)"
-                completion(.failure(TranslationError.requestFailed(message)))
+                let serverMessage = data
+                    .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+                    .flatMap { $0["error"] as? String }
+                let message = serverMessage
+                    ?? data.flatMap { String(data: $0, encoding: .utf8) }
+                    ?? "HTTP \(http.statusCode)"
+                completion(.failure(TranslationError.requestFailed("LibreTranslate 请求失败：\(message)")))
                 return
             }
             guard
@@ -653,9 +658,42 @@ final class TranslationService {
         return String(value.prefix(10)) + String(value.count) + String(value.suffix(10))
     }
 
+    private func normalizeDeepLTargetLanguage(_ value: String) -> String {
+        let lower = value.lowercased()
+        if lower.hasPrefix("zh") {
+            if lower.contains("tw") || lower.contains("hk") || lower.contains("hant") { return "ZH-HANT" }
+            return "ZH-HANS"
+        }
+        if lower.hasPrefix("en") {
+            return lower.contains("gb") ? "EN-GB" : "EN-US"
+        }
+        if lower.hasPrefix("pt") {
+            return lower == "pt-pt" ? "PT-PT" : "PT-BR"
+        }
+        return rootLanguageCode(value).uppercased()
+    }
+
+    private func normalizeDeepLSourceLanguage(_ value: String) -> String {
+        let lower = value.lowercased()
+        if lower.hasPrefix("zh") { return "ZH" }
+        if lower.hasPrefix("en") { return "EN" }
+        if lower.hasPrefix("pt") { return "PT" }
+        return rootLanguageCode(value).uppercased()
+    }
+
+    /// BCP-47 root subtag ("fr-CA" -> "fr"), used so region/script variants
+    /// never leak into provider APIs that only accept root language codes.
+    private func rootLanguageCode(_ value: String) -> String {
+        value.split(separator: "-").first.map(String.init) ?? value
+    }
+
     private func normalizeSimpleLanguage(_ value: String) -> String {
         let lower = value.lowercased()
-        if lower.hasPrefix("zh") { return "zh" }
+        if lower.hasPrefix("zh") {
+            // LibreTranslate 现在使用 zh-Hans / zh-Hant（裸 "zh" 已不被识别）。
+            if lower.contains("tw") || lower.contains("hk") || lower.contains("hant") || lower.contains("mo") { return "zh-Hant" }
+            return "zh-Hans"
+        }
         if lower.hasPrefix("en") { return "en" }
         if lower.hasPrefix("ja") { return "ja" }
         if lower.hasPrefix("ko") { return "ko" }
@@ -674,7 +712,10 @@ final class TranslationService {
 
     private func normalizeYoudaoLanguage(_ value: String) -> String {
         let lower = value.lowercased()
-        if lower.hasPrefix("zh") { return "zh-CHS" }
+        if lower.hasPrefix("zh") {
+            if lower.contains("tw") || lower.contains("hk") || lower.contains("hant") || lower.contains("mo") { return "zh-CHT" }
+            return "zh-CHS"
+        }
         if lower.hasPrefix("en") { return "en" }
         if lower.hasPrefix("ja") { return "ja" }
         if lower.hasPrefix("ko") { return "ko" }

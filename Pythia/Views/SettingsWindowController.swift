@@ -27,6 +27,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let pluginMetadataLabel = NSTextField(wrappingLabelWithString: "")
     private let pluginConfigStack = FullWidthStackView()
     private let pluginTestResultLabel = NSTextField(labelWithString: "")
+    private let serviceTestResultLabel = NSTextField(labelWithString: "")
     private let clipboardCheckbox = NSButton(checkboxWithTitle: "监听剪贴板", target: nil, action: nil)
     private let recognizeLanguagePopup = NSPopUpButton()
     private let recognizeAutoCopyCheckbox = NSButton(checkboxWithTitle: "OCR 后自动复制", target: nil, action: nil)
@@ -346,6 +347,36 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         stack.addArrangedSubview(row("有道密钥", youdaoSecretField))
         stack.addArrangedSubview(row("LibreTranslate URL", libreURLField))
         stack.addArrangedSubview(row("LibreTranslate Key", libreKeyField))
+        stack.addArrangedSubview(sectionHeader("验证服务", detail: "填写上方 Key 后点对应按钮：会先按当前输入保存，再发起一次真实翻译测试。"))
+        let verifyButtons = NSStackView()
+        verifyButtons.orientation = .horizontal
+        verifyButtons.spacing = 10
+        for (title, identifier) in [
+            ("验证 OpenAI", "OpenAI"),
+            ("验证 DeepL", "DeepL"),
+            ("验证 百度", "Baidu"),
+            ("验证 有道", "Youdao"),
+            ("验证 LibreTranslate", "LibreTranslate"),
+        ] {
+            let button = PillButton(title, target: self, action: #selector(verifyBuiltInService(_:)))
+            button.identifier = NSUserInterfaceItemIdentifier(identifier)
+            verifyButtons.addArrangedSubview(button)
+        }
+        stack.addArrangedSubview(leadingFullWidth(verifyButtons, minHeight: 0))
+        serviceTestResultLabel.lineBreakMode = .byTruncatingTail
+        serviceTestResultLabel.maximumNumberOfLines = 1
+        serviceTestResultLabel.font = .systemFont(ofSize: 12)
+        let serviceResultCaption = NSTextField(labelWithString: "检测结果：")
+        serviceResultCaption.font = .systemFont(ofSize: 12)
+        serviceResultCaption.textColor = .secondaryLabelColor
+        let serviceResultBox = NSStackView()
+        serviceResultBox.orientation = .horizontal
+        serviceResultBox.alignment = .firstBaseline
+        serviceResultBox.spacing = 6
+        serviceResultBox.addArrangedSubview(serviceResultCaption)
+        serviceResultBox.addArrangedSubview(serviceTestResultLabel)
+        stack.addArrangedSubview(leadingFullWidth(serviceResultBox, minHeight: 0))
+        stack.addArrangedSubview(note("OpenAI / DeepL / 百度 / 有道 / LibreTranslate 均需自行注册账号获取 API Key；LibreTranslate 公共实例已强制要求 Key，也可改为自托管实例地址。Google 与「本地预览」无需 Key。"))
         return stack
     }
 
@@ -668,6 +699,52 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
                 case .failure(let error):
                     self.pluginTestResultLabel.stringValue = "✗ 失败：\(error.localizedDescription)"
                     self.pluginTestResultLabel.textColor = .systemRed
+                }
+            }
+        }
+    }
+
+    /// Saves only the 服务 tab fields so verification uses what the user just
+    /// typed, without running the full settings validation in `save()`.
+    private func persistServiceFields() {
+        let preferences = Preferences.shared
+        preferences.openAIKey = openAIKeyField.stringValue
+        preferences.openAIModel = openAIModelField.stringValue.isEmpty ? "gpt-4o-mini" : openAIModelField.stringValue
+        preferences.deepLKey = deepLKeyField.stringValue
+        preferences.baiduAppID = baiduAppIDField.stringValue
+        preferences.baiduSecret = baiduSecretField.stringValue
+        preferences.youdaoAppKey = youdaoAppKeyField.stringValue
+        preferences.youdaoSecret = youdaoSecretField.stringValue
+        preferences.libreTranslateURL = libreURLField.stringValue.isEmpty ? "https://libretranslate.com" : libreURLField.stringValue
+        preferences.libreTranslateKey = libreKeyField.stringValue
+    }
+
+    /// Verifies a built-in key-based translation service by saving the typed
+    /// fields and running one real translation through TranslationService.
+    @objc private func verifyBuiltInService(_ sender: NSButton) {
+        guard
+            let identifier = sender.identifier?.rawValue,
+            let provider = PythiaProvider.allCases.first(where: { $0.rawValue == identifier })
+        else { return }
+        persistServiceFields()
+        serviceTestResultLabel.stringValue = "检测中…"
+        serviceTestResultLabel.textColor = .secondaryLabelColor
+        TranslationService.shared.translate(
+            text: "hello",
+            provider: provider,
+            sourceLanguage: "auto",
+            targetLanguage: "zh-CN"
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .success(let output):
+                    let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.serviceTestResultLabel.stringValue = "✓ \(provider.rawValue) 连通正常：hello → \(trimmed)"
+                    self.serviceTestResultLabel.textColor = NSColor(calibratedRed: 0.2, green: 0.6, blue: 0.2, alpha: 1)
+                case .failure(let error):
+                    self.serviceTestResultLabel.stringValue = "✗ \(provider.rawValue) 失败：\(error.localizedDescription)"
+                    self.serviceTestResultLabel.textColor = .systemRed
                 }
             }
         }
@@ -1321,15 +1398,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
         preferences.sourceLanguage = selectedLanguageCode(sourceLanguagePopup)
         preferences.targetLanguage = selectedLanguageCode(targetLanguagePopup)
-        preferences.openAIKey = openAIKeyField.stringValue
-        preferences.openAIModel = openAIModelField.stringValue.isEmpty ? "gpt-4o-mini" : openAIModelField.stringValue
-        preferences.deepLKey = deepLKeyField.stringValue
-        preferences.baiduAppID = baiduAppIDField.stringValue
-        preferences.baiduSecret = baiduSecretField.stringValue
-        preferences.youdaoAppKey = youdaoAppKeyField.stringValue
-        preferences.youdaoSecret = youdaoSecretField.stringValue
-        preferences.libreTranslateURL = libreURLField.stringValue.isEmpty ? "https://libretranslate.com" : libreURLField.stringValue
-        preferences.libreTranslateKey = libreKeyField.stringValue
+        persistServiceFields()
         preferences.translateServiceList = serviceOrderList.orderedEnabledServices
         preferences.translateServiceOrder = serviceOrderList.orderedServices
         preferences.recognizeServiceList = recognizeServiceList.orderedEnabledServices
