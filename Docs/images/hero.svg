@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="560" viewBox="0 0 920 560" font-family="-apple-system,'Helvetica Neue','Segoe UI',sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7faf4"/>
+      <stop offset="1" stop-color="#eef4e8"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#fbfdfb"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#3d5a26" flood-opacity="0.12"/>
+    </filter>
+    <filter id="chip" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#3d5a26" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+
+  <rect x="1" y="1" width="918" height="558" rx="24" fill="url(#bg)" stroke="#dde7d2"/>
+
+  <!-- main translator window -->
+  <g filter="url(#soft)">
+    <rect x="48" y="44" width="576" height="472" rx="16" fill="#ffffff" stroke="#e3eadb"/>
+  </g>
+  <!-- title bar -->
+  <path d="M48 60 a16 16 0 0 1 16 -16 h544 a16 16 0 0 1 16 16 v22 h-576 z" fill="#f4f7f1"/>
+  <circle cx="76" cy="66" r="6" fill="#ff5f57"/>
+  <circle cx="96" cy="66" r="6" fill="#febc2e"/>
+  <circle cx="116" cy="66" r="6" fill="#28c840"/>
+  <text x="336" y="71" font-size="13" fill="#7a876f" text-anchor="middle">Pythia 翻译</text>
+
+  <!-- language bar -->
+  <rect x="72" y="98" width="140" height="30" rx="15" fill="#eef4e6"/>
+  <text x="142" y="118" font-size="12.5" fill="#55653f" text-anchor="middle">自动检测</text>
+  <path d="M232 113 h44 m-8 -6 l8 6 l-8 6" stroke="#80B847" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="296" y="98" width="140" height="30" rx="15" fill="#80B847"/>
+  <text x="366" y="118" font-size="12.5" fill="#ffffff" text-anchor="middle">简体中文</text>
+  <rect x="472" y="98" width="128" height="30" rx="15" fill="#f4f7f1" stroke="#e3eadb"/>
+  <text x="536" y="118" font-size="12" fill="#7a876f" text-anchor="middle">⇧⌘D 输入翻译</text>
+
+  <!-- input area -->
+  <rect x="72" y="142" width="528" height="76" rx="12" fill="#f8faf6" stroke="#e3eadb"/>
+  <text x="88" y="172" font-size="14" fill="#2c3524">Pythia brings every translation service</text>
+  <text x="88" y="194" font-size="14" fill="#2c3524">into one native window.</text>
+
+  <!-- result cards -->
+  <!-- Google -->
+  <g filter="url(#chip)">
+    <rect x="72" y="234" width="528" height="58" rx="12" fill="url(#card)" stroke="#e6ede0"/>
+  </g>
+  <circle cx="94" cy="254" r="5" fill="#80B847"/>
+  <text x="108" y="258" font-size="11" fill="#8a967d">Google</text>
+  <text x="88" y="280" font-size="13.5" fill="#2c3524">Pythia 让每一个翻译服务汇聚于一个原生窗口。</text>
+  <rect x="566" y="246" width="22" height="22" rx="6" fill="#f0f4ec"/>
+  <path d="M573 253 h8 v8 h-8 z M576 250 h8 v8" stroke="#7a876f" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+
+  <!-- DeepL -->
+  <g filter="url(#chip)">
+    <rect x="72" y="302" width="528" height="58" rx="12" fill="url(#card)" stroke="#e6ede0"/>
+  </g>
+  <circle cx="94" cy="322" r="5" fill="#0f2b46"/>
+  <text x="108" y="326" font-size="11" fill="#8a967d">DeepL</text>
+  <text x="88" y="348" font-size="13.5" fill="#2c3524">Pythia 将所有翻译服务融入一个原生窗口。</text>
+  <rect x="566" y="314" width="22" height="22" rx="6" fill="#f0f4ec"/>
+  <path d="M573 321 h8 v8 h-8 z M576 318 h8 v8" stroke="#7a876f" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+
+  <!-- Youdao -->
+  <g filter="url(#chip)">
+    <rect x="72" y="370" width="528" height="58" rx="12" fill="url(#card)" stroke="#e6ede0"/>
+  </g>
+  <circle cx="94" cy="390" r="5" fill="#e60012"/>
+  <text x="108" y="394" font-size="11" fill="#8a967d">有道</text>
+  <text x="88" y="416" font-size="13.5" fill="#2c3524">Pythia 让每个翻译服务尽在一个原生窗口。</text>
+  <rect x="566" y="382" width="22" height="22" rx="6" fill="#f0f4ec"/>
+  <path d="M573 389 h8 v8 h-8 z M576 386 h8 v8" stroke="#7a876f" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+
+  <!-- OpenAI -->
+  <g filter="url(#chip)">
+    <rect x="72" y="438" width="528" height="58" rx="12" fill="url(#card)" stroke="#e6ede0"/>
+  </g>
+  <circle cx="94" cy="458" r="5" fill="#10a37f"/>
+  <text x="108" y="462" font-size="11" fill="#8a967d">OpenAI</text>
+  <text x="88" y="484" font-size="13.5" fill="#2c3524">Pythia 让桌面翻译服务齐聚一个原生窗口。</text>
+  <rect x="566" y="450" width="22" height="22" rx="6" fill="#f0f4ec"/>
+  <path d="M573 457 h8 v8 h-8 z M576 454 h8 v8" stroke="#7a876f" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+
+  <!-- right feature chips -->
+  <g filter="url(#chip)">
+    <rect x="656" y="72" width="216" height="52" rx="12" fill="#ffffff" stroke="#e3eadb"/>
+  </g>
+  <rect x="672" y="88" width="22" height="22" rx="6" fill="#80B847"/>
+  <path d="M678 99 l4 4 l8 -9" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="706" y="97" font-size="13" fill="#2c3524">划词翻译</text>
+  <text x="706" y="113" font-size="10.5" fill="#8a967d">⇧⌘E · 随选随翻</text>
+
+  <g filter="url(#chip)">
+    <rect x="656" y="140" width="216" height="52" rx="12" fill="#ffffff" stroke="#e3eadb"/>
+  </g>
+  <rect x="672" y="156" width="22" height="22" rx="6" fill="#5b8dd9"/>
+  <rect x="677" y="161" width="12" height="12" rx="2" fill="none" stroke="#ffffff" stroke-width="1.6"/>
+  <text x="706" y="165" font-size="13" fill="#2c3524">截图 OCR</text>
+  <text x="706" y="181" font-size="10.5" fill="#8a967d">⇧⌘O · 识别并翻译</text>
+
+  <g filter="url(#chip)">
+    <rect x="656" y="208" width="216" height="52" rx="12" fill="#ffffff" stroke="#e3eadb"/>
+  </g>
+  <rect x="672" y="224" width="22" height="22" rx="6" fill="#b085f5"/>
+  <circle cx="683" cy="235" r="6" fill="none" stroke="#ffffff" stroke-width="1.6"/>
+  <path d="M683 231 v4 l3 2" stroke="#ffffff" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  <text x="706" y="233" font-size="13" fill="#2c3524">历史与收藏</text>
+  <text x="706" y="249" font-size="10.5" fill="#8a967d">可搜索 · 可同步</text>
+
+  <g filter="url(#chip)">
+    <rect x="656" y="276" width="216" height="52" rx="12" fill="#ffffff" stroke="#e3eadb"/>
+  </g>
+  <rect x="672" y="292" width="22" height="22" rx="6" fill="#f2a33c"/>
+  <path d="M678 303 a5 5 0 0 1 10 0 M683 298 v-3 M683 308 v3" stroke="#ffffff" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  <text x="706" y="301" font-size="13" fill="#2c3524">WebDAV 同步</text>
+  <text x="706" y="317" font-size="10.5" fill="#8a967d">双端历史一致</text>
+
+  <g filter="url(#chip)">
+    <rect x="656" y="344" width="216" height="52" rx="12" fill="#ffffff" stroke="#e3eadb"/>
+  </g>
+  <rect x="672" y="360" width="22" height="22" rx="6" fill="#e86a92"/>
+  <path d="M678 366 h10 v10 h-10 z M681 363 v16" stroke="#ffffff" stroke-width="1.6" fill="none"/>
+  <text x="706" y="369" font-size="13" fill="#2c3524">.pythia 插件</text>
+  <text x="706" y="385" font-size="10.5" fill="#8a967d">阿里 / DeepSeek / 小米…</text>
+
+  <g filter="url(#chip)">
+    <rect x="656" y="412" width="216" height="52" rx="12" fill="#ffffff" stroke="#e3eadb"/>
+  </g>
+  <rect x="672" y="428" width="22" height="22" rx="6" fill="#4db6ac"/>
+  <path d="M678 439 a5 5 0 1 1 10 0 a5 5 0 1 1 -10 0 M678 439 h10" stroke="#ffffff" stroke-width="1.6" fill="none"/>
+  <text x="706" y="437" font-size="13" fill="#2c3524">本地优先</text>
+  <text x="706" y="453" font-size="10.5" fill="#8a967d">凭据 0600 · 不上云</text>
+
+  <text x="764" y="500" font-size="12" fill="#8a967d" text-anchor="middle">macOS 原生 · Windows 同步演进</text>
+</svg>
