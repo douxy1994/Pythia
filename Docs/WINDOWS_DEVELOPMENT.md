@@ -4,6 +4,25 @@ This repository contains a 64-bit x64 Flutter Windows client under `Windows/Pyth
 
 The authoritative, detailed continuation document is [`../WINDOWS_CODEX_HANDOFF.md`](../WINDOWS_CODEX_HANDOFF.md). A Windows Codex agent must read it before changing the client. This file remains a shorter architecture and command reference.
 
+## Current Status (2026-08-01)
+
+- The current repository baseline is `master` at `0d286b1a85b5c0a8bfa8f66b53d861f13185e972` (`Release Pythia 1.1.0`). This is the current repository/macOS release, not a Windows release number.
+- The Windows client remains Preview at Flutter version `1.0.0+100`. Until a Windows release is cut, keep the installer names `Pythia-1.0.0-windows-x64.exe` and `Pythia-1.0.0-windows-x64.exe.sha256`.
+- The latest Windows x64 workflow run [30703218631](https://github.com/douxy1994/Pythia/actions/runs/30703218631) passed on `windows-2025` at the current baseline.
+
+### Verified CI Baseline
+
+The latest run verified the complete non-interactive Windows release path:
+
+- Flutter `3.44.5 stable`, `flutter analyze`, and 85 Dart/Flutter tests passed.
+- Pythia plugin examples and public-plugin validation passed, including long-text/retry coverage.
+- Both macOS and Windows plugin runners passed their network-fallback checks.
+- The x64 release build and release-package verifier passed; the PE architecture gate requires `0x8664` (AMD64).
+- Inno Setup generated the installer and SHA-256 sidecar, and the checksum verification passed.
+- Windows runtime, restart, install, launch, and uninstall smoke tests passed.
+
+This CI result establishes a reproducible build baseline. The next Windows developer must still run the interactive acceptance matrix on a real Windows 11 x64 machine and record any environment-specific findings.
+
 ## Architecture Requirement
 
 - Supported release architecture: x64/AMD64 only.
@@ -93,12 +112,39 @@ Windows/Pythia.Windows/
 
 ## Next Milestone
 
-1. Download the verified `Pythia-1.0.0-windows-x64` Actions artifact or build locally with the pinned Flutter version.
-2. Run the installer and verify startup, restart, uninstall, Credential Manager, UI Automation selection, screenshot OCR, launch-at-startup, tray, hotkeys, WebDAV, and always-on-top behavior.
-3. Verify screenshot OCR, global-hotkey conflicts, and the Authenticode-signed updater on a real Windows installation with Chinese/English language packs. The recorder UI, tray callbacks, hide-on-blur, secure download/install channel, and release check UI are implemented in code.
-4. Add the remaining macOS first-party provider presets beyond DeepL and LibreTranslate, including provider-specific settings and contract tests.
-5. Exercise WebDAV connection test/manual sync/automatic sync on a real Windows machine and with the same WebDAV account used by macOS.
-6. Build release artifacts and verify plugin exclusion.
+1. Pull the current `master` baseline, create `codex/windows-final`, and reproduce the pinned Flutter/Windows toolchain locally.
+2. Run the installer and verify startup, restart, uninstall, Credential Manager, UI Automation selection, screenshot OCR, launch-at-startup, tray, hotkeys, WebDAV, and always-on-top behavior on a real Windows 11 x64 machine.
+3. Verify screenshot OCR, global-hotkey conflicts, Chinese/English language packs, and the Authenticode-signed updater. The recorder UI, tray callbacks, hide-on-blur, secure download/install channel, and release check UI are implemented in code; the remaining task is real-machine validation and fixes.
+4. Synchronize Windows mixed-language routing with the dominant-script policy already used by macOS, then add Windows regression coverage before the next Windows release.
+5. Exercise WebDAV connection test/manual sync/automatic sync with the same WebDAV account used by macOS, and verify portable backup restore on a clean Windows profile.
+6. Keep Windows at `1.0.0+100` until the Windows acceptance matrix, Authenticode signing, release artifact verification, and GitHub Release assets are ready; update the Windows version and installer names together at that point.
+
+## First Checkout Commands
+
+Run these commands in PowerShell before the first Windows code change:
+
+```powershell
+git clone https://github.com/douxy1994/Pythia.git
+Set-Location Pythia
+git switch master
+git pull --ff-only
+git merge-base --is-ancestor 0d286b1a85b5c0a8bfa8f66b53d861f13185e972 HEAD
+if ($LASTEXITCODE -ne 0) { throw "master is behind the current Windows development baseline" }
+git switch -c codex/windows-final
+
+Set-Location Windows\Pythia.Windows
+flutter config --enable-windows-desktop
+flutter pub get
+node ..\..\script\validate_pythia_plugins.mjs
+flutter analyze
+flutter test
+```
+
+For a quick comparison with the published CI evidence:
+
+```powershell
+gh run view 30703218631 --repo douxy1994/Pythia
+```
 
 ## Verification
 
@@ -109,6 +155,8 @@ flutter test
 flutter build windows --release
 dart run tool/verify_release_package.dart build\windows\x64\runner\Release
 ```
+
+After the local release build, run `tool\build_windows_installer.ps1` and the smoke script from [`WINDOWS_CODEX_HANDOFF.md`](../WINDOWS_CODEX_HANDOFF.md). Keep the generated installer and checksum outside the Git working tree unless they are being uploaded as release assets.
 
 Then verify the feature matrix in `Docs/FEATURE_MATRIX.md` and the release gates in `Docs/RELEASE_CHECKLIST.md`.
 

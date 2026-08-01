@@ -2,9 +2,10 @@
 
 > 面向接手 Windows 版 Pythia 的 Codex。请先完整阅读本文，再修改代码。
 >
-> 更新日期：2026-07-15  
-> 产品版本：Pythia 1.0.0  
-> Windows 目标：Windows 11 x64 / AMD64  
+> 更新日期：2026-08-01
+> 仓库/macOS 当前发布：Pythia 1.1.0
+> Windows 当前版本：Pythia 1.0.0+100（Preview）
+> Windows 目标：Windows 11 x64 / AMD64
 > 仓库：<https://github.com/douxy1994/Pythia>
 
 ## 0. 你接手的任务是什么
@@ -36,16 +37,16 @@ https://github.com/douxy1994/Pythia.git
 
 ### 1.2 正确基线
 
-本交接发布后，默认分支 `master` 应包含提交 `dbae1b5` 及其后续文档和插件提交。克隆后先确认：
+当前默认分支 `master` 的 Windows 开发基线是提交 `0d286b1a85b5c0a8bfa8f66b53d861f13185e972`，其提交说明为 `Release Pythia 1.1.0`。克隆后先确认：
 
 ```powershell
 git clone https://github.com/douxy1994/Pythia.git
 Set-Location Pythia
 git switch master
 git pull --ff-only
-git merge-base --is-ancestor dbae1b5 HEAD
+git merge-base --is-ancestor 0d286b1a85b5c0a8bfa8f66b53d861f13185e972 HEAD
 if ($LASTEXITCODE -ne 0) {
-  throw "当前 master 不包含 Windows 最终验收基线 dbae1b5"
+  throw "master is behind the current Windows development baseline"
 }
 ```
 
@@ -55,39 +56,35 @@ if ($LASTEXITCODE -ne 0) {
 git switch -c codex/windows-final
 ```
 
-如果默认分支尚未合并本交接提交，则临时从下面的分支开始：
-
-```powershell
-git fetch origin codex/final-acceptance
-git switch -c codex/windows-final origin/codex/final-acceptance
-```
-
 ### 1.3 已验证基线
 
-提交 `dbae1b522e8a3d995c8e87699da99cd39882c91a` 已通过 Windows x64 GitHub Actions：
+提交 `0d286b1a85b5c0a8bfa8f66b53d861f13185e972` 已通过 Windows x64 GitHub Actions：
 
 - Workflow：`Windows x64`
-- Run：<https://github.com/douxy1994/Pythia/actions/runs/29406318371>
+- Run：<https://github.com/douxy1994/Pythia/actions/runs/30703218631>
 - Runner：`windows-2025`
 - Flutter：`3.44.5 stable`
 - Dart/Flutter 测试：85 项
+- `flutter analyze` 通过
+- Pythia 示例插件、公有插件长文本/重试校验通过
+- macOS 和 Windows 插件 runner 的网络回退测试通过
 - 架构：PE machine `0x8664`，即 AMD64
 - 完成实际 release 构建
 - 完成 Inno Setup 安装程序构建
 - 完成安装程序 SHA-256 复核
-- 完成未安装版本启动两次的冒烟测试
-- 完成临时目录静默安装、启动、静默卸载冒烟测试
+- 完成 Windows runtime、重启、安装、启动、卸载冒烟测试
 - 完成发布包插件和敏感材料排除检查
 
-这说明现有代码可以在 CI 中构建，但不能代替真实 Windows 桌面的人工交互验收。
+这说明现有代码已经有可复现的 CI 构建基线，但真实 Windows 桌面的人工交互验收仍需单独完成。
 
 ## 2. 不可更改的产品身份
 
 | 项目 | 固定值 |
 | --- | --- |
 | 产品名 | `Pythia` |
-| 当前版本 | `1.0.0` |
-| Flutter build number | `100` |
+| 仓库/macOS 当前发布 | `1.1.0` |
+| Windows 当前版本 | `1.0.0` |
+| Windows Flutter build number | `100` |
 | Windows 架构 | x64 / AMD64 only |
 | Windows EXE | `Pythia.exe` |
 | Windows 安装程序 | `Pythia-1.0.0-windows-x64.exe` |
@@ -98,6 +95,8 @@ git switch -c codex/windows-final origin/codex/final-acceptance
 | WebDAV 根目录 | `/Pythia/` |
 | 历史文件 | `/Pythia/history/history.json` |
 | 可移植备份 | `/Pythia/settings/portable-backup.json` |
+
+> 版本边界：仓库/macOS 的 `1.1.0` 已发布；Windows 客户端仍是 Preview `1.0.0+100`。Windows 在完成实机验收、Authenticode 签名和 Release 资产复核前，不要把 Windows 文档、更新检查器或安装程序名称提前改成 `1.1.0`。
 
 不要：
 
@@ -1288,9 +1287,9 @@ Windows 版只有同时满足下列条件才算完成：
 - Docs/RELEASE_CHECKLIST.md
 - Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md
 
-先从 master 创建 codex/windows-final 分支，并确认 dbae1b5 是 HEAD 的祖先。不要从原 Pot 仓库开始，不要重写已经存在的 Flutter/Win32 架构，不要修改 macOS 签名和 TCC 身份。
+先从 master 创建 codex/windows-final 分支，并确认 `0d286b1a85b5c0a8bfa8f66b53d861f13185e972` 是 HEAD 的祖先。不要从原 Pot 仓库开始，不要重写已经存在的 Flutter/Win32 架构，不要修改 macOS 签名和 TCC 身份。
 
-第一步只做基线复现：flutter pub get、插件校验、flutter analyze、85 项测试、准备插件 runtime、Windows x64 release、发布包门禁、Inno 安装程序和安装/卸载冒烟。记录 Windows build、Flutter、Visual Studio、SDK 和 DPI。
+第一步只做基线复现：flutter pub get、插件校验、flutter analyze、85 项测试、准备插件 runtime、Windows x64 release、发布包门禁、Inno 安装程序和安装/卸载冒烟。当前 CI 基线是 [run 30703218631](https://github.com/douxy1994/Pythia/actions/runs/30703218631)，仍需记录真实 Windows 的 build、Flutter、Visual Studio、SDK 和 DPI。
 
 随后优先修复并实机验证：
 1. Enter 翻译、Shift+Enter 换行、中文输入法 composing 时 Enter 不触发翻译。
