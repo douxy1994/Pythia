@@ -1,5 +1,11 @@
 # Windows x64 Development Plan
 
+> **2026-07-16 起技术路线已转向 WinUI 3。** 当前正式 Windows 客户端是
+> `Windows/Pythia.WinUI/`（C# 14 / .NET 10 / WinUI 3 / Windows App SDK 2.3.1），
+> 本文下述的 Flutter/Win32 内容仅描述旧的 `Windows/Pythia.Windows/` 兼容参考工程。
+> WinUI 现行差异清单见 [`WINDOWS_DIFF_LIST.md`](WINDOWS_DIFF_LIST.md)，
+> 构建/测试命令以 WinUI 工程的 `tool/` 与 `Windows/Pythia.WinUI.Tests/` 为准。
+
 This repository contains a 64-bit x64 Flutter Windows client under `Windows/Pythia.Windows`, including the native Windows host/CMake files needed to register platform channels. Local macOS runs Flutter/Dart tests and native contract checks; the fork's GitHub Actions Windows runner now compiles and packages the AMD64 release. Interactive runtime verification still requires Windows x64.
 
 The authoritative, detailed continuation document is [`../WINDOWS_CODEX_HANDOFF.md`](../WINDOWS_CODEX_HANDOFF.md). A Windows Codex agent must read it before changing the client. This file remains a shorter architecture and command reference.

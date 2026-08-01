@@ -1,5 +1,10 @@
 # Windows Credential Channel
 
+> **2026-07-16 起技术路线已转向 WinUI 3。** 当前正式客户端 `Windows/Pythia.WinUI/`
+> 通过 `Services/CredentialStore.cs` 直接调用 Windows Credential Manager
+> （`CredWriteW/CredReadW/CredDeleteW`，`Pythia/` 前缀，UTF-8 blob），不再使用下述
+> Flutter MethodChannel。下文为旧 `Windows/Pythia.Windows/` 兼容参考工程的实现记录。
+
 Pythia Windows must not store API keys or WebDAV passwords in `settings.json`.
 The Flutter scaffold uses:
 

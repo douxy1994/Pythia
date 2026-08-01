@@ -1,5 +1,13 @@
 # Run and Test
 
+> **Windows 客户端已于 2026-07-16 转向 WinUI 3。** Windows 的运行与测试命令以
+> `Windows/Pythia.WinUI/`（C#/.NET）为准：`dotnet build`、
+> `dotnet run --project Windows/Pythia.WinUI.Tests`、
+> `dotnet publish Windows/Pythia.WinUI -c Release -r win-x64 --self-contained`，
+> 安装包由 `Windows/Pythia.WinUI/tool/build-installer.ps1` 生成。
+> 完整命令对照见 [`WINDOWS_DIFF_LIST.md`](WINDOWS_DIFF_LIST.md) 末尾。
+> 下文 Windows 段落中的 `flutter` 命令仅适用于旧兼容参考工程 `Windows/Pythia.Windows/`。
+
 ## macOS
 
 Build, install, sign, launch, and verify:

@@ -1,5 +1,10 @@
 # Change Summary
 
+> **2026-07-16 起，Windows 客户端迁移至 WinUI 3**（`Windows/Pythia.WinUI/`，
+> C# 14 / .NET 10 / Windows App SDK 2.3.1）。旧 Flutter 工程
+> `Windows/Pythia.Windows/` 保留为兼容参考。差异清单见
+> [`WINDOWS_DIFF_LIST.md`](WINDOWS_DIFF_LIST.md)。
+
 ## Added
 
 - Cross-platform history record schema.

@@ -1,5 +1,11 @@
 # Known Issues
 
+> **2026-08-01 更新：Windows 客户端已迁移至 WinUI 3（`Windows/Pythia.WinUI/`）。**
+> 当前已确认的代码缺口为「系统通知未真正发送」(P0) 与「OCR 语言包枚举/缺失提示」(P1)；
+> Authenticode 签名为外部阻塞（待证书）。完整清单见
+> [`WINDOWS_DIFF_LIST.md`](WINDOWS_DIFF_LIST.md)。下文早期条目描述的是旧 Flutter
+> 客户端，WinUI 客户端已实现其中大部分能力（见 `WINDOWS_WINUI_PARITY_AUDIT.md`）。
+
 ## Cross-Platform
 
 - Windows x64 compilation and installer packaging are verified by GitHub Actions and by a local Windows 11 build/install smoke run. User-driven interaction verification remains outstanding for IME candidate windows, mixed-DPI displays, representative third-party applications, and credentialed network services.

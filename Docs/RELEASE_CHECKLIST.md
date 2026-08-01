@@ -1,5 +1,11 @@
 # Pythia Release Checklist
 
+> **Windows 客户端已于 2026-07-16 转向 WinUI 3。** 下文中涉及 Windows 的
+> `flutter` 命令、`Pythia.Windows` 路径与 Dart 校验工具，应替换为 WinUI 等价物
+> （`dotnet publish`、`Windows/Pythia.WinUI/`、原生 smoke 套件、
+> `Windows/Pythia.WinUI/tool/build-installer.ps1`）。Authenticode 签名为当前发布
+> 阻塞项，详见 [`WINDOWS_DIFF_LIST.md`](WINDOWS_DIFF_LIST.md)。
+
 ## Shared
 
 - Version is `1.0.0`.

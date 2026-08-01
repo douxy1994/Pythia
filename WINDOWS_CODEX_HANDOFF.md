@@ -2,10 +2,31 @@
 
 > 面向接手 Windows 版 Pythia 的 Codex。请先完整阅读本文，再修改代码。
 >
-> 更新日期：2026-07-18
-> 产品版本：Pythia 1.0.0  
-> Windows 目标：Windows 11 x64 / AMD64  
+> 更新日期：2026-07-18（2026-08-01 增补 WinUI 转向说明）
+> 产品版本：Pythia 1.0.0
+> Windows 目标：Windows 11 x64 / AMD64
 > 仓库：<https://github.com/douxy1994/Pythia>
+
+> ## ⚠️ 重要：技术路线已于 2026-07-16 转向 WinUI 3
+>
+> 本文档最初描述的是 **Flutter/Win32 客户端**。用户已于 2026-07-16 决定将
+> Windows 客户端迁移至 **WinUI 3（C# 14 / .NET 10 / Windows App SDK 2.3.1）**，
+> 原因是 Flutter 界面不够美观、不够现代化。该决策记录于 Codex 会话
+> `rollout-2026-07-16T05-21-35-...jsonl`（用户指令 L1456、L2926）。
+>
+> - **当前正式 Windows 客户端**：`Windows/Pythia.WinUI/`（WinUI 3，分支 `codex/windows-final`）
+> - **旧 Flutter 工程**：`Windows/Pythia.Windows/` —— 保留为兼容参考，**不再新增功能**
+> - **本文档下文**（第 1 节起的 Flutter 命令、Dart 代码结构、MethodChannel 契约等）
+>   描述的是旧 Flutter 客户端，仅作历史与数据/插件/安全契约参考。
+>
+> **以 WinUI 为准的现行文档**：
+> - [`Docs/WINDOWS_DIFF_LIST.md`](Docs/WINDOWS_DIFF_LIST.md) —— 基于 WinUI 的功能差异清单（P0/P1/P2/外部阻塞）
+> - [`Docs/WINDOWS_WINUI_PARITY_AUDIT.md`](Docs/WINDOWS_WINUI_PARITY_AUDIT.md) —— WinUI 对齐与回归证据
+> - [`Windows/Pythia.WinUI/README.md`](Windows/Pythia.WinUI/README.md) —— WinUI 工程说明
+>
+> **仍然有效的部分**：本文档中的数据契约、插件协议、凭据与隐私边界、划词/快捷键/托盘等
+> 验收标准，以及对「禁止无限开发」「不得泄露敏感信息」的约束，**原样适用于 WinUI 客户端**。
+> 仅「必须使用 Flutter / 改 Flutter 代码」一类的实现指引已被 WinUI 转向覆盖。
 
 ## 0. 你接手的任务是什么
 
