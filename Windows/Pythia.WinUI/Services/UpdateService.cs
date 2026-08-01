@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Security;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -112,6 +113,13 @@ public static class UpdateService
         var actualHash = await HashFileAsync(temporary, cancellationToken);
         if (!string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
             throw new CryptographicException("更新安装包 SHA-256 校验失败。");
+        // SHA-256 proves the bytes match the release; Authenticode additionally proves the
+        // bytes come from the expected publisher and haven't been tampered with in flight.
+        // Both checks are required before the installer is allowed to run (goal §IV.6).
+        var status = AuthenticodeVerifier.VerifyFile(temporary, out var subject);
+        var decision = AuthenticodeVerifier.Evaluate(status, subject, AuthenticodeVerifier.ExpectedPublisher);
+        if (!decision.Accepted)
+            throw new SecurityException($"更新安装包被拒绝：{decision.Reason}");
         File.Move(temporary, destination, true);
         return destination;
     }

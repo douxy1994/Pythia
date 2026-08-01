@@ -5,6 +5,12 @@
 > 本文下述的 Flutter/Win32 内容仅描述旧的 `Windows/Pythia.Windows/` 兼容参考工程。
 > WinUI 现行差异清单见 [`WINDOWS_DIFF_LIST.md`](WINDOWS_DIFF_LIST.md)，
 > 构建/测试命令以 WinUI 工程的 `tool/` 与 `Windows/Pythia.WinUI.Tests/` 为准。
+>
+> **阶段二更新（2026-08-01）：** WinUI 客户端的系统通知（`NotificationService` +
+> `Shell_NotifyIcon` 气泡）、OCR 语言包检测（显式 zh/en 枚举 + 缺失提示）、
+> Authenticode 校验（`UpdateService` 的 `WinVerifyTrust`）与签名流程
+> （`build-installer.ps1` 环境变量门控签名）代码均已就绪。详见差异清单 P0-1/P1-1/P1-2。
+> 下文第 82 行起的 Flutter `SystemNotificationService` 等描述仅供对照旧实现。
 
 This repository contains a 64-bit x64 Flutter Windows client under `Windows/Pythia.Windows`, including the native Windows host/CMake files needed to register platform channels. Local macOS runs Flutter/Dart tests and native contract checks; the fork's GitHub Actions Windows runner now compiles and packages the AMD64 release. Interactive runtime verification still requires Windows x64.
 

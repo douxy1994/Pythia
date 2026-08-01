@@ -1,6 +1,7 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Pythia.Models;
 using Pythia.Pages;
 using Pythia.Services;
 using Windows.Graphics;
@@ -33,6 +34,7 @@ public sealed partial class MainWindow : Window
             _shell.HotkeyInvoked += Shell_HotkeyInvoked;
             _shell.ShowRequested += (_, _) => ShowWindow();
             _shell.TrayActionInvoked += Shell_TrayActionInvoked;
+            App.Services.Notifications = new NotificationService(_shell.ShowBalloon, () => App.Services.Settings.NotificationsEnabled);
         }
         catch (Exception exception)
         {
@@ -114,6 +116,7 @@ public sealed partial class MainWindow : Window
         {
             await Task.Delay(250);
             var text = await OcrService.RecognizeScreenAsync();
+            ReportOcrWarning();
             if (string.IsNullOrWhiteSpace(text))
             {
                 ShowWindow();
@@ -127,11 +130,30 @@ public sealed partial class MainWindow : Window
             ShowWindow();
             App.Services.Status.Report("已取消截图识别");
         }
+        catch (OcrUnavailableException exception)
+        {
+            ShowWindow();
+            App.Services.Status.Report(exception.Message);
+            // OCR is hotkey-triggered and the window may still be hidden — surface a balloon too.
+            NotifyBackground("Pythia OCR", exception.Message, NotificationKind.Warning);
+        }
         catch (Exception exception)
         {
             ShowWindow();
             App.Services.Status.Report($"截图识别失败：{exception.Message}");
         }
+    }
+
+    /// <summary>
+    /// If the last OCR call fell back to a non-preferred language pack, tell the user
+    /// (status bar + balloon when backgrounded) without blocking the recognized text.
+    /// </summary>
+    private void ReportOcrWarning()
+    {
+        if (OcrService.LastWarning is not { } reason) return;
+        var message = OcrUnavailableException.Describe(reason);
+        App.Services.Status.Report(message);
+        NotifyBackground("Pythia OCR", message, NotificationKind.Warning);
     }
 
     public async Task TranslateSelectionAsync()
@@ -202,6 +224,17 @@ public sealed partial class MainWindow : Window
             return true;
         }
         return _shell.TryRegisterHotkeys(settings, out error);
+    }
+
+    /// <summary>
+    /// Fires a system balloon only when the Pythia window is not in the foreground,
+    /// so events the user is already looking at do not produce a notification.
+    /// Silently no-ops when the shell or notifier is unavailable.
+    /// </summary>
+    public void NotifyBackground(string title, string body, NotificationKind kind = NotificationKind.Info)
+    {
+        if (_shell is null || !_shell.IsWindowForeground())
+            App.Services.Notifications?.Show(title, body, kind);
     }
 
     public void ExitApplication()

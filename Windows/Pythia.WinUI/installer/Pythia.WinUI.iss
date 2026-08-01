@@ -9,6 +9,10 @@
 #endif
 
 [Setup]
+; Authenticode signing is performed by tool/build-installer.ps1 via signtool, gated on the
+; PYTHIA_WIN_CERT_FILE / PYTHIA_WIN_CERT_SHA1 environment variables (no cert material in the
+; repo). An equivalent ISCC SignTool directive is intentionally NOT enabled here to avoid
+; double-signing: the installer + bundled Pythia.exe are both signed in the PowerShell script.
 AppId={{6F96CE7A-6729-4F43-9878-FF171728A2D4}
 AppName={#AppName}
 AppVersion={#AppVersion}

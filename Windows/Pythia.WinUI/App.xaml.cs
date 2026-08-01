@@ -71,7 +71,11 @@ public partial class App : Application
         try
         {
             var update = await UpdateService.CheckAsync();
-            if (update is not null) Services.Status.Report($"发现新版本 {update.Tag}，可在“设置 → 关于与更新”中安装");
+            if (update is not null)
+            {
+                Services.Status.Report($"发现新版本 {update.Tag}，可在“设置 → 关于与更新”中安装");
+                (MainAppWindow as MainWindow)?.NotifyBackground("Pythia", $"发现新版本 {update.Tag}，可在设置中安装");
+            }
         }
         catch
         {

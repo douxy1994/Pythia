@@ -405,12 +405,15 @@ public sealed partial class HomePage : Page
             if (!string.IsNullOrWhiteSpace(text))
             {
                 SourceTextBox.Text = text;
-                Services.Status.Report("文字识别完成");
+                if (OcrService.LastWarning is { } reason)
+                    Services.Status.Report(OcrUnavailableException.Describe(reason));
+                else Services.Status.Report("文字识别完成");
                 if (Services.Settings.ScreenshotOcrAutoTranslate) await TranslateAsync();
             }
             else Services.Status.Report("图片中未识别到文字");
         }
         catch (OperationCanceledException) { Services.Status.Report("已取消 OCR"); }
+        catch (OcrUnavailableException exception) { Services.Status.Report(exception.Message); }
         catch (Exception exception) { Services.Status.Report($"OCR 失败：{exception.Message}"); }
     }
 

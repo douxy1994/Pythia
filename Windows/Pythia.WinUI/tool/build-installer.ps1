@@ -5,6 +5,49 @@ param(
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
+
+# Authenticode signing is optional and gated on environment variables so no certificate
+# material ever lives in the repo. Provide either a PFX file + password, or a SHA-1 thumbprint
+# of a cert in the current user's certificate store. When unset, the build produces an unsigned
+# installer (tracked as EXT-1; the auto-updater accepts unsigned releases until a cert exists).
+# When set, a signing failure aborts the release build.
+$certFile = $env:PYTHIA_WIN_CERT_FILE
+$certPassword = $env:PYTHIA_WIN_CERT_PASSWORD
+$certSha1 = $env:PYTHIA_WIN_CERT_SHA1
+$timestampServer = if ($env:PYTHIA_WIN_TIMESTAMP_URL) { $env:PYTHIA_WIN_TIMESTAMP_URL } else { 'http://timestamp.digicert.com' }
+
+function Find-SignTool {
+    $candidates = @(
+        "$env:LOCALAPPDATA\Programs\WindowsSdk\AnyCPU\bin\x64\signtool.exe",
+        "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe",
+        "${env:ProgramFiles}\Windows Kits\10\bin\*\x64\signtool.exe"
+    ) | ForEach-Object { Get-Item -Path $_ -ErrorAction SilentlyContinue } | Sort-Object FullName -Descending
+    $found = $candidates | Select-Object -First 1
+    if ($found) { return $found.FullName }
+    $cmd = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    throw "signtool.exe not found. Install the Windows SDK or add signtool to PATH."
+}
+
+function Sign-File {
+    param([string]$Path)
+    if (-not $certFile -and -not $certSha1) {
+        Write-Warning "PYTHIA_WIN_CERT_* not set — leaving '$(Split-Path -Leaf $Path)' unsigned (EXT-1). Not a signed release."
+        return
+    }
+    $signtool = Find-SignTool
+    if ($certFile) {
+        if (-not (Test-Path -LiteralPath $certFile)) { throw "Certificate file not found: $certFile" }
+        & $signtool sign /fd sha256 /td sha256 /tr $timestampServer /f $certFile /p $certPassword $Path
+    }
+    else {
+        & $signtool sign /fd sha256 /td sha256 /tr $timestampServer /sha1 $certSha1 $Path
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Authenticode signing failed for '$Path' (signtool exit $LASTEXITCODE). Aborting release build." }
+    Write-Host "Signed: $Path"
+}
+
+$projectRoot = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $projectRoot "Pythia.WinUI.csproj"
 $publish = Join-Path $projectRoot "publish\win-x64"
 $projectRootFull = [System.IO.Path]::GetFullPath($projectRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar)
@@ -64,11 +107,17 @@ if (-not (Test-Path -LiteralPath (Join-Path $publishRuntime "node.exe"))) {
     throw "Published application is missing Runtime\node.exe."
 }
 
+# Sign the main executable before ISCC packages it, so the bundled Pythia.exe is signed too.
+$mainExe = Join-Path $publish "Pythia.exe"
+if (Test-Path -LiteralPath $mainExe) { Sign-File -Path $mainExe }
+
 & $iscc "/DAppVersion=$Version" "/DChineseLanguageFile=$chineseLanguageFile" $installer
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
 
 $artifact = Join-Path $projectRoot "dist\Pythia-$Version-windows-x64.exe"
 if (-not (Test-Path -LiteralPath $artifact)) { throw "Installer was not created: $artifact" }
+# Sign the installer itself once ISCC has produced it.
+Sign-File -Path $artifact
 $checksum = "$artifact.sha256"
 $hash = (Get-FileHash -Algorithm SHA256 $artifact).Hash.ToLowerInvariant()
 "$hash  $(Split-Path -Leaf $artifact)" | Set-Content -LiteralPath $checksum -Encoding ascii -NoNewline

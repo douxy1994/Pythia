@@ -31,11 +31,13 @@ public sealed class WindowsShellService : IDisposable
     private const uint WmContextMenu = 0x007B;
     private const uint NinSelect = 0x0400;
     private const uint NimAdd = 0;
+    private const uint NimModify = 1;
     private const uint NimDelete = 2;
     private const uint NimSetVersion = 4;
     private const uint NifMessage = 1;
     private const uint NifIcon = 2;
     private const uint NifTip = 4;
+    private const uint NifInfo = 0x0010; // balloon
     private const uint NotifyIconVersion4 = 4;
     private const uint ImageIcon = 1;
     private const uint LrLoadFromFile = 0x0010;
@@ -81,6 +83,34 @@ public sealed class WindowsShellService : IDisposable
         _exitRequested = true;
         _window.Close();
     }
+
+    /// <summary>
+    /// Displays a classic tray balloon via <c>NIM_MODIFY</c> + <c>NIF_INFO</c>.
+    /// Safe to call whether or not the tray icon was added; returns false if the
+    /// underlying <see cref="Shell_NotifyIcon"/> call rejects the modify (for example
+    /// when no icon is present). The balloon lifetime is owned by the shell.
+    /// </summary>
+    public bool ShowBalloon(NotifyBalloon balloon)
+    {
+        if (!_trayAdded) return false;
+        var data = new NotifyIconData
+        {
+            Size = (uint)Marshal.SizeOf<NotifyIconData>(),
+            Window = _hwnd,
+            Id = 1,
+            Flags = NifInfo,
+            Info = balloon.Body,
+            InfoTitle = balloon.Title,
+            InfoFlags = (uint)balloon.Kind,
+        };
+        return Shell_NotifyIcon(NimModify, ref data);
+    }
+
+    /// <summary>
+    /// True when the Pythia window is the current foreground window. Callers use this
+    /// to avoid firing a balloon for an event the user is already looking at.
+    /// </summary>
+    public bool IsWindowForeground() => GetForegroundWindow() == _hwnd;
 
     public bool TryRegisterHotkeys(PythiaSettings settings, out string? error)
     {
@@ -301,4 +331,5 @@ public sealed class WindowsShellService : IDisposable
     [DllImport("user32.dll")] private static extern bool DestroyMenu(IntPtr menu);
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
 }

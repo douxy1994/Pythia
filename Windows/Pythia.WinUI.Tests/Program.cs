@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.IO.Compression;
+using Windows.Globalization;
 using Pythia.Models;
 using Pythia.Services;
 
@@ -269,6 +270,59 @@ Check(UpdateService.TryParseVersion("v1.2.3", out var updateVersion) && updateVe
     "update version parser");
 Check(ScreenRegionSelector.NormalizeSelection(new System.Drawing.Point(120, 90), new System.Drawing.Point(20, 10)) ==
       new System.Drawing.Rectangle(20, 10, 100, 80), "screenshot reverse drag geometry");
+
+// --- P0: system notification gating + de-dupe ---------------------------------------------
+var notificationCalls = new List<NotifyBalloon>();
+bool NotificationEnabled() => true;
+var notifier = new NotificationService(b => { notificationCalls.Add(b); return true; }, NotificationEnabled);
+notifier.Show("Pythia", "hello", NotificationKind.Info);
+notifier.Show("Pythia", "hello", NotificationKind.Info); // identical — must be suppressed
+Check(notificationCalls.Count == 1 && notificationCalls[0].Body == "hello",
+    "notification de-duplicates identical back-to-back balloons");
+notifier.Show("Pythia", "different", NotificationKind.Warning);
+Check(notificationCalls.Count == 2 && notificationCalls[1].Kind == NotificationKind.Warning,
+    "notification forwards distinct balloons with their kind");
+var disabledCalls = new List<NotifyBalloon>();
+var disabledNotifier = new NotificationService(b => { disabledCalls.Add(b); return true; }, () => false);
+disabledNotifier.Show("Pythia", "ignored", NotificationKind.Info);
+Check(disabledCalls.Count == 0, "notification respects NotificationsEnabled=false");
+
+// --- P1: OCR language-pack selection -------------------------------------------------------
+Language Tag(string tag) => new(tag);
+Check(OcrService.SelectLanguage([], "zh") is null, "OCR empty language list yields no selection");
+Check(OcrService.SelectLanguage([Tag("en-US")], "zh") is null, "OCR no Chinese pack detectable");
+// Note: WinRT Language normalizes "zh-CN" to "zh-Hans-CN" (inserts the default script), so we
+// assert on the primary subtag rather than the exact input string.
+Check(OcrService.SelectLanguage([Tag("zh-CN"), Tag("en-US")], "zh")?.LanguageTag.Split('-')[0] == "zh",
+    "OCR selects Chinese when available");
+Check(OcrService.SelectLanguage([Tag("zh-Hans"), Tag("en-US")], "zh")?.LanguageTag.Split('-')[0] == "zh",
+    "OCR Chinese prefix match handles subtags");
+Check(OcrService.SelectLanguage([Tag("en-US")], "en")?.LanguageTag.Split('-')[0] == "en",
+    "OCR selects English when available");
+Check(OcrUnavailableException.Describe(OcrUnavailableReason.NoLanguagePack).Contains("设置", StringComparison.Ordinal),
+    "OCR missing-pack message points to Windows Settings");
+Check(OcrUnavailableException.Describe(OcrUnavailableReason.NoChinesePack).Contains("改用英文", StringComparison.Ordinal),
+    "OCR missing-Chinese message explains the English fallback");
+
+// --- P1: Authenticode verify decision (pure policy) ----------------------------------------
+Check(!AuthenticodeVerifier.Evaluate(SignatureStatus.NoSignature, "", "CN=douxy1994").Accepted,
+    "Authenticode rejects unsigned installer when a publisher is pinned");
+Check(!AuthenticodeVerifier.Evaluate(SignatureStatus.Invalid, "CN=douxy1994", "CN=douxy1994").Accepted,
+    "Authenticode rejects invalid signatures");
+Check(!AuthenticodeVerifier.Evaluate(SignatureStatus.Untrusted, "CN=douxy1994", "CN=douxy1994").Accepted,
+    "Authenticode rejects untrusted chains");
+Check(!AuthenticodeVerifier.Evaluate(SignatureStatus.Trusted, "CN=attacker", "CN=douxy1994").Accepted,
+    "Authenticode rejects signer-identity mismatch");
+Check(AuthenticodeVerifier.Evaluate(SignatureStatus.Trusted, "CN=douxy1994", "CN=douxy1994").Accepted,
+    "Authenticode accepts matching signer");
+// EXT-1 (no cert provisioned): unsigned is accepted, but tampering is not.
+Check(AuthenticodeVerifier.Evaluate(SignatureStatus.NoSignature, "", "").Accepted,
+    "EXT-1: unsigned release accepted while no publisher is pinned");
+Check(!AuthenticodeVerifier.Evaluate(SignatureStatus.Invalid, "", "").Accepted,
+    "EXT-1: invalid signature still rejected");
+Check(!AuthenticodeVerifier.Evaluate(SignatureStatus.Untrusted, "", "").Accepted,
+    "EXT-1: untrusted signature still rejected");
+
 
 var json = """
 {

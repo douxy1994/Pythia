@@ -1,10 +1,9 @@
 # Pythia Release Checklist
 
-> **Windows 客户端已于 2026-07-16 转向 WinUI 3。** 下文中涉及 Windows 的
-> `flutter` 命令、`Pythia.Windows` 路径与 Dart 校验工具，应替换为 WinUI 等价物
+> **Windows 客户端已于 2026-07-16 转向 WinUI 3。** Windows 段落已重写为 WinUI 等价物
 > （`dotnet publish`、`Windows/Pythia.WinUI/`、原生 smoke 套件、
-> `Windows/Pythia.WinUI/tool/build-installer.ps1`）。Authenticode 签名为当前发布
-> 阻塞项，详见 [`WINDOWS_DIFF_LIST.md`](WINDOWS_DIFF_LIST.md)。
+> `Windows/Pythia.WinUI/tool/build-installer.ps1`）。Authenticode 代码路径已就绪，
+> 真实签名待 EXT-1 证书，详见 [`WINDOWS_DIFF_LIST.md`](WINDOWS_DIFF_LIST.md)。
 
 ## Shared
 
@@ -33,24 +32,22 @@
 
 ## Windows
 
-- The Windows agent has completed the tasks and manual acceptance matrix in `WINDOWS_CODEX_HANDOFF.md`.
+> WinUI 3 客户端（`Windows/Pythia.WinUI/`）。阶段二已关闭 P0 系统通知与 P1 OCR 语言包；
+> Authenticode 代码路径已就绪，真实签名待 EXT-1 证书（见 [`WINDOWS_DIFF_LIST.md`](WINDOWS_DIFF_LIST.md)）。
 
-- Windows project builds with an x64 Visual Studio toolchain; non-x64 CMake configuration is rejected.
-- `Pythia.exe` is AMD64 (`PE machine 0x8664`), verified by the release package gate.
-- App starts, exits, and restarts.
-- Uninstall removes the current-user `Pythia` Run value without disturbing a value that existed before an isolated smoke test.
-- Main translation flow works.
-- Settings save and change behavior.
-- API keys and WebDAV credentials are stored via Credential Manager or DPAPI.
-- Tray menu exposes translate, settings, history, sync, and quit.
-- Global hotkeys work.
-- Screenshot translation has a real implementation or clear unavailable-state message.
-- Release package contains no plugins.
-- Bundled plugin runtime exists at `runtime/node.exe`; native `.pythia`, `.potext` conversion, compatibility fallback, configuration, disable, and delete tests pass.
-- `dart run tool/verify_release_package.dart build\windows\x64\runner\Release` succeeds before upload, including x64, plugin exclusion, and secret scans.
-- `powershell -File tool/build_windows_installer.ps1` creates `dist/Pythia-1.0.0-windows-x64.exe` and its same-name `.sha256` sidecar.
-- Production installer is Authenticode-signed by setting `PYTHIA_WINDOWS_CERT_SHA1` to a certificate already in the Windows certificate store before packaging.
-- Both installer and `.sha256` are uploaded to the same GitHub Release; certificate and private-key files are never uploaded or committed.
+- `dotnet build Windows/Pythia.WinUI -c Debug` 与 `-c Release` 均通过（0 warning / 0 error）。
+- `dotnet run --project Windows/Pythia.WinUI.Tests` 通过（83 项原生 smoke 断言）。
+- `node script/validate_pythia_plugins.mjs` 通过（Git Bash 下需用 Windows 原生 `tar` 或改用 cmd/PowerShell）。
+- `dotnet publish Windows/Pythia.WinUI -c Release -r win-x64 --self-contained` 通过；发布树为 win-x64、自包含、不含 Flutter/Dart 运行时、不含插件/凭据/私钥/测试项目。
+- `Windows/Pythia.WinUI/tool/build-installer.ps1` 生成 `dist/Pythia-<version>-windows-x64.exe` 与同名 `.sha256` sidecar。
+- 系统通知：`NotificationsEnabled` 真实门控气泡；更新发现/后台 WebDAV 同步/OCR 缺语言包三个流程接入气泡（人工实机验收见 EXT-8）。
+- OCR：显式枚举 zh/en 语言包，缺首选包回退并提示，两者皆无才中止（人工实机验收见 EXT-9）。
+- Authenticode 签名（**待 EXT-1 证书**）：配置 `PYTHIA_WIN_CERT_FILE`+`PYTHIA_WIN_CERT_PASSWORD`（或 `PYTHIA_WIN_CERT_SHA1`，可选 `PYTHIA_WIN_TIMESTAMP_URL`）后，`build-installer.ps1` 自动签名 exe 与安装包；签名失败中止正式发布构建。证书与私钥文件绝不提交或上传。
+- Authenticode 校验：`UpdateService` 在 SHA-256 通过后执行 `WinVerifyTrust`（`AuthenticodeVerifier`）；配置 `ExpectedPublisher` 后启用签名身份锁定；签名无效/不可信/身份不符时拒绝更新。
+- App starts, exits, restarts; 单实例运行通过。
+- 主翻译流程、设置保存与行为、Credential Manager 凭据存储、托盘菜单（6 项）、4 组全局快捷键均工作。
+- 卸载移除当前用户 `Pythia` Run 值且不影响既存值；卸载后无残留启动项或运行进程。
+- 安装包与 `.sha256` 一同上传至同一 GitHub Release。
 
 ## Sync
 

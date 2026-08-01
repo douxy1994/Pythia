@@ -17,6 +17,12 @@ public sealed class AppServices
     }
 
     public StatusService Status { get; } = new();
+    /// <summary>
+    /// System balloon notifier. Null until <see cref="Pythia.MainWindow"/> wires it to the
+    /// tray shell service; callers must null-check. Honors
+    /// <see cref="PythiaSettings.NotificationsEnabled"/> and de-dupes repeats.
+    /// </summary>
+    public NotificationService? Notifications { get; set; }
     public LocalStore Store { get; } = new();
     public CredentialStore Credentials { get; } = new();
     public PluginService Plugins { get; }
@@ -122,6 +128,12 @@ public sealed class AppServices
     }
 
     public async Task<WebDavHistorySyncResult> SyncHistoryAsync(CancellationToken cancellationToken = default)
+        => await SyncHistoryAsync(notify: false, cancellationToken);
+
+    /// <param name="notify">When true (background auto-sync), surface a system balloon on
+    /// completion or failure so the user learns about an event they did not trigger.
+    /// User-initiated sync passes false — the status bar already covers that case.</param>
+    public async Task<WebDavHistorySyncResult> SyncHistoryAsync(bool notify, CancellationToken cancellationToken = default)
     {
         await _historySyncGate.WaitAsync(cancellationToken);
         try
@@ -147,6 +159,7 @@ public sealed class AppServices
             await Store.SaveSettingsAsync(Settings);
             HistoryChanged?.Invoke(this, EventArgs.Empty);
             Status.Report(Settings.WebdavLastSyncStatus);
+            if (notify) Notifications?.Show("Pythia 同步", Settings.WebdavLastSyncStatus, NotificationKind.Info);
             return result;
         }
         catch (Exception exception)
@@ -156,6 +169,7 @@ public sealed class AppServices
             Settings.WebdavLastSyncError = exception.Message;
             await Store.SaveSettingsAsync(Settings);
             Status.Report($"WebDAV 同步失败：{exception.Message}");
+            if (notify) Notifications?.Show("Pythia 同步", $"历史同步失败：{exception.Message}", NotificationKind.Error);
             throw;
         }
         finally
@@ -212,7 +226,7 @@ public sealed class AppServices
             try
             {
                 await Task.Delay(GetSyncInterval(Settings), cancellationToken);
-                await SyncHistoryAsync(cancellationToken);
+                await SyncHistoryAsync(notify: true, cancellationToken);
             }
             catch (OperationCanceledException) { return; }
             catch { }
@@ -233,7 +247,7 @@ public sealed class AppServices
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
-            await SyncHistoryAsync(cancellationToken);
+            await SyncHistoryAsync(notify: true, cancellationToken);
         }
         catch (OperationCanceledException) { }
         catch { }
