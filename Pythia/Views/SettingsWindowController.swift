@@ -1014,7 +1014,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 16
-        stack.edgeInsets = NSEdgeInsets(top: 34, left: 42, bottom: 26, right: 42)
+        stack.edgeInsets = NSEdgeInsets(top: 24, left: 42, bottom: 22, right: 42)
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         // Hero: icon, name, version pills, description.
@@ -1026,8 +1026,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         icon.layer?.cornerRadius = 22
         icon.layer?.masksToBounds = true
         NSLayoutConstraint.activate([
-            icon.widthAnchor.constraint(equalToConstant: 96),
-            icon.heightAnchor.constraint(equalToConstant: 96),
+            icon.widthAnchor.constraint(equalToConstant: 80),
+            icon.heightAnchor.constraint(equalToConstant: 80),
         ])
 
         let nameLabel = NSTextField(labelWithString: "Pythia")
@@ -1050,7 +1050,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
         // Action bar: GitHub + 检查更新（含忙碌状态）。
         let githubButton = PillButton("GitHub", target: self, action: #selector(openGitHubProject))
-        githubButton.image = NSImage(systemSymbolName: "link", accessibilityDescription: "GitHub")
+        if let mark = NSImage(named: "GitHubMark") {
+            mark.isTemplate = true
+            githubButton.image = mark
+        } else {
+            githubButton.image = NSImage(systemSymbolName: "link", accessibilityDescription: "GitHub")
+        }
         githubButton.imagePosition = .imageLeading
         githubButton.imageHugsTitle = true
 
@@ -1142,17 +1147,44 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         return view
     }
 
+    /// A card title row pinned to the leading edge; plain NSTextFields in a
+    /// .width-aligned NSStackView don't reliably stretch, which centered them.
+    private func aboutCardTitle(_ text: String) -> NSView {
+        let container = NSView()
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 15, weight: .semibold)
+        label.alignment = .left
+        label.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            label.topAnchor.constraint(equalTo: container.topAnchor),
+            label.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        return container
+    }
+
     private func aboutReleaseNotesCard(version: String) -> NSView {
         let card = aboutCardContainer()
         let titleLabel = NSTextField(labelWithString: "最近版本更新")
         titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        titleLabel.alignment = .left
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
         let versionTag = NSTextField(labelWithString: "v\(version)")
         versionTag.font = .systemFont(ofSize: 11, weight: .semibold)
         versionTag.textColor = PythiaDesign.themeColor()
-        let header = NSStackView(views: [titleLabel, versionTag])
-        header.orientation = .horizontal
-        header.alignment = .centerY
-        header.distribution = .equalSpacing
+        versionTag.translatesAutoresizingMaskIntoConstraints = false
+        let header = NSView()
+        header.addSubview(titleLabel)
+        header.addSubview(versionTag)
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            titleLabel.topAnchor.constraint(equalTo: header.topAnchor),
+            titleLabel.bottomAnchor.constraint(equalTo: header.bottomAnchor),
+            versionTag.trailingAnchor.constraint(equalTo: header.trailingAnchor),
+            versionTag.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+        ])
 
         let rows = NSStackView(views: [
             aboutUpdateItem("修复 DeepL / 有道 / LibreTranslate", "按各平台官方契约修正语言代码映射，三个内置翻译服务恢复正常。"),
@@ -1182,12 +1214,11 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private func aboutSoftwareCard() -> NSView {
         let card = aboutCardContainer()
-        let titleLabel = NSTextField(labelWithString: "关于本软件")
-        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
         let bodyLabel = NSTextField(wrappingLabelWithString: "Pythia 是一款本地优先的桌面翻译工具。一个快捷键即可从划词、输入或截图中取词，让 Google、DeepL、百度、有道、OpenAI、LibreTranslate 与 .pythia 插件并排作答；历史记录可通过 WebDAV 在 macOS 与 Windows 之间同步，API Key 只保存在本机私有凭据文件中。")
         bodyLabel.font = .systemFont(ofSize: 13)
         bodyLabel.textColor = .secondaryLabelColor
-        let content = NSStackView(views: [titleLabel, bodyLabel])
+        bodyLabel.alignment = .left
+        let content = NSStackView(views: [aboutCardTitle("关于本软件"), bodyLabel])
         content.orientation = .vertical
         content.alignment = .width
         content.spacing = 12
@@ -1204,28 +1235,37 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func aboutUpdateItem(_ title: String, _ detail: String) -> NSView {
+        let container = NSView()
         let symbol = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
         let check = NSImageView(image: symbol ?? NSImage())
         check.contentTintColor = PythiaDesign.themeColor()
         check.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            check.widthAnchor.constraint(equalToConstant: 14),
-            check.heightAnchor.constraint(equalToConstant: 14),
-        ])
         let titleLabel = NSTextField(labelWithString: title)
         titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        titleLabel.alignment = .left
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
         let detailLabel = NSTextField(wrappingLabelWithString: detail)
         detailLabel.font = .systemFont(ofSize: 11)
         detailLabel.textColor = .secondaryLabelColor
-        let textStack = NSStackView(views: [titleLabel, detailLabel])
-        textStack.orientation = .vertical
-        textStack.alignment = .width
-        textStack.spacing = 2
-        let row = NSStackView(views: [check, textStack])
-        row.orientation = .horizontal
-        row.alignment = .top
-        row.spacing = 9
-        return row
+        detailLabel.alignment = .left
+        detailLabel.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(check)
+        container.addSubview(titleLabel)
+        container.addSubview(detailLabel)
+        NSLayoutConstraint.activate([
+            check.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            check.topAnchor.constraint(equalTo: container.topAnchor, constant: 1),
+            check.widthAnchor.constraint(equalToConstant: 14),
+            check.heightAnchor.constraint(equalToConstant: 14),
+            titleLabel.leadingAnchor.constraint(equalTo: check.trailingAnchor, constant: 9),
+            titleLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            titleLabel.topAnchor.constraint(equalTo: container.topAnchor),
+            detailLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            detailLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            detailLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 2),
+            detailLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        return container
     }
 
     private func scrollTab(_ document: NSView) -> NSView {

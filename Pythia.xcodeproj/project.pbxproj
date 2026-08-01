@@ -10,6 +10,7 @@
 		A10000000000000000000001 /* Pythia.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* Pythia.swift */; };
 		A10000000000000000000002 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* AppIcon.icns */; };
 		A10000000000000000000003 /* PythiaStatusTemplate.png in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* PythiaStatusTemplate.png */; };
+		A100000000000000000000B2 /* GitHubMark.pdf in Resources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B3 /* GitHubMark.pdf */; };
 		A10000000000000000000004 /* PythiaBaseIcon.png in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* PythiaBaseIcon.png */; };
 		A100000000000000000000A4 /* pythia-plugin-runner.cjs in Resources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A5 /* pythia-plugin-runner.cjs */; };
 		A10000000000000000000005 /* PythiaModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017 /* PythiaModels.swift */; };
@@ -51,6 +52,7 @@
 		A10000000000000000000013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000000000000000000014 /* Pythia.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Pythia.entitlements; sourceTree = "<group>"; };
 		A10000000000000000000015 /* PythiaStatusTemplate.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = PythiaStatusTemplate.png; sourceTree = "<group>"; };
+		A100000000000000000000B3 /* GitHubMark.pdf */ = {isa = PBXFileReference; lastKnownFileType = image.pdf; path = GitHubMark.pdf; sourceTree = "<group>"; };
 		A10000000000000000000016 /* PythiaBaseIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = PythiaBaseIcon.png; sourceTree = "<group>"; };
 		A100000000000000000000A5 /* pythia-plugin-runner.cjs */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "pythia-plugin-runner.cjs"; sourceTree = "<group>"; };
 		A10000000000000000000017 /* PythiaModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaModels.swift; sourceTree = "<group>"; };
@@ -138,6 +140,7 @@
 			children = (
 				A10000000000000000000012 /* AppIcon.icns */,
 				A10000000000000000000015 /* PythiaStatusTemplate.png */,
+				A100000000000000000000B3 /* GitHubMark.pdf */,
 				A10000000000000000000016 /* PythiaBaseIcon.png */,
 				A100000000000000000000A5 /* pythia-plugin-runner.cjs */,
 			);
@@ -268,6 +271,7 @@
 			files = (
 				A10000000000000000000002 /* AppIcon.icns in Resources */,
 				A10000000000000000000003 /* PythiaStatusTemplate.png in Resources */,
+				A100000000000000000000B2 /* GitHubMark.pdf in Resources */,
 				A10000000000000000000004 /* PythiaBaseIcon.png in Resources */,
 				A100000000000000000000A4 /* pythia-plugin-runner.cjs in Resources */,
 			);
