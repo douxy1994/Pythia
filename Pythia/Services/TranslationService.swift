@@ -21,7 +21,7 @@ enum PythiaNetworkSession {
         return task
     }
 
-    private static func configuration(for url: URL?) -> URLSessionConfiguration {
+    static func configuration(for url: URL?) -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCredentialStorage = nil
         configuration.httpCookieStorage = nil
@@ -57,7 +57,7 @@ enum PythiaNetworkSession {
         ]
     }
 
-    private static func requestWithProxyAuthorization(_ request: URLRequest) -> URLRequest {
+    static func requestWithProxyAuthorization(_ request: URLRequest) -> URLRequest {
         let preferences = Preferences.shared
         guard preferences.proxyEnabled,
               !preferences.proxyUsername.isEmpty,

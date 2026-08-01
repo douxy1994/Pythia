@@ -32,6 +32,7 @@
 				A1000000000000000000002C /* TranslatorWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002D /* TranslatorWindowController.swift */; };
 				A1000000000000000000002E /* PythiaBackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002F /* PythiaBackupService.swift */; };
 				A10000000000000000000092 /* PythiaUpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000093 /* PythiaUpdateChecker.swift */; };
+				A100000000000000000000B0 /* PythiaUpdateInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B1 /* PythiaUpdateInstaller.swift */; };
 				A10000000000000000000095 /* HistorySync.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000094 /* HistorySync.swift */; };
 				A10000000000000000000097 /* NodeRuntimeResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000096 /* NodeRuntimeResolver.swift */; };
 				A10000000000000000000099 /* TextSubmissionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000098 /* TextSubmissionPolicy.swift */; };
@@ -72,6 +73,7 @@
 				A1000000000000000000002D /* TranslatorWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslatorWindowController.swift; sourceTree = "<group>"; };
 				A1000000000000000000002F /* PythiaBackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaBackupService.swift; sourceTree = "<group>"; };
 				A10000000000000000000093 /* PythiaUpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaUpdateChecker.swift; sourceTree = "<group>"; };
+				A100000000000000000000B1 /* PythiaUpdateInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaUpdateInstaller.swift; sourceTree = "<group>"; };
 				A10000000000000000000094 /* HistorySync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/HistorySync.swift; sourceTree = SOURCE_ROOT; };
 				A10000000000000000000096 /* NodeRuntimeResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/NodeRuntimeResolver.swift; sourceTree = SOURCE_ROOT; };
 				A10000000000000000000098 /* TextSubmissionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/TextSubmissionPolicy.swift; sourceTree = SOURCE_ROOT; };
@@ -171,6 +173,7 @@
 						A1000000000000000000001E /* OCRService.swift */,
 						A1000000000000000000002F /* PythiaBackupService.swift */,
 						A10000000000000000000093 /* PythiaUpdateChecker.swift */,
+						A100000000000000000000B1 /* PythiaUpdateInstaller.swift */,
 				A1000000000000000000001A /* MigrationService.swift */,
 				A1000000000000000000001B /* TranslationService.swift */,
 			);
@@ -318,6 +321,7 @@
 						A1000000000000000000002C /* TranslatorWindowController.swift in Sources */,
 						A1000000000000000000002E /* PythiaBackupService.swift in Sources */,
 						A10000000000000000000092 /* PythiaUpdateChecker.swift in Sources */,
+						A100000000000000000000B0 /* PythiaUpdateInstaller.swift in Sources */,
 						A10000000000000000000095 /* HistorySync.swift in Sources */,
 						A10000000000000000000097 /* NodeRuntimeResolver.swift in Sources */,
 						A10000000000000000000099 /* TextSubmissionPolicy.swift in Sources */,

@@ -51,7 +51,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let alwaysOnTopCheckbox = NSButton(checkboxWithTitle: "翻译窗口总在最前", target: nil, action: nil)
     private let rememberWindowSizeCheckbox = NSButton(checkboxWithTitle: "记住翻译窗口尺寸", target: nil, action: nil)
     private let saveStatusLabel = NSTextField(labelWithString: "")
-    private let aboutUpdateStatusLabel = NSTextField(labelWithString: "")
+    private let aboutUpdateStatusLabel = NSTextField(wrappingLabelWithString: "")
+    private let aboutUpdateProgress = NSProgressIndicator()
+    private var aboutCheckButton: NSButton?
     // Translate behavior (aligned with original Pot)
     private let translateDeleteNewlineCheckbox = NSButton(checkboxWithTitle: "翻译结果删除换行", target: nil, action: nil)
     private let smartTargetCheckbox = NSButton(checkboxWithTitle: "自动检测时智能选择目标语言", target: nil, action: nil)
@@ -1005,94 +1007,225 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func aboutTab() -> NSView {
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
 
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 16
+        stack.edgeInsets = NSEdgeInsets(top: 34, left: 42, bottom: 26, right: 42)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        // Hero: icon, name, version pills, description.
         let icon = NSImageView()
         icon.translatesAutoresizingMaskIntoConstraints = false
         icon.image = NSApp.applicationIconImage
         icon.imageScaling = .scaleProportionallyUpOrDown
         icon.wantsLayer = true
-        icon.layer?.shadowColor = NSColor.black.cgColor
-        icon.layer?.shadowOpacity = 0.16
-        icon.layer?.shadowRadius = 18
-        icon.layer?.shadowOffset = NSSize(width: 0, height: -6)
+        icon.layer?.cornerRadius = 22
+        icon.layer?.masksToBounds = true
+        NSLayoutConstraint.activate([
+            icon.widthAnchor.constraint(equalToConstant: 96),
+            icon.heightAnchor.constraint(equalToConstant: 96),
+        ])
 
         let nameLabel = NSTextField(labelWithString: "Pythia")
-        nameLabel.font = .systemFont(ofSize: 34, weight: .bold)
-        nameLabel.textColor = .labelColor
+        nameLabel.font = .systemFont(ofSize: 30, weight: .bold)
         nameLabel.alignment = .center
 
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
-        let versionText = build.isEmpty ? "版本 \(version)" : "版本 \(version)（\(build)）"
-        let versionLabel = NSTextField(labelWithString: versionText)
-        versionLabel.font = .systemFont(ofSize: 14, weight: .semibold)
-        versionLabel.textColor = PythiaDesign.themeColor()
-        versionLabel.alignment = .center
+        let pills = NSStackView(views: [
+            aboutVersionPill("正式版本 \(version)"),
+            aboutVersionPill("开发版本 \(build.isEmpty ? "未提交构建" : build)"),
+        ])
+        pills.orientation = .horizontal
+        pills.spacing = 8
 
-        let descriptionLabel = NSTextField(labelWithString: "多服务翻译与插件平台")
-        descriptionLabel.font = .systemFont(ofSize: 14)
+        let descriptionLabel = NSTextField(wrappingLabelWithString: "本地优先的多服务桌面翻译：划词、输入、截图即翻，多个翻译服务并排作答。")
+        descriptionLabel.font = .systemFont(ofSize: 13)
         descriptionLabel.textColor = .secondaryLabelColor
         descriptionLabel.alignment = .center
+        descriptionLabel.maximumNumberOfLines = 2
+        descriptionLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 430).isActive = true
 
-        let updateButton = PillButton("检查更新", target: self, action: #selector(checkForUpdates))
-        updateButton.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "检查更新")
-        updateButton.imagePosition = .imageLeading
-        updateButton.imageHugsTitle = true
-
-        let githubButton = PillButton("GitHub 项目", target: self, action: #selector(openGitHubProject))
-        githubButton.image = NSImage(systemSymbolName: "link", accessibilityDescription: "GitHub 项目")
+        // Action bar: GitHub + 检查更新（含忙碌状态）。
+        let githubButton = PillButton("GitHub", target: self, action: #selector(openGitHubProject))
+        githubButton.image = NSImage(systemSymbolName: "link", accessibilityDescription: "GitHub")
         githubButton.imagePosition = .imageLeading
         githubButton.imageHugsTitle = true
 
-        let actionStack = NSStackView(views: [updateButton, githubButton])
+        let checkButton = PillButton("检查更新", target: self, action: #selector(checkForUpdates))
+        checkButton.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "检查更新")
+        checkButton.imagePosition = .imageLeading
+        checkButton.imageHugsTitle = true
+        aboutCheckButton = checkButton
+
+        aboutUpdateProgress.style = .spinning
+        aboutUpdateProgress.controlSize = .small
+        aboutUpdateProgress.isDisplayedWhenStopped = false
+
+        let actionStack = NSStackView(views: [githubButton, checkButton, aboutUpdateProgress])
         actionStack.orientation = .horizontal
         actionStack.alignment = .centerY
         actionStack.spacing = 10
 
-        aboutUpdateStatusLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        aboutUpdateStatusLabel.stringValue = "尚未检查更新"
+        aboutUpdateStatusLabel.font = .systemFont(ofSize: 11, weight: .medium)
         aboutUpdateStatusLabel.textColor = .secondaryLabelColor
         aboutUpdateStatusLabel.alignment = .center
-        aboutUpdateStatusLabel.maximumNumberOfLines = 1
+        aboutUpdateStatusLabel.maximumNumberOfLines = 2
 
+        // Cards.
+        let releaseCard = aboutReleaseNotesCard(version: version)
+        let aboutCard = aboutSoftwareCard()
+
+        // Footer.
+        let footerLine = NSTextField(labelWithString: "本地优先 · 原生 macOS · 多服务翻译")
+        footerLine.font = .systemFont(ofSize: 11, weight: .medium)
+        footerLine.textColor = .secondaryLabelColor
         let copyrightLabel = NSTextField(labelWithString: "© 2026 douxy1994 · AGPL-3.0")
-        copyrightLabel.font = .systemFont(ofSize: 11)
-        copyrightLabel.textColor = .tertiaryLabelColor
-        copyrightLabel.alignment = .center
+        copyrightLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        copyrightLabel.textColor = .secondaryLabelColor
+        let bundleLabel = NSTextField(labelWithString: "Bundle ID  com.douxy.pythia")
+        bundleLabel.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+        bundleLabel.textColor = .tertiaryLabelColor
+        let footer = NSStackView(views: [footerLine, copyrightLabel, bundleLabel])
+        footer.orientation = .vertical
+        footer.alignment = .centerX
+        footer.spacing = 5
 
-        let hero = NSStackView(views: [
-            icon,
-            nameLabel,
-            versionLabel,
-            descriptionLabel,
-            actionStack,
-            aboutUpdateStatusLabel,
-            copyrightLabel,
-        ])
-        hero.translatesAutoresizingMaskIntoConstraints = false
-        hero.orientation = .vertical
-        hero.alignment = .centerX
-        hero.spacing = 9
-        hero.setCustomSpacing(16, after: icon)
-        hero.setCustomSpacing(3, after: nameLabel)
-        hero.setCustomSpacing(18, after: descriptionLabel)
-        hero.setCustomSpacing(6, after: actionStack)
-        hero.setCustomSpacing(18, after: aboutUpdateStatusLabel)
-        container.addSubview(hero)
+        for view in [icon, nameLabel, pills, descriptionLabel, actionStack, aboutUpdateStatusLabel, releaseCard, aboutCard, footer] {
+            stack.addArrangedSubview(view)
+        }
+        stack.setCustomSpacing(12, after: icon)
+        stack.setCustomSpacing(2, after: nameLabel)
+        stack.setCustomSpacing(10, after: pills)
+        stack.setCustomSpacing(6, after: actionStack)
+        stack.setCustomSpacing(10, after: aboutUpdateStatusLabel)
+        stack.setCustomSpacing(16, after: aboutCard)
 
+        for card in [releaseCard, aboutCard] {
+            card.translatesAutoresizingMaskIntoConstraints = false
+            card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -84).isActive = true
+        }
+        aboutUpdateStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+        aboutUpdateStatusLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -84).isActive = true
+        return stack
+    }
+
+    private func aboutVersionPill(_ text: String) -> NSView {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 11, weight: .medium)
+        label.textColor = .secondaryLabelColor
+        label.lineBreakMode = .byTruncatingMiddle
+        label.translatesAutoresizingMaskIntoConstraints = false
+        let pill = NSView()
+        pill.wantsLayer = true
+        pill.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
+        pill.layer?.cornerRadius = 10
+        pill.addSubview(label)
         NSLayoutConstraint.activate([
-            icon.widthAnchor.constraint(equalToConstant: 124),
-            icon.heightAnchor.constraint(equalToConstant: 124),
-            hero.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            hero.centerYAnchor.constraint(equalTo: container.centerYAnchor, constant: -6),
-            hero.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 24),
-            hero.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -24),
-            hero.topAnchor.constraint(greaterThanOrEqualTo: container.topAnchor, constant: 20),
-            hero.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -20),
-            aboutUpdateStatusLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 260),
+            label.centerXAnchor.constraint(equalTo: pill.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
+            pill.widthAnchor.constraint(equalTo: label.widthAnchor, constant: 20),
+            pill.widthAnchor.constraint(lessThanOrEqualToConstant: 220),
+            pill.heightAnchor.constraint(equalToConstant: 20),
         ])
-        return container
+        return pill
+    }
+
+    private func aboutCardContainer() -> NSView {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.045).cgColor
+        view.layer?.cornerRadius = 14
+        return view
+    }
+
+    private func aboutReleaseNotesCard(version: String) -> NSView {
+        let card = aboutCardContainer()
+        let titleLabel = NSTextField(labelWithString: "最近版本更新")
+        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        let versionTag = NSTextField(labelWithString: "v\(version)")
+        versionTag.font = .systemFont(ofSize: 11, weight: .semibold)
+        versionTag.textColor = PythiaDesign.themeColor()
+        let header = NSStackView(views: [titleLabel, versionTag])
+        header.orientation = .horizontal
+        header.alignment = .centerY
+        header.distribution = .equalSpacing
+
+        let rows = NSStackView(views: [
+            aboutUpdateItem("修复 DeepL / 有道 / LibreTranslate", "按各平台官方契约修正语言代码映射，三个内置翻译服务恢复正常。"),
+            aboutUpdateItem("新增「验证服务」", "设置 → 服务页可对 OpenAI、DeepL、百度、有道、LibreTranslate 一键做真实翻译连通性测试。"),
+            aboutUpdateItem("关于页重做与应用内更新", "全新关于页：版本信息、最近更新一览；检查更新后可直接在应用内下载并安装新版本。"),
+            aboutUpdateItem("文档与许可证", "README 图文并茂重写；项目许可证切换为 AGPL-3.0。"),
+        ])
+        rows.orientation = .vertical
+        rows.alignment = .width
+        rows.spacing = 12
+
+        let content = NSStackView(views: [header, rows])
+        content.orientation = .vertical
+        content.alignment = .width
+        content.spacing = 12
+        content.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
+        content.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            content.topAnchor.constraint(equalTo: card.topAnchor),
+            content.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+        ])
+        return card
+    }
+
+    private func aboutSoftwareCard() -> NSView {
+        let card = aboutCardContainer()
+        let titleLabel = NSTextField(labelWithString: "关于本软件")
+        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        let bodyLabel = NSTextField(wrappingLabelWithString: "Pythia 是一款本地优先的桌面翻译工具。一个快捷键即可从划词、输入或截图中取词，让 Google、DeepL、百度、有道、OpenAI、LibreTranslate 与 .pythia 插件并排作答；历史记录可通过 WebDAV 在 macOS 与 Windows 之间同步，API Key 只保存在本机私有凭据文件中。")
+        bodyLabel.font = .systemFont(ofSize: 13)
+        bodyLabel.textColor = .secondaryLabelColor
+        let content = NSStackView(views: [titleLabel, bodyLabel])
+        content.orientation = .vertical
+        content.alignment = .width
+        content.spacing = 12
+        content.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
+        content.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            content.topAnchor.constraint(equalTo: card.topAnchor),
+            content.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+        ])
+        return card
+    }
+
+    private func aboutUpdateItem(_ title: String, _ detail: String) -> NSView {
+        let symbol = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
+        let check = NSImageView(image: symbol ?? NSImage())
+        check.contentTintColor = PythiaDesign.themeColor()
+        check.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            check.widthAnchor.constraint(equalToConstant: 14),
+            check.heightAnchor.constraint(equalToConstant: 14),
+        ])
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        let detailLabel = NSTextField(wrappingLabelWithString: detail)
+        detailLabel.font = .systemFont(ofSize: 11)
+        detailLabel.textColor = .secondaryLabelColor
+        let textStack = NSStackView(views: [titleLabel, detailLabel])
+        textStack.orientation = .vertical
+        textStack.alignment = .width
+        textStack.spacing = 2
+        let row = NSStackView(views: [check, textStack])
+        row.orientation = .horizontal
+        row.alignment = .top
+        row.spacing = 9
+        return row
     }
 
     private func scrollTab(_ document: NSView) -> NSView {
@@ -1163,7 +1296,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         case 9: content = scrollTab(proxyTab())
         case 10: content = scrollTab(backupTab())
         case 11: content = scrollTab(migrationTab())
-        case 12: content = aboutTab()
+        case 12: content = scrollTab(aboutTab())
         default: content = scrollTab(generalTab())
         }
         activeTabView = content
@@ -1601,47 +1734,125 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     @objc private func checkForUpdates() {
         saveStatusLabel.textColor = .secondaryLabelColor
         saveStatusLabel.stringValue = "正在检查更新..."
-        aboutUpdateStatusLabel.textColor = .secondaryLabelColor
-        aboutUpdateStatusLabel.stringValue = "正在检查更新..."
+        setAboutUpdateBusy(true, status: "正在检查更新…", color: .secondaryLabelColor)
         PythiaUpdateChecker.shared.check { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
+                self.setAboutUpdateBusy(false)
                 switch result {
                 case .success(let info):
                     self.saveStatusLabel.textColor = PythiaDesign.themeColor()
                     self.saveStatusLabel.stringValue = info.isNewer ? "发现新版本 \(info.latestVersion)" : "当前已是最新版本"
-                    self.aboutUpdateStatusLabel.textColor = PythiaDesign.themeColor()
-                    self.aboutUpdateStatusLabel.stringValue = self.saveStatusLabel.stringValue
-                    self.showUpdateResult(info)
+                    self.aboutUpdateStatusLabel.textColor = info.isNewer ? PythiaDesign.themeColor() : .secondaryLabelColor
+                    self.aboutUpdateStatusLabel.stringValue = info.isNewer
+                        ? "发现新版本 \(info.latestVersion)：\(info.releaseName)"
+                        : "当前已是最新版本（\(info.currentVersion)）"
+                    if info.isNewer {
+                        self.showUpdateAvailable(info)
+                    } else {
+                        let alert = NSAlert()
+                        alert.messageText = "当前已是最新版本"
+                        alert.informativeText = "当前版本：\(info.currentVersion)"
+                        alert.runModal()
+                    }
                 case .failure(let error):
                     self.saveStatusLabel.textColor = .systemRed
                     self.saveStatusLabel.stringValue = "更新检查失败"
                     self.aboutUpdateStatusLabel.textColor = .systemRed
-                    self.aboutUpdateStatusLabel.stringValue = "更新检查失败"
-                    let alert = NSAlert()
-                    alert.messageText = "更新检查失败"
-                    alert.informativeText = error.localizedDescription
-                    alert.runModal()
+                    self.aboutUpdateStatusLabel.stringValue = "检查更新失败：\(error.localizedDescription)"
                 }
             }
         }
     }
 
-    private func showUpdateResult(_ info: PythiaUpdateInfo) {
-        let alert = NSAlert()
-        if info.isNewer {
-            alert.messageText = "发现新版本 \(info.latestVersion)"
-            alert.informativeText = "当前版本：\(info.currentVersion)\n发布版本：\(info.releaseName)"
-            alert.addButton(withTitle: "打开发布页")
-            alert.addButton(withTitle: "稍后")
-            let response = alert.runModal()
-            if response == .alertFirstButtonReturn, let url = info.releaseURL {
-                NSWorkspace.shared.open(url)
-            }
+    private func setAboutUpdateBusy(_ busy: Bool, status: String? = nil, color: NSColor? = nil) {
+        aboutCheckButton?.isEnabled = !busy
+        if busy {
+            aboutUpdateProgress.startAnimation(nil)
         } else {
-            alert.messageText = "当前已是最新版本"
-            alert.informativeText = "当前版本：\(info.currentVersion)"
-            alert.runModal()
+            aboutUpdateProgress.stopAnimation(nil)
+        }
+        if let status { aboutUpdateStatusLabel.stringValue = status }
+        if let color { aboutUpdateStatusLabel.textColor = color }
+    }
+
+    private func showUpdateAvailable(_ info: PythiaUpdateInfo) {
+        let alert = NSAlert()
+        alert.messageText = "发现新版本 \(info.latestVersion)"
+        alert.informativeText = "当前版本：\(info.currentVersion)\n发布版本：\(info.releaseName)\n\n可在应用内直接下载并安装（热更新），无需手动替换。"
+        if info.assetURL != nil {
+            alert.addButton(withTitle: "立即更新")
+        }
+        alert.addButton(withTitle: "打开发布页")
+        alert.addButton(withTitle: "稍后")
+        let response = alert.runModal()
+        if info.assetURL != nil, response == .alertFirstButtonReturn {
+            startHotUpdate(info)
+        } else if (info.assetURL != nil && response == .alertSecondButtonReturn)
+                    || (info.assetURL == nil && response == .alertFirstButtonReturn),
+                  let url = info.releaseURL {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// Hot update: download the release DMG, verify its signing identity,
+    /// replace /Applications/Pythia.app, and relaunch. Falls back to opening
+    /// the DMG when /Applications is not writable.
+    private func startHotUpdate(_ info: PythiaUpdateInfo) {
+        setAboutUpdateBusy(true, status: "正在下载 \(info.latestVersion)…", color: .secondaryLabelColor)
+        PythiaUpdateInstaller.shared.download(
+            info: info,
+            progress: { [weak self] fraction in
+                self?.aboutUpdateStatusLabel.stringValue = "正在下载 \(info.latestVersion)… \(Int(fraction * 100))%"
+            }
+        ) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let dmgURL):
+                self.aboutUpdateStatusLabel.stringValue = "下载完成，正在校验并安装…"
+                PythiaUpdateInstaller.shared.install(from: dmgURL) { [weak self] installResult in
+                    guard let self else { return }
+                    self.setAboutUpdateBusy(false)
+                    switch installResult {
+                    case .success(.installed(let appURL)):
+                        self.aboutUpdateStatusLabel.textColor = PythiaDesign.themeColor()
+                        self.aboutUpdateStatusLabel.stringValue = "版本 \(info.latestVersion) 安装完成，正在重启…"
+                        self.relaunch(updatedApp: appURL)
+                    case .success(.openedInstaller(let url)):
+                        self.aboutUpdateStatusLabel.textColor = PythiaDesign.themeColor()
+                        self.aboutUpdateStatusLabel.stringValue = "已打开 \(url.lastPathComponent)，请将 Pythia 拖入「应用程序」完成更新。"
+                    case .failure(let error):
+                        self.aboutUpdateStatusLabel.textColor = .systemRed
+                        self.aboutUpdateStatusLabel.stringValue = "更新失败：\(error.localizedDescription)"
+                    }
+                }
+            case .failure(let error):
+                self.setAboutUpdateBusy(false)
+                self.aboutUpdateStatusLabel.textColor = .systemRed
+                self.aboutUpdateStatusLabel.stringValue = "更新失败：\(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func relaunch(updatedApp appURL: URL) {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
+            DispatchQueue.main.async {
+                if error == nil {
+                    NSApp.terminate(nil)
+                } else if NSWorkspace.shared.open(appURL) {
+                    NSApp.terminate(nil)
+                } else {
+                    // Could not relaunch automatically; keep this instance
+                    // alive instead of terminating with no new process.
+                    let alert = NSAlert()
+                    alert.messageText = "更新已安装"
+                    alert.informativeText = "无法自动重启 Pythia，请手动退出并重新打开 /Applications/Pythia.app。"
+                    alert.addButton(withTitle: "好")
+                    alert.runModal()
+                }
+            }
         }
     }
 
