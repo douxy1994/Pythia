@@ -11,7 +11,7 @@ Each package was rebuilt from a locally converted compatibility plugin and conta
 - `manifest.json`
 - `main.js`
 - the plugin icon when available
-- the repository's GPL-3.0 `LICENSE`
+- the repository's AGPL-3.0 `LICENSE`
 
 The packages do **not** contain API keys, passwords, WebDAV credentials, user history, `plugin-configs.json`, legacy backups, conversion logs, local paths, or test fixtures.
 
@@ -60,7 +60,7 @@ shasum -a 256 deepseek-1.1.1.pythia
 - These are converted compatibility packages. New plugin development should use the native Pythia contract directly.
 - Auditable package sources and the shared long-text adapter are under [`Sources`](Sources/); `../script/build_public_plugins.mjs` rebuilds deterministic packages and catalog checksums.
 - See the [complete plugin development guide](../Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md).
-- Source and converted code are distributed under the repository's [GPL-3.0 license](../LICENSE). Original author and service rights remain with their respective owners.
+- Source and converted code are distributed under the repository's [AGPL-3.0 license](../LICENSE). Original author and service rights remain with their respective owners.
 
 ## 简体中文
 
@@ -71,7 +71,7 @@ shasum -a 256 deepseek-1.1.1.pythia
 - `manifest.json`
 - `main.js`
 - 存在时附带插件图标
-- 仓库的 GPL-3.0 `LICENSE`
+- 仓库的 AGPL-3.0 `LICENSE`
 
 插件包不包含 API Key、密码、WebDAV 凭据、用户历史、`plugin-configs.json`、旧插件备份、迁移日志、本机路径或测试 Fixture。
 
@@ -120,4 +120,4 @@ shasum -a 256 deepseek-1.1.1.pythia
 - 这些是已经转换的兼容插件。新插件应直接使用 Pythia 原生契约开发。
 - 可审计的插件源文件和共享长文适配器位于 [`Sources`](Sources/)；运行 `../script/build_public_plugins.mjs` 可确定性重建插件包并刷新目录校验值。
 - 完整规范见 [Pythia 插件开发指南](../Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md)。
-- 源码和转换代码按仓库 [GPL-3.0 许可证](../LICENSE)发布；原作者和服务商的相关权利归各自所有者。
+- 源码和转换代码按仓库 [AGPL-3.0 许可证](../LICENSE)发布；原作者和服务商的相关权利归各自所有者。

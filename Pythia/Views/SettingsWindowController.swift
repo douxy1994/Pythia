@@ -1056,7 +1056,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         aboutUpdateStatusLabel.alignment = .center
         aboutUpdateStatusLabel.maximumNumberOfLines = 1
 
-        let copyrightLabel = NSTextField(labelWithString: "© 2026 Pythia Contributors · GPL-3.0")
+        let copyrightLabel = NSTextField(labelWithString: "© 2026 douxy1994 · AGPL-3.0")
         copyrightLabel.font = .systemFont(ofSize: 11)
         copyrightLabel.textColor = .tertiaryLabelColor
         copyrightLabel.alignment = .center

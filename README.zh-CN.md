@@ -12,7 +12,7 @@
   [![Windows](https://img.shields.io/badge/Windows_x64-预览版-0078D4?logo=windows11&logoColor=white)](#windows)
   [![Swift](https://img.shields.io/badge/Swift-AppKit-F05138?logo=swift&logoColor=white)](#macos-构建)
   [![Flutter](https://img.shields.io/badge/Flutter-Win32-02569B?logo=flutter&logoColor=white)](#windows-开发)
-  [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-2ea44f.svg)](./LICENSE)
+  [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-2ea44f.svg)](./LICENSE)
 
   [English](README.md) | [简体中文](README.zh-CN.md)
 
@@ -219,4 +219,6 @@ WINDOWS_CODEX_HANDOFF.md 完整 Windows 交接文档
 
 ## License
 
-Pythia 基于 [GNU General Public License v3.0](LICENSE) 发布。
+Pythia 基于 [GNU Affero General Public License v3.0](LICENSE) 发布。
+
+Copyright © 2026 douxy1994.
