@@ -16,7 +16,21 @@ struct PythiaUpdateInfo {
 final class PythiaUpdateChecker {
     static let shared = PythiaUpdateChecker()
 
-    private let releasesURL = URL(string: "https://api.github.com/repos/douxy1994/Pythia/releases?per_page=20")!
+    private let releasesURL: URL
+
+    private init() {
+#if DEBUG
+        // Production stays pinned to GitHub, while Debug builds can exercise
+        // the full startup-check -> title button -> signed-DMG install flow
+        // against a deterministic local fixture.
+        if let override = ProcessInfo.processInfo.environment["PYTHIA_UPDATE_RELEASES_URL"],
+           let url = URL(string: override) {
+            releasesURL = url
+            return
+        }
+#endif
+        releasesURL = URL(string: "https://api.github.com/repos/douxy1994/Pythia/releases?per_page=20")!
+    }
 
     func check(completion: @escaping (Result<PythiaUpdateInfo, Error>) -> Void) {
         var request = URLRequest(url: releasesURL)

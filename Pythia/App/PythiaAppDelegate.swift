@@ -33,6 +33,7 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        settings?.flushPendingAutosave()
         NotificationCenter.default.removeObserver(self)
         webDAVHistorySyncDebounce?.cancel()
         webDAVHistorySyncDebounce = nil
@@ -63,6 +64,10 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
 
     func setStatus(_ text: String) {
         translator.setStatus(text)
+    }
+
+    func showAvailableUpdateOnMain(_ info: PythiaUpdateInfo) {
+        translator.showAvailableUpdate(info)
     }
 
     func showHistory() {
@@ -288,22 +293,15 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
     }
 
     private func checkForUpdatesOnStartup() {
-        PythiaUpdateChecker.shared.check { result in
+        PythiaUpdateChecker.shared.check { [weak self] result in
             DispatchQueue.main.async {
+                guard let self else { return }
                 guard case .success(let info) = result, info.isNewer else { return }
-                guard Preferences.shared.lastNotifiedUpdateVersion != info.latestVersion else {
-                    self.translator.setStatus("发现新版本 \(info.latestVersion)")
-                    return
+                if Preferences.shared.lastNotifiedUpdateVersion != info.latestVersion {
+                    Preferences.shared.lastNotifiedUpdateVersion = info.latestVersion
                 }
-                Preferences.shared.lastNotifiedUpdateVersion = info.latestVersion
-                let alert = NSAlert()
-                alert.messageText = "Pythia 有新版本 \(info.latestVersion)"
-                alert.informativeText = "当前版本：\(info.currentVersion)\n发布版本：\(info.releaseName)"
-                alert.addButton(withTitle: "打开发布页")
-                alert.addButton(withTitle: "稍后")
-                if alert.runModal() == .alertFirstButtonReturn, let url = info.releaseURL {
-                    NSWorkspace.shared.open(url)
-                }
+                self.translator.showAvailableUpdate(info)
+                self.translator.setStatus("发现新版本 \(info.latestVersion)")
             }
         }
     }

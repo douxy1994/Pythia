@@ -7,8 +7,8 @@
 
   本地优先的桌面翻译工具：多服务结果卡片、截图 OCR、全局快捷键、可同步的历史记录和真正的插件系统。
 
-  [![版本](https://img.shields.io/badge/版本-1.0.4-80B847)](#下载)
-  [![macOS](https://img.shields.io/badge/macOS-26%2B-111111?logo=apple&logoColor=white)](#macos)
+  [![版本](https://img.shields.io/badge/版本-1.1.0-80B847)](#下载)
+  [![macOS](https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white)](#macos)
   [![Windows](https://img.shields.io/badge/Windows_x64-预览版-0078D4?logo=windows11&logoColor=white)](#windows)
   [![Swift](https://img.shields.io/badge/Swift-AppKit-F05138?logo=swift&logoColor=white)](#macos-构建)
   [![Flutter](https://img.shields.io/badge/Flutter-Win32-02569B?logo=flutter&logoColor=white)](#windows-开发)
@@ -83,8 +83,8 @@ flowchart LR
     <td width="50%" align="center">
       <img src="./Docs/images/platform-macos.svg" width="100%" alt="Pythia macOS 版">
       <h3 id="macos">macOS</h3>
-      <p><strong>原生版本 · 当前 1.0.4</strong></p>
-      <p>Swift · AppKit · macOS 26+ · Apple silicon</p>
+      <p><strong>原生版本 · 当前 1.1.0</strong></p>
+      <p>Swift · AppKit · macOS 14+ · Apple silicon</p>
       <p>菜单栏应用、多服务卡片、OCR、快捷键、历史同步、插件、签名打包全链路。</p>
     </td>
     <td width="50%" align="center">
@@ -101,11 +101,11 @@ flowchart LR
 
 ### macOS
 
-[下载 Pythia 1.0.4 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.0.4/Pythia-1.0.4-macos-arm64.dmg)
+[下载 Pythia 1.1.0 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.1.0/Pythia-1.1.0-macos-arm64.dmg)
 
-- 需要 macOS 26 或更高版本，Apple silicon（`arm64`）。
+- 需要 macOS 14 或更高版本，Apple silicon（`arm64`）。
 - 当前构建使用项目稳定的本地代码签名身份，未经 Apple Developer ID 公证——首次打开如被拦截，请在「系统设置 > 隐私与安全性」中允许。
-- DMG 和 SHA-256 校验文件同时发布在 [v1.0.4 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.0.4)。
+- DMG 和 SHA-256 校验文件同时发布在 [v1.1.0 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.1.0)。
 
 ### Windows
 
@@ -140,7 +140,7 @@ Windows x64 源码、原生宿主、安装包流水线与自动化测试均已�
 
 ### 环境要求
 
-- macOS 26 或更高版本、Apple silicon Mac、Xcode 26.6 或更高版本。
+- macOS 14 或更高版本、Apple silicon Mac、Xcode 27 beta 或更高版本。
 - 本机代码签名身份 `Pot Local Code Signing`——它保证本机更新后辅助功能/TCC 身份不变，请勿随意改动签名要求或 Bundle ID。
 
 ### 构建、运行、打包、验证
@@ -208,7 +208,7 @@ WINDOWS_CODEX_HANDOFF.md 完整 Windows 交接文档
 
 ## 文档
 
-- [Pythia 1.0.4 发布说明](Docs/RELEASE_NOTES_1.0.4.md)
+- [Pythia 1.1.0 发布说明](Docs/RELEASE_NOTES_1.1.0.md)
 - [架构设计](Docs/ARCHITECTURE.md)
 - [功能矩阵](Docs/FEATURE_MATRIX.md)
 - [插件开发指南](Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md)

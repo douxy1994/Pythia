@@ -2,9 +2,9 @@
 
 ## Shared
 
-- Version is `1.0.4`.
+- Version is `1.1.0` (build `110`).
 - Update checks point to `https://github.com/douxy1994/Pythia/releases`.
-- Release artifacts are named `Pythia`.
+- macOS release artifacts are named `Pythia-1.1.0-macos-arm64.dmg` and `Pythia-1.1.0-macos-arm64.dmg.sha256`.
 - Release artifacts contain no bundled plugins.
 - README describes Pythia and does not link to the original project.
 - Sensitive values are not included in app bundles, archives, release notes, or generated logs.
@@ -19,9 +19,10 @@
 - `/Applications/Pythia.app` launches and exits cleanly.
 - `curl http://127.0.0.1:60828/config` returns `OK`.
 - `POST /translate` returns a translation for `hello`.
+- With a newer signed fixture release, startup check exposes `下载更新` beside the main Pythia title; clicking it replaces `/Applications/Pythia.app` and relaunches the new version.
 - App verifies with the stable local signing identity.
-- `./script/package_release.sh` produces `release/Pythia/Pythia.app` and `release/Pythia/Pythia.dmg`.
-- `hdiutil verify release/Pythia/Pythia.dmg` succeeds.
+- `./script/package_release.sh` produces `release/Pythia/Pythia.app`, `release/Pythia/Pythia-1.1.0-macos-arm64.dmg`, and its `.sha256` sidecar.
+- `hdiutil verify release/Pythia/Pythia-1.1.0-macos-arm64.dmg` and `shasum -a 256 -c release/Pythia/Pythia-1.1.0-macos-arm64.dmg.sha256` succeed.
 - Accessibility selection translation does not prompt repeatedly after updates signed by the same identity.
 - Service, WebDAV, proxy, and plugin credentials migrate out of UserDefaults into `credentials.json`; the file is `0600`, portable backups omit it, and the app contains no `SecItem` runtime calls.
 

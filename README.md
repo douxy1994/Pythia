@@ -7,8 +7,8 @@
 
   A local-first desktop translator for macOS and Windows: multi-service result cards, screenshot OCR, global hotkeys, syncable history, and a real plugin system.
 
-  [![Version](https://img.shields.io/badge/Version-1.0.4-80B847)](#download)
-  [![macOS](https://img.shields.io/badge/macOS-26%2B-111111?logo=apple&logoColor=white)](#macos)
+  [![Version](https://img.shields.io/badge/Version-1.1.0-80B847)](#download)
+  [![macOS](https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white)](#macos)
   [![Windows](https://img.shields.io/badge/Windows_x64-Preview-0078D4?logo=windows11&logoColor=white)](#windows)
   [![Swift](https://img.shields.io/badge/Swift-AppKit-F05138?logo=swift&logoColor=white)](#macos-build)
   [![Flutter](https://img.shields.io/badge/Flutter-Win32-02569B?logo=flutter&logoColor=white)](#windows-development)
@@ -83,8 +83,8 @@ flowchart LR
     <td width="50%" align="center">
       <img src="./Docs/images/platform-macos.svg" width="100%" alt="Pythia for macOS">
       <h3 id="macos">macOS</h3>
-      <p><strong>Native · current release 1.0.4</strong></p>
-      <p>Swift · AppKit · macOS 26+ · Apple silicon</p>
+      <p><strong>Native · current release 1.1.0</strong></p>
+      <p>Swift · AppKit · macOS 14+ · Apple silicon</p>
       <p>Menu-bar app, multi-service cards, OCR, hotkeys, history sync, plugins, verified release packaging.</p>
     </td>
     <td width="50%" align="center">
@@ -101,11 +101,11 @@ flowchart LR
 
 ### macOS
 
-[Download Pythia 1.0.4 for macOS Apple silicon](https://github.com/douxy1994/Pythia/releases/download/v1.0.4/Pythia-1.0.4-macos-arm64.dmg)
+[Download Pythia 1.1.0 for macOS Apple silicon](https://github.com/douxy1994/Pythia/releases/download/v1.1.0/Pythia-1.1.0-macos-arm64.dmg)
 
-- Requires macOS 26 or later, Apple silicon (`arm64`).
+- Requires macOS 14 or later, Apple silicon (`arm64`).
 - The current build uses the project's stable local code-signing identity and is not Apple Developer ID notarized — if macOS blocks the first launch, allow it in System Settings > Privacy & Security.
-- The DMG and its SHA-256 checksum are published together on the [v1.0.4 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.0.4).
+- The DMG and its SHA-256 checksum are published together on the [v1.1.0 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.1.0).
 
 ### Windows
 
@@ -140,7 +140,7 @@ The guide covers package layout, Manifest schema, configuration and secret field
 
 ### Requirements
 
-- macOS 26 or later, Apple silicon Mac, Xcode 26.6 or later.
+- macOS 14 or later, Apple silicon Mac, Xcode 27 beta or later.
 - Local code-signing identity named `Pot Local Code Signing` — it preserves the installed app's Accessibility/TCC identity across local updates; do not casually change the signing requirement or bundle identifier.
 
 ### Build, run, package, verify
@@ -208,7 +208,7 @@ Active development happens on the `master` branch of [github.com/douxy1994/Pythi
 
 ## Documentation
 
-- [Pythia 1.0.4 release notes](Docs/RELEASE_NOTES_1.0.4.md)
+- [Pythia 1.1.0 release notes](Docs/RELEASE_NOTES_1.1.0.md)
 - [Architecture](Docs/ARCHITECTURE.md)
 - [Feature matrix](Docs/FEATURE_MATRIX.md)
 - [Plugin development guide](Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md)

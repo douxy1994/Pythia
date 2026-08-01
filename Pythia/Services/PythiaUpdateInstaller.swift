@@ -9,6 +9,7 @@ enum PythiaUpdateInstallError: LocalizedError {
     case signatureMismatch(String)
     case installFailed(String)
     case downloadInProgress
+    case installInProgress
 
     var errorDescription: String? {
         switch self {
@@ -26,13 +27,15 @@ enum PythiaUpdateInstallError: LocalizedError {
             "安装更新失败：\(detail)"
         case .downloadInProgress:
             "已有更新下载正在进行中。"
+        case .installInProgress:
+            "已有更新正在下载或安装中。"
         }
     }
 }
 
 enum PythiaUpdateInstallOutcome {
     /// /Applications/Pythia.app was replaced; caller should relaunch.
-    case installed(URL)
+    case installed(app: URL, rollback: URL?)
     /// The app is not running from a writable /Applications; the DMG was
     /// opened for manual install.
     case openedInstaller(URL)
@@ -54,7 +57,9 @@ final class PythiaUpdateInstaller: NSObject {
     private var expectedBytes: Int64 = 0
     private var destinationURL: URL?
     private var downloadSession: URLSession?
-    private var isDownloading = false
+    private enum Activity: Equatable { case idle, downloading, downloaded, installing }
+    private let activityLock = NSLock()
+    private var activity: Activity = .idle
     private var lastReportedProgress = -1.0
 
     // MARK: - Download
@@ -64,15 +69,19 @@ final class PythiaUpdateInstaller: NSObject {
         progress: @escaping (Double) -> Void,
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
-        guard !isDownloading else {
+        activityLock.lock()
+        guard activity == .idle else {
+            activityLock.unlock()
             completion(.failure(PythiaUpdateInstallError.downloadInProgress))
             return
         }
+        activity = .downloading
+        activityLock.unlock()
         guard let assetURL = info.assetURL, let assetName = info.assetName else {
+            setActivity(.idle)
             completion(.failure(PythiaUpdateInstallError.missingAsset))
             return
         }
-        isDownloading = true
         lastReportedProgress = -1
         progressHandler = progress
         downloadCompletion = completion
@@ -104,10 +113,19 @@ final class PythiaUpdateInstaller: NSObject {
         from dmgURL: URL,
         completion: @escaping (Result<PythiaUpdateInstallOutcome, Error>) -> Void
     ) {
+        activityLock.lock()
+        guard activity == .downloaded else {
+            activityLock.unlock()
+            completion(.failure(PythiaUpdateInstallError.installInProgress))
+            return
+        }
+        activity = .installing
+        activityLock.unlock()
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             let result = Result<PythiaUpdateInstallOutcome, Error> {
                 try performInstall(from: dmgURL)
             }
+            setActivity(.idle)
             DispatchQueue.main.async { completion(result) }
         }
     }
@@ -145,20 +163,19 @@ final class PythiaUpdateInstaller: NSObject {
             return .openedInstaller(dmgURL)
         }
 
-        // Atomic-ish swap: rename the old bundle aside first, move the new one
-        // in, and only then delete the old one — a failure mid-way rolls back.
+        // Atomic-ish swap: rename the old bundle aside first and keep it until
+        // the relaunch helper confirms the replacement survives startup.
         let staging = URL(fileURLWithPath: "/Applications/.Pythia-update-\(UUID().uuidString)")
         let sidecar = URL(fileURLWithPath: "/Applications/.Pythia-old-\(UUID().uuidString)")
+        var movedOld = false
         do {
             try FileManager.default.copyItem(at: mountedApp, to: staging)
-            var movedOld = false
             if FileManager.default.fileExists(atPath: applicationsURL.path) {
                 try FileManager.default.moveItem(at: applicationsURL, to: sidecar)
                 movedOld = true
             }
             do {
                 try FileManager.default.moveItem(at: staging, to: applicationsURL)
-                if movedOld { try? FileManager.default.removeItem(at: sidecar) }
             } catch {
                 if movedOld { try? FileManager.default.moveItem(at: sidecar, to: applicationsURL) }
                 try? FileManager.default.removeItem(at: staging)
@@ -168,7 +185,57 @@ final class PythiaUpdateInstaller: NSObject {
             try? FileManager.default.removeItem(at: staging)
             throw PythiaUpdateInstallError.installFailed(error.localizedDescription)
         }
-        return .installed(applicationsURL)
+        return .installed(app: applicationsURL, rollback: movedOld ? sidecar : nil)
+    }
+
+    /// Relaunches only after the current process exits. The old bundle stays
+    /// beside the replacement until the new process has remained alive for a
+    /// short health window; a launch failure restores and reopens the old app.
+    func relaunch(
+        appURL: URL,
+        rollbackURL: URL?,
+        failure: @escaping (Error) -> Void
+    ) {
+        let helper = Process()
+        helper.executableURL = URL(fileURLWithPath: "/bin/sh")
+        helper.arguments = [
+            "-c",
+            """
+            while /bin/kill -0 "$1" 2>/dev/null; do /bin/sleep 0.2; done
+            /usr/bin/open -n "$2"
+            newpid=""
+            i=0
+            while [ "$i" -lt 60 ]; do
+              newpid=$(/bin/ps -axo pid=,command= | /usr/bin/awk -v exe="$2/Contents/MacOS/Pythia" '$2 == exe { print $1; exit }')
+              [ -n "$newpid" ] && break
+              i=$((i + 1)); /bin/sleep 0.25
+            done
+            if [ -n "$newpid" ]; then
+              /bin/sleep 8
+              if /bin/kill -0 "$newpid" 2>/dev/null; then
+                [ -n "$3" ] && /bin/rm -rf "$3"
+                exit 0
+              fi
+            fi
+            if [ -n "$3" ] && [ -e "$3" ]; then
+              /bin/rm -rf "$2"
+              /bin/mv "$3" "$2"
+              /usr/bin/open -n "$2"
+            fi
+            """,
+            "pythia-relaunch",
+            "\(ProcessInfo.processInfo.processIdentifier)",
+            appURL.path,
+            rollbackURL?.path ?? "",
+        ]
+        helper.standardOutput = FileHandle.nullDevice
+        helper.standardError = FileHandle.nullDevice
+        do {
+            try helper.run()
+            NSApp.terminate(nil)
+        } catch {
+            failure(error)
+        }
     }
 
     private func verifyStableIdentity(of app: URL) throws {
@@ -219,13 +286,28 @@ final class PythiaUpdateInstaller: NSObject {
     }
 
     private func finishDownload(with result: Result<URL, Error>) {
+        activityLock.lock()
+        guard activity == .downloading else {
+            activityLock.unlock()
+            return
+        }
+        switch result {
+        case .success: activity = .downloaded
+        case .failure: activity = .idle
+        }
+        activityLock.unlock()
         let completion = downloadCompletion
         progressHandler = nil
         downloadCompletion = nil
         destinationURL = nil
         downloadSession = nil
-        isDownloading = false
         DispatchQueue.main.async { completion?(result) }
+    }
+
+    private func setActivity(_ next: Activity) {
+        activityLock.lock()
+        activity = next
+        activityLock.unlock()
     }
 }
 

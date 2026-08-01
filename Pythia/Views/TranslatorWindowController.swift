@@ -23,6 +23,9 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private var failedResultKeys = Set<String>()
     private let servicePicker = TranslationServicePickerButton()
     private let pinWindowButton = GlassIconButton(systemName: "pin", accessibility: "窗口置顶", target: nil, action: nil)
+    private let updateButton = PillButton("下载更新", target: nil, action: nil)
+    private var availableUpdateInfo: PythiaUpdateInfo?
+    private var isUpdating = false
     private let sourceLanguagePopup = NSPopUpButton()
     private let targetLanguagePopup = NSPopUpButton()
     private let statusLabel = NSTextField(labelWithString: "就绪")
@@ -681,6 +684,29 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         status(text)
     }
 
+    /// Shows the update action beside the main Pythia title without opening a
+    /// second settings window. The button stays available for the whole
+    /// session, including when the same release was already reported during a
+    /// previous launch.
+    func showAvailableUpdate(_ info: PythiaUpdateInfo) {
+        availableUpdateInfo = info
+        guard info.isNewer else {
+            updateButton.isHidden = true
+            return
+        }
+        let hasDownload = info.assetURL != nil
+        updateButton.title = hasDownload ? "下载更新" : "查看更新"
+        updateButton.image = NSImage(
+            systemSymbolName: hasDownload ? "arrow.down.circle.fill" : "arrow.up.right",
+            accessibilityDescription: hasDownload ? "下载更新" : "打开发布页"
+        )
+        updateButton.isEnabled = true
+        updateButton.toolTip = hasDownload
+            ? "下载并安装 Pythia \(info.latestVersion)"
+            : "打开 Pythia \(info.latestVersion) 发布页"
+        updateButton.isHidden = false
+    }
+
     func showMessage(title: String, text: String, status statusText: String) {
         showSingleResult(title: title, text: text)
         status(statusText)
@@ -721,6 +747,14 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         title.textColor = .labelColor
         titleRow.addArrangedSubview(icon)
         titleRow.addArrangedSubview(title)
+        updateButton.target = self
+        updateButton.action = #selector(downloadAvailableUpdate)
+        updateButton.imagePosition = .imageLeading
+        updateButton.imageHugsTitle = true
+        updateButton.imageScaling = .scaleProportionallyDown
+        updateButton.widthAnchor.constraint(equalToConstant: 112).isActive = true
+        updateButton.isHidden = true
+        titleRow.addArrangedSubview(updateButton)
         titleRow.addArrangedSubview(NSView())
         pinWindowButton.target = self
         pinWindowButton.action = #selector(toggleAlwaysOnTop)
@@ -1009,6 +1043,77 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         updatePinWindowButton()
         status(next ? "翻译窗口已置顶" : "翻译窗口取消置顶")
         NotificationCenter.default.post(name: .preferencesChanged, object: nil)
+    }
+
+    @objc private func downloadAvailableUpdate() {
+        guard let info = availableUpdateInfo, info.isNewer, !isUpdating else { return }
+        guard info.assetURL != nil else {
+            if let releaseURL = info.releaseURL {
+                NSWorkspace.shared.open(releaseURL)
+                status("已打开 \(info.latestVersion) 发布页")
+            } else {
+                status("当前版本没有可下载的更新附件")
+            }
+            return
+        }
+
+        isUpdating = true
+        updateButton.isEnabled = false
+        updateButton.title = "下载中…"
+        status("正在下载 \(info.latestVersion)…")
+        PythiaUpdateInstaller.shared.download(
+            info: info,
+            progress: { [weak self] fraction in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    let percent = Int(fraction * 100)
+                    self.updateButton.title = "下载 \(percent)%"
+                    self.status("正在下载 \(info.latestVersion)… \(percent)%")
+                }
+            }
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .success(let dmgURL):
+                    self.updateButton.title = "安装中…"
+                    self.status("下载完成，正在校验并安装…")
+                    PythiaUpdateInstaller.shared.install(from: dmgURL) { [weak self] installResult in
+                        DispatchQueue.main.async {
+                            guard let self else { return }
+                            switch installResult {
+                            case .success(.installed(let appURL, let rollbackURL)):
+                                self.status("版本 \(info.latestVersion) 安装完成，正在重启…")
+                                self.relaunchUpdatedApp(appURL, rollbackURL: rollbackURL)
+                            case .success(.openedInstaller(let url)):
+                                self.resetUpdateButton()
+                                self.status("已打开 \(url.lastPathComponent)，请完成更新")
+                            case .failure(let error):
+                                self.resetUpdateButton()
+                                self.status("更新失败：\(error.localizedDescription)")
+                            }
+                        }
+                    }
+                case .failure(let error):
+                    self.resetUpdateButton()
+                    self.status("更新失败：\(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private func resetUpdateButton() {
+        isUpdating = false
+        updateButton.isEnabled = true
+        let hasDownload = availableUpdateInfo?.assetURL != nil
+        updateButton.title = hasDownload ? "下载更新" : "查看更新"
+    }
+
+    private func relaunchUpdatedApp(_ appURL: URL, rollbackURL: URL?) {
+        PythiaUpdateInstaller.shared.relaunch(appURL: appURL, rollbackURL: rollbackURL) { [weak self] _ in
+            self?.resetUpdateButton()
+            self?.status("更新已安装，请退出当前 Pythia 后重新打开 /Applications/Pythia.app。")
+        }
     }
 
     @objc private func languageChanged() {
