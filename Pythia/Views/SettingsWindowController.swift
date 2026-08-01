@@ -1277,6 +1277,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    /// Selects the 关于 tab; used by the app menu's 关于 Pythia item so the
+    /// custom about page (version pills, update check) shows instead of the
+    /// standard macOS about panel.
+    func selectAboutTab() {
+        showTab(index: tabTitles.firstIndex(of: "关于") ?? (tabTitles.count - 1))
+    }
+
     private func showTab(index: Int) {
         selectedSettingsIndex = max(0, min(index, tabTitles.count - 1))
         updateSidebarSelection()

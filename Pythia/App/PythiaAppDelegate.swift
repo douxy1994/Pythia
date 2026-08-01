@@ -476,6 +476,12 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
         showSettings()
     }
 
+    @objc func aboutMenu() {
+        NSApp.activate(ignoringOtherApps: true)
+        showSettings()
+        settings?.selectAboutTab()
+    }
+
     @objc func quit() {
         NSApp.terminate(nil)
     }

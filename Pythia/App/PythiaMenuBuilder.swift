@@ -58,7 +58,7 @@ extension PythiaAppDelegate {
 
     private func makeAppMenu() -> NSMenu {
         let appMenu = NSMenu()
-        appMenu.addItem(NSMenuItem(title: "关于 Pythia", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: ""))
+        addMenuItem("关于 Pythia", action: #selector(aboutMenu), to: appMenu)
         appMenu.addItem(.separator())
         addMenuItem("历史记录", action: #selector(historyMenu), to: appMenu)
         let settingsItem = addMenuItem("设置...", action: #selector(settingsMenu), keyEquivalent: ",", to: appMenu)
