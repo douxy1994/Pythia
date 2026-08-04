@@ -30,6 +30,10 @@
                                 </Grid>
                                 <ToggleSwitch x:Name="SaveHistorySwitch" Header="保存翻译历史" OnContent="开启" OffContent="关闭" />
                                 <ToggleSwitch x:Name="CompactTranslationWindowSwitch" Header="划词翻译或截图 OCR 翻译时默认打开简约窗口" OnContent="开启" OffContent="关闭" />
+                                <StackPanel Spacing="4">
+                                    <ToggleSwitch x:Name="FloatingSelectionButtonSwitch" Header="实验功能：选中文字后显示悬浮翻译按钮" OnContent="开启" OffContent="关闭" />
+                                    <TextBlock Margin="0,0,0,2" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="默认关闭。支持 Word、PDF、网页和常见聊天软件；点击小型 Pythia 图标后读取选区并打开简约窗口。" TextWrapping="Wrap" />
+                                </StackPanel>
                                 <ToggleSwitch x:Name="LaunchAtStartupSwitch" Header="登录 Windows 后自动启动" OnContent="开启" OffContent="关闭" />
                             </StackPanel>
                         </Border>

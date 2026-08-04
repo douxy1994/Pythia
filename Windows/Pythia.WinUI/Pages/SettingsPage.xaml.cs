@@ -59,6 +59,7 @@ public sealed partial class SettingsPage : Page
         ThemeBox.SelectedItem = ThemeBox.Items.OfType<ComboBoxItem>().First(item => (string)item.Tag == settings.ThemeMode);
         SaveHistorySwitch.IsOn = settings.SaveHistory;
         CompactTranslationWindowSwitch.IsOn = settings.CompactTranslationWindow;
+        FloatingSelectionButtonSwitch.IsOn = settings.ExperimentalFloatingSelectionButton;
         LaunchAtStartupSwitch.IsOn = settings.LaunchAtStartup;
         GoogleSwitch.IsOn = settings.GoogleEnabled || settings.EnabledTranslateServices.Contains("google");
         BaiduSwitch.IsOn = settings.BaiduEnabled || settings.EnabledTranslateServices.Contains("baidu");
@@ -113,9 +114,9 @@ public sealed partial class SettingsPage : Page
             UpdateCard.Visibility = Visibility.Collapsed;
             UpdateButton.Visibility = Visibility.Collapsed;
             LatestNotesText.Text =
-                "1.2.1 · 修复自定义大模型 API 翻译长文档时被固定超时取消的问题。\n" +
-                "长文档按语义边界分段翻译，并避免切断数字、日期和 Unicode 字符。\n" +
-                "对超时、限流及临时服务错误进行有限重试，用户主动取消仍会立即停止。";
+                "1.2.2 · 窗口现可适配不同屏幕尺寸、分辨率和每显示器 DPI。\n" +
+                "修复简约窗口翻译服务列表显示不全且无法滚动的问题，并增强 WPS 划词。\n" +
+                "新增默认关闭的实验性悬浮划词按钮，可在 Word、PDF、网页和聊天软件中使用。";
             return;
         }
 
@@ -133,7 +134,7 @@ public sealed partial class SettingsPage : Page
     {
         foreach (var toggle in new[]
                  {
-                     SaveHistorySwitch, CompactTranslationWindowSwitch, LaunchAtStartupSwitch, GoogleSwitch, BaiduSwitch,
+                     SaveHistorySwitch, CompactTranslationWindowSwitch, FloatingSelectionButtonSwitch, LaunchAtStartupSwitch, GoogleSwitch, BaiduSwitch,
                      YoudaoSwitch, OpenAiSwitch, DeepLSwitch, LibreSwitch, OcrAutoTranslateSwitch,
                      WebDavAutoSyncSwitch, AlwaysOnTopSwitch, CloseToTraySwitch, HideOnBlurSwitch,
                      NotificationsSwitch, CheckUpdateOnStartupSwitch,
@@ -246,6 +247,17 @@ public sealed partial class SettingsPage : Page
             settings.ThemeMode = (string)((ComboBoxItem)ThemeBox.SelectedItem).Tag;
             settings.SaveHistory = SaveHistorySwitch.IsOn;
             settings.CompactTranslationWindow = CompactTranslationWindowSwitch.IsOn;
+            settings.ExperimentalFloatingSelectionButton = FloatingSelectionButtonSwitch.IsOn;
+            if (App.MainAppWindow is MainWindow floatingWindow &&
+                !floatingWindow.TryApplyFloatingSelectionButton(
+                    settings.ExperimentalFloatingSelectionButton, out var floatingError))
+            {
+                settings.ExperimentalFloatingSelectionButton = false;
+                _loadingValues = true;
+                FloatingSelectionButtonSwitch.IsOn = false;
+                _loadingValues = false;
+                throw new InvalidOperationException(floatingError);
+            }
             settings.LaunchAtStartup = LaunchAtStartupSwitch.IsOn;
             settings.GoogleEnabled = GoogleSwitch.IsOn;
             settings.BaiduEnabled = BaiduSwitch.IsOn;

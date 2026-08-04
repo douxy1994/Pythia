@@ -150,8 +150,7 @@ public sealed partial class HomePage : Page
         var enabled = new HashSet<string>(_selectedServices, StringComparer.OrdinalIgnoreCase);
         var list = new ListView
         {
-            MinWidth = 430,
-            MaxHeight = 520,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
             // SelectionMode.None: a selection competes with drag for pointer ownership on
             // WinUI 3 desktop; None lets the press start a reorder drag on the whole row.
             SelectionMode = ListViewSelectionMode.None,
@@ -160,6 +159,8 @@ public sealed partial class HomePage : Page
             AllowDrop = true,
             ReorderMode = ListViewReorderMode.Enabled,
         };
+        ScrollViewer.SetVerticalScrollMode(list, ScrollMode.Enabled);
+        ScrollViewer.SetVerticalScrollBarVisibility(list, ScrollBarVisibility.Auto);
 
         ListViewItem CreateRow(string id)
         {
@@ -213,14 +214,31 @@ public sealed partial class HomePage : Page
             keyEvent.Handled = true;
             await PersistServiceStateAsync(list, enabled);
         };
-        var content = new StackPanel { Spacing = 8 };
-        content.Children.Add(new TextBlock
+        var content = new Grid { RowSpacing = 8 };
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        var guidance = new TextBlock
         {
             Text = "拖动左侧手柄排序；键盘可选中一行后按 Ctrl+↑ / Ctrl+↓。更改会立即保存。",
             TextWrapping = TextWrapping.Wrap,
             Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-        });
+        };
+        content.Children.Add(guidance);
+        Grid.SetRow(list, 1);
         content.Children.Add(list);
+
+        void ResizeDialogContent()
+        {
+            // ContentDialog command/title areas consume part of the compact window.
+            // Give the ListView an explicit bounded viewport so its internal
+            // ScrollViewer receives finite height instead of being clipped by the
+            // dialog's bottom command area.
+            var rootWidth = XamlRoot?.Size.Width ?? ActualWidth;
+            var rootHeight = XamlRoot?.Size.Height ?? ActualHeight;
+            content.Width = Math.Clamp(rootWidth - 72, 260, 520);
+            list.Height = Math.Clamp(rootHeight - 190, 96, 520);
+        }
+        ResizeDialogContent();
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
@@ -228,8 +246,14 @@ public sealed partial class HomePage : Page
             Content = content,
             CloseButtonText = "完成",
         };
-        await dialog.ShowAsync();
-        await PersistServiceStateAsync(list, enabled);
+        SizeChangedEventHandler resizeHandler = (_, _) => ResizeDialogContent();
+        SizeChanged += resizeHandler;
+        try
+        {
+            await dialog.ShowAsync();
+            await PersistServiceStateAsync(list, enabled);
+        }
+        finally { SizeChanged -= resizeHandler; }
     }
 
     private async Task PersistServiceStateAsync(ListView list, HashSet<string> enabled)

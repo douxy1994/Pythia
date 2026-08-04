@@ -103,6 +103,7 @@ public sealed class PortableBackupSettings
     public string OpenAICompatibleModel { get; set; } = "gpt-4o-mini";
     public string OpenAICompatibleAPI { get; set; } = "openai";
     public bool CompactTranslationWindow { get; set; }
+    public bool ExperimentalFloatingSelectionButton { get; set; }
     public bool DeepLEnabled { get; set; }
     public string DeepLBaseUrl { get; set; } = "https://api-free.deepl.com/v2";
     public bool LibreTranslateEnabled { get; set; }
@@ -155,6 +156,7 @@ public static class PortableBackupService
                 OpenAICompatibleModel = settings.OpenAICompatibleModel,
                 OpenAICompatibleAPI = settings.OpenAICompatibleApi,
                 CompactTranslationWindow = settings.CompactTranslationWindow,
+                ExperimentalFloatingSelectionButton = settings.ExperimentalFloatingSelectionButton,
                 DeepLEnabled = settings.DeepLEnabled,
                 DeepLBaseUrl = settings.DeepLBaseUrl,
                 LibreTranslateEnabled = settings.LibreTranslateEnabled,
@@ -217,6 +219,7 @@ public static class PortableBackupService
         target.OpenAICompatibleApi = source.OpenAICompatibleAPI is "openai" or "anthropic"
             ? source.OpenAICompatibleAPI : "openai";
         target.CompactTranslationWindow = source.CompactTranslationWindow;
+        target.ExperimentalFloatingSelectionButton = source.ExperimentalFloatingSelectionButton;
         target.DeepLEnabled = source.DeepLEnabled;
         target.DeepLBaseUrl = source.DeepLBaseUrl;
         target.LibreTranslateEnabled = source.LibreTranslateEnabled;

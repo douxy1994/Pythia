@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -12,23 +13,26 @@ public sealed partial class MainWindow : Window
 {
     private bool _initiallyPositioned;
     private readonly WindowsShellService? _shell;
+    private readonly FloatingSelectionButtonService? _floatingSelectionButton;
     private CancellationTokenSource? _placementSaveDelay;
     private CancellationTokenSource? _blurHideDelay;
     private bool _selectionCaptureInProgress;
     private bool _compactPresentation;
     private RectInt32? _fullWindowBounds;
     private readonly IconSource? _fullTitleIconSource;
+    private readonly IntPtr _windowHandle;
 
     public MainWindow()
     {
         InitializeComponent();
+        _windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this);
         _fullTitleIconSource = AppTitleBar.IconSource;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         AppWindow.Title = "Pythia";
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
-        SelectionCaptureService.Initialize(WinRT.Interop.WindowNative.GetWindowHandle(this));
+        SelectionCaptureService.Initialize(_windowHandle);
         if (AppWindow.Presenter is OverlappedPresenter presenter)
             presenter.IsAlwaysOnTop = App.Services.Settings.AlwaysOnTop;
         var translateItem = NavView.MenuItems.OfType<NavigationViewItem>().First(item => (string)item.Tag == "translate");
@@ -47,6 +51,17 @@ public sealed partial class MainWindow : Window
         {
             App.Services.Status.Report($"Windows 集成初始化失败：{exception.Message}");
         }
+        try
+        {
+            _floatingSelectionButton = new FloatingSelectionButtonService(
+                _windowHandle, DispatcherQueue, FloatingSelectionButton_Clicked);
+            _floatingSelectionButton.SetEnabled(App.Services.Settings.ExperimentalFloatingSelectionButton);
+        }
+        catch (Exception exception)
+        {
+            App.Services.Settings.ExperimentalFloatingSelectionButton = false;
+            App.Services.Status.Report($"悬浮划词按钮初始化失败：{exception.Message}");
+        }
         Closed += (_, _) =>
         {
             _placementSaveDelay?.Cancel();
@@ -54,6 +69,7 @@ public sealed partial class MainWindow : Window
             _blurHideDelay?.Cancel();
             _blurHideDelay?.Dispose();
             SelectionCaptureService.Shutdown();
+            _floatingSelectionButton?.Dispose();
             _shell?.Dispose();
         };
         Activated += async (_, args) =>
@@ -191,7 +207,7 @@ public sealed partial class MainWindow : Window
         NotifyBackground("Pythia OCR", message, NotificationKind.Warning);
     }
 
-    public async Task TranslateSelectionAsync()
+    public async Task TranslateSelectionAsync(bool forceCompact = false)
     {
         if (_selectionCaptureInProgress) return;
         _selectionCaptureInProgress = true;
@@ -202,7 +218,7 @@ public sealed partial class MainWindow : Window
             // UIA selections are captured before any focus transition. Keep Pythia visible in
             // that path so clicking the selection button never produces a needless flash.
             // Clipboard-only applications still require returning focus before Ctrl+C.
-            if (!captureRequest.HasAutomationText && AppWindow.IsVisible)
+            if (!captureRequest.HasCapturedText && AppWindow.IsVisible)
             {
                 AppWindow.Hide();
                 await Task.Delay(120);
@@ -221,7 +237,9 @@ public sealed partial class MainWindow : Window
                 App.Services.Status.Report(selection.Message);
                 return;
             }
-            await ShowHomeTextAsync(selection.Text!, true, App.Services.Settings.CompactTranslationWindow);
+            await ShowHomeTextAsync(selection.Text!, true,
+                forceCompact || App.Services.Settings.CompactTranslationWindow,
+                new PointInt32(captureRequest.AnchorX, captureRequest.AnchorY));
         }
         finally
         {
@@ -229,22 +247,27 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    public async Task ShowHomeTextAsync(string text, bool translate, bool compact = false)
+    public async Task ShowHomeTextAsync(
+        string text,
+        bool translate,
+        bool compact = false,
+        PointInt32? compactAnchor = null)
     {
         ShowWindow();
         var translateItem = NavView.MenuItems.OfType<NavigationViewItem>().First(item => (string)item.Tag == "translate");
         NavView.SelectedItem = translateItem;
         if (NavFrame.Content is not HomePage) NavFrame.Navigate(typeof(HomePage));
         await Task.Yield();
-        SetCompactPresentation(compact);
+        SetCompactPresentation(compact, compactAnchor);
         if (NavFrame.Content is HomePage home) await home.LoadTextAsync(text, translate);
     }
 
-    public void SetCompactPresentation(bool compact)
+    public void SetCompactPresentation(bool compact, PointInt32? anchor = null)
     {
         if (_compactPresentation == compact)
         {
             if (NavFrame.Content is HomePage current) current.SetCompactMode(compact);
+            if (compact && anchor is not null) PlaceCompactWindow(anchor);
             return;
         }
         _compactPresentation = compact;
@@ -269,19 +292,27 @@ public sealed partial class MainWindow : Window
         {
             _fullWindowBounds = new RectInt32(AppWindow.Position.X, AppWindow.Position.Y,
                 AppWindow.Size.Width, AppWindow.Size.Height);
-            var display = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
-            var width = Math.Min(680, display.WorkArea.Width);
-            var height = Math.Min(430, display.WorkArea.Height);
-            AppWindow.MoveAndResize(new RectInt32(
-                display.WorkArea.X + (display.WorkArea.Width - width) / 2,
-                display.WorkArea.Y + (display.WorkArea.Height - height) / 2,
-                width, height));
+            PlaceCompactWindow(anchor);
         }
         else if (_fullWindowBounds is { } bounds)
         {
-            AppWindow.MoveAndResize(bounds);
+            var display = DisplayArea.GetFromPoint(
+                new PointInt32(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2),
+                DisplayAreaFallback.Nearest);
+            AppWindow.MoveAndResize(WindowPlacementPolicy.Clamp(bounds, display.WorkArea, 0));
             _fullWindowBounds = null;
         }
+    }
+
+    private void PlaceCompactWindow(PointInt32? anchor)
+    {
+        var display = anchor is { } point
+            ? DisplayArea.GetFromPoint(point, DisplayAreaFallback.Nearest)
+            : DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
+        var dpi = anchor is { } anchorPoint
+            ? GetDpiForPoint(anchorPoint)
+            : GetWindowDpi();
+        AppWindow.MoveAndResize(WindowPlacementPolicy.CompactBounds(display.WorkArea, dpi, anchor));
     }
 
     public void ShowAndActivate()
@@ -317,6 +348,42 @@ public sealed partial class MainWindow : Window
         return _shell.TryRegisterHotkeys(settings, out error);
     }
 
+    public bool TryApplyFloatingSelectionButton(bool enabled, out string? error)
+    {
+        if (_floatingSelectionButton is null)
+        {
+            error = enabled ? "悬浮划词服务未成功初始化" : null;
+            return !enabled;
+        }
+        try
+        {
+            _floatingSelectionButton.SetEnabled(enabled);
+            error = null;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            error = exception.Message;
+            return false;
+        }
+    }
+
+    private async void FloatingSelectionButton_Clicked(string? capturedText, PointInt32 anchor)
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(capturedText))
+                await ShowHomeTextAsync(capturedText, true, true, anchor);
+            else
+                await TranslateSelectionAsync(true);
+        }
+        catch (Exception exception)
+        {
+            ShowWindow();
+            App.Services.Status.Report($"悬浮划词失败：{exception.Message}");
+        }
+    }
+
     /// <summary>
     /// Fires a system balloon only when the Pythia window is not in the foreground,
     /// so events the user is already looking at do not produce a notification.
@@ -344,7 +411,6 @@ public sealed partial class MainWindow : Window
     {
         if (_initiallyPositioned) return;
         _initiallyPositioned = true;
-        var scale = (Content as FrameworkElement)?.XamlRoot?.RasterizationScale ?? 1;
         var settings = App.Services.Settings;
         var hasPlacement = settings.WindowWidth > 0 && settings.WindowHeight > 0;
         var display = hasPlacement
@@ -353,25 +419,24 @@ public sealed partial class MainWindow : Window
                 settings.WindowY + settings.WindowHeight / 2), DisplayAreaFallback.Nearest)
             : DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
         var work = display.WorkArea;
-        var width = hasPlacement ? settings.WindowWidth : Math.Min((int)Math.Round(1180 * scale), (int)Math.Round(work.Width * 0.90));
-        var height = hasPlacement ? settings.WindowHeight : Math.Min((int)Math.Round(780 * scale), (int)Math.Round(work.Height * 0.90));
-        width = Math.Max(width, Math.Min(960, work.Width));
-        height = Math.Max(height, Math.Min(680, work.Height));
-        width = Math.Min(width, work.Width);
-        height = Math.Min(height, work.Height);
-        var x = hasPlacement ? Math.Clamp(settings.WindowX, work.X, work.X + work.Width - width) : work.X + (work.Width - width) / 2;
-        var y = hasPlacement ? Math.Clamp(settings.WindowY, work.Y, work.Y + work.Height - height) : work.Y + (work.Height - height) / 2;
-        AppWindow.MoveAndResize(new RectInt32(
-            x, y, width, height));
+        var saved = hasPlacement
+            ? new RectInt32(settings.WindowX, settings.WindowY, settings.WindowWidth, settings.WindowHeight)
+            : (RectInt32?)null;
+        var targetDpi = GetDpiForPoint(new PointInt32(
+            work.X + work.Width / 2, work.Y + work.Height / 2));
+        AppWindow.MoveAndResize(WindowPlacementPolicy.FullBounds(
+            work, saved, (uint)Math.Max(0, settings.WindowDpi), targetDpi));
     }
 
     private async void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
     {
-        if (!_initiallyPositioned || (!args.DidPositionChange && !args.DidSizeChange)) return;
+        if (!_initiallyPositioned || _compactPresentation ||
+            (!args.DidPositionChange && !args.DidSizeChange)) return;
         App.Services.Settings.WindowX = sender.Position.X;
         App.Services.Settings.WindowY = sender.Position.Y;
         App.Services.Settings.WindowWidth = sender.Size.Width;
         App.Services.Settings.WindowHeight = sender.Size.Height;
+        App.Services.Settings.WindowDpi = (int)GetWindowDpi();
         var delay = new CancellationTokenSource();
         var previous = Interlocked.Exchange(ref _placementSaveDelay, delay);
         previous?.Cancel();
@@ -409,5 +474,31 @@ public sealed partial class MainWindow : Window
         if (page is not null && NavFrame.CurrentSourcePageType != page)
             NavFrame.Navigate(page);
     }
+
+    private uint GetWindowDpi()
+    {
+        var dpi = GetDpiForWindow(_windowHandle);
+        return dpi == 0 ? WindowPlacementPolicy.DefaultDpi : dpi;
+    }
+
+    private static uint GetDpiForPoint(PointInt32 point)
+    {
+        var monitor = MonitorFromPoint(new NativePoint(point.X, point.Y), 2);
+        if (monitor != IntPtr.Zero && GetDpiForMonitor(monitor, 0, out var dpiX, out _) == 0 && dpiX > 0)
+            return dpiX;
+        return WindowPlacementPolicy.DefaultDpi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct NativePoint(int x, int y)
+    {
+        public readonly int X = x;
+        public readonly int Y = y;
+    }
+
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern IntPtr MonitorFromPoint(NativePoint point, uint flags);
+    [DllImport("shcore.dll")] private static extern int GetDpiForMonitor(
+        IntPtr monitor, int dpiType, out uint dpiX, out uint dpiY);
 
 }

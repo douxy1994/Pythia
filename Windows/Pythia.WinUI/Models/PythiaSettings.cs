@@ -33,12 +33,14 @@ public sealed class PythiaSettings
     public int WindowY { get; set; }
     public int WindowWidth { get; set; }
     public int WindowHeight { get; set; }
+    public int WindowDpi { get; set; }
     public string ShowWindowHotkey { get; set; } = "Ctrl+Alt+P";
     public string SelectionTranslateHotkey { get; set; } = "Ctrl+Alt+D";
     public string ScreenshotTranslateHotkey { get; set; } = "Ctrl+Alt+Shift+D";
     public string ScreenshotOcrHotkey { get; set; } = "Ctrl+Alt+Shift+R";
     public bool ScreenshotOcrAutoTranslate { get; set; } = true;
     public bool CompactTranslationWindow { get; set; }
+    public bool ExperimentalFloatingSelectionButton { get; set; }
     public string WebdavUrl { get; set; } = string.Empty;
     public string WebdavUsername { get; set; } = string.Empty;
     public bool WebdavHistoryAutoSync { get; set; }

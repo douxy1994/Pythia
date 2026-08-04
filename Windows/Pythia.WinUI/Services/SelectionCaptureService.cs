@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Automation;
 using FormsClipboard = System.Windows.Forms.Clipboard;
@@ -20,9 +21,13 @@ public enum SelectionCaptureStatus
 public sealed record SelectionCaptureRequest(
     IntPtr TargetWindow,
     IntPtr FocusedWindow,
-    string? AutomationText)
+    string? CapturedText,
+    bool CapturedWithClipboard,
+    bool PrefersClipboardCapture,
+    int AnchorX,
+    int AnchorY)
 {
-    public bool HasAutomationText => !string.IsNullOrWhiteSpace(AutomationText);
+    public bool HasCapturedText => !string.IsNullOrWhiteSpace(CapturedText);
 }
 
 public sealed record SelectionCaptureResult(
@@ -48,6 +53,8 @@ public static class SelectionCaptureService
     private const uint EventSystemForeground = 0x0003;
     private const uint WineventOutOfContext = 0x0000;
     private const uint WineventSkipOwnProcess = 0x0002;
+    private static readonly HashSet<string> ClipboardFirstProcessNames =
+        new(["wps", "et", "wpp", "wpspdf"], StringComparer.OrdinalIgnoreCase);
     private static readonly WinEventDelegate ForegroundChangedDelegate = ForegroundChanged;
     private static IntPtr _foregroundHook;
     private static IntPtr _pythiaWindow;
@@ -55,7 +62,7 @@ public static class SelectionCaptureService
     private static IntPtr _lastExternalFocusWindow;
     private static readonly object PreActivationLock = new();
     private static IntPtr _preActivationTarget;
-    private static Task<string?>? _preActivationCapture;
+    private static Task<PreActivationSelection?>? _preActivationCapture;
     private static long _preActivationTimestamp;
 
     public static void Initialize(IntPtr pythiaWindow)
@@ -80,14 +87,17 @@ public static class SelectionCaptureService
         var target = IsEligibleExternalWindow(current) ? GetAncestor(current, 2) : _lastExternalWindow;
         var focused = GetFocusedWindow(target);
         if (!IsFocusWindowForTarget(target, focused)) focused = _lastExternalFocusWindow;
+        var clipboardFirst = PrefersClipboardCapture(target);
 
         // Read UIA before hiding Pythia or reactivating the source application. Chromium-
         // based clients such as ChatGPT expose transcript selections on their Document,
         // while their focused element returns to the prompt editor as soon as focus is
         // restored. Reading only AutomationElement.FocusedElement after activation loses
         // the transcript selection and makes Ctrl+C target the empty prompt instead.
-        var automationText = ConsumeCompletedPreActivationText(target);
-        return new SelectionCaptureRequest(target, focused, automationText);
+        var captured = ConsumeCompletedPreActivationText(target);
+        GetCursorPos(out var anchor);
+        return new SelectionCaptureRequest(target, focused, captured?.Text,
+            captured?.UsedClipboard ?? false, clipboardFirst, anchor.X, anchor.Y);
     }
 
     public static async Task<SelectionCaptureRequest> PrepareCaptureAsync(CancellationToken cancellationToken = default)
@@ -97,10 +107,18 @@ public static class SelectionCaptureService
         var target = IsEligibleExternalWindow(current) ? GetAncestor(current, 2) : _lastExternalWindow;
         var focused = GetFocusedWindow(target);
         if (!IsFocusWindowForTarget(target, focused)) focused = _lastExternalFocusWindow;
-        var automationText = await AwaitPreActivationTextAsync(target, cancellationToken);
-        if (string.IsNullOrWhiteSpace(automationText) && IsEligibleExternalWindow(target))
-            automationText = await ReadSelectionBoundedAsync(target, cancellationToken);
-        return new SelectionCaptureRequest(target, focused, automationText);
+        var clipboardFirst = PrefersClipboardCapture(target);
+        var captured = await AwaitPreActivationTextAsync(target, cancellationToken);
+        if (!clipboardFirst && string.IsNullOrWhiteSpace(captured?.Text) && IsEligibleExternalWindow(target))
+        {
+            var automationText = await ReadSelectionBoundedAsync(target, cancellationToken);
+            captured = string.IsNullOrWhiteSpace(automationText)
+                ? null
+                : new PreActivationSelection(automationText, false);
+        }
+        GetCursorPos(out var anchor);
+        return new SelectionCaptureRequest(target, focused, captured?.Text,
+            captured?.UsedClipboard ?? false, clipboardFirst, anchor.X, anchor.Y);
     }
 
     /// <summary>
@@ -114,16 +132,36 @@ public static class SelectionCaptureService
         var foreground = GetForegroundWindow();
         if (!IsEligibleExternalWindow(foreground)) return;
         var target = GetAncestor(foreground, 2);
+        // WPS and other custom document canvases may not expose TextPattern. Copy
+        // while the source is still foreground; doing it after Pythia activates can
+        // restore a different editor/caret and lose the selection. The clipboard is
+        // snapshotted and restored inside this call.
+        var clipboardText = CopySelectionWhileSourceIsForeground();
         lock (PreActivationLock)
         {
             _preActivationTarget = target;
-            _preActivationCapture = Task.Run(() => ReadSelectionFromWindow(target));
+            _preActivationCapture = !string.IsNullOrWhiteSpace(clipboardText)
+                ? Task.FromResult<PreActivationSelection?>(new(clipboardText, true))
+                : Task.Run(() =>
+                {
+                    var automationText = ReadSelectionFromWindow(target);
+                    return string.IsNullOrWhiteSpace(automationText)
+                        ? null
+                        : new PreActivationSelection(automationText, false);
+                });
             _preActivationTimestamp = Environment.TickCount64;
         }
     }
 
     public static async Task<SelectionCaptureResult> CaptureAsync(CancellationToken cancellationToken = default) =>
         await CaptureAsync(await PrepareCaptureAsync(cancellationToken), cancellationToken);
+
+    public static Task<string?> TryReadSelectionForFloatingButtonAsync(
+        IntPtr target,
+        CancellationToken cancellationToken = default) =>
+        IsEligibleExternalWindow(target)
+            ? ReadSelectionBoundedAsync(target, cancellationToken)
+            : Task.FromResult<string?>(null);
 
     public static async Task<SelectionCaptureResult> CaptureAsync(
         SelectionCaptureRequest request,
@@ -134,9 +172,12 @@ public static class SelectionCaptureService
             return new(SelectionCaptureStatus.NoPreviousApplication, null,
                 "没有可返回的外部应用。请先在其他应用中选中文字，再使用划词快捷键。", false);
 
-        if (request.HasAutomationText)
-            return new(SelectionCaptureStatus.Success, request.AutomationText!.Trim(),
-                "已在切换窗口前通过 UI Automation 读取选区。", false);
+        if (request.HasCapturedText)
+            return new(SelectionCaptureStatus.Success, request.CapturedText!.Trim(),
+                request.CapturedWithClipboard
+                    ? "已在源应用仍处于前台时通过受控复制读取选区，并恢复原剪贴板。"
+                    : "已在切换窗口前通过 UI Automation 读取选区。",
+                request.CapturedWithClipboard);
 
         if (!await ActivateTargetAsync(target, request.FocusedWindow, cancellationToken))
             return new(SelectionCaptureStatus.ForegroundActivationFailed, null,
@@ -145,7 +186,7 @@ public static class SelectionCaptureService
         // When the user clicks Pythia's own selection button, the target application
         // has just lost focus. Poll briefly while Windows restores the target's focused
         // text control; a single read is frequently too early in Chromium and editors.
-        for (var attempt = 0; attempt < 6; attempt++)
+        for (var attempt = 0; !request.PrefersClipboardCapture && attempt < 6; attempt++)
         {
             await Task.Delay(attempt == 0 ? 160 : 60, cancellationToken);
             var automationText = await ReadSelectionBoundedAsync(target, cancellationToken);
@@ -211,7 +252,7 @@ public static class SelectionCaptureService
         }
     }
 
-    private static string? ConsumeCompletedPreActivationText(IntPtr target)
+    private static PreActivationSelection? ConsumeCompletedPreActivationText(IntPtr target)
     {
         lock (PreActivationLock)
         {
@@ -226,9 +267,9 @@ public static class SelectionCaptureService
         }
     }
 
-    private static async Task<string?> AwaitPreActivationTextAsync(IntPtr target, CancellationToken cancellationToken)
+    private static async Task<PreActivationSelection?> AwaitPreActivationTextAsync(IntPtr target, CancellationToken cancellationToken)
     {
-        Task<string?>? pending;
+        Task<PreActivationSelection?>? pending;
         lock (PreActivationLock)
         {
             var fresh = target != IntPtr.Zero && target == _preActivationTarget &&
@@ -466,11 +507,31 @@ public static class SelectionCaptureService
         return windowClass is not ("Shell_TrayWnd" or "Shell_SecondaryTrayWnd" or "Progman" or "WorkerW");
     }
 
+    private static bool PrefersClipboardCapture(IntPtr target)
+    {
+        if (target == IntPtr.Zero || !IsWindow(target)) return false;
+        GetWindowThreadProcessId(target, out var processId);
+        if (processId <= 0) return false;
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            return IsClipboardFirstProcessName(process.ProcessName);
+        }
+        catch (ArgumentException) { return false; }
+        catch (InvalidOperationException) { return false; }
+        catch (Win32Exception) { return false; }
+    }
+
+    public static bool IsClipboardFirstProcessName(string processName) =>
+        ClipboardFirstProcessNames.Contains(processName);
+
     private static Input Key(ushort virtualKey, bool up) => new()
     {
         Type = InputKeyboard,
         Union = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = virtualKey, Flags = up ? Keyup : 0 } },
     };
+
+    private sealed record PreActivationSelection(string Text, bool UsedClipboard);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Input { public uint Type; public InputUnion Union; }
@@ -531,6 +592,7 @@ public static class SelectionCaptureService
 
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
     [DllImport("user32.dll")] private static extern uint GetClipboardSequenceNumber();
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out NativePoint point);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int virtualKey);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hwnd);
@@ -550,4 +612,7 @@ public static class SelectionCaptureService
     [DllImport("user32.dll")] private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr module,
         WinEventDelegate callback, uint processId, uint threadId, uint flags);
     [DllImport("user32.dll")] private static extern bool UnhookWinEvent(IntPtr hook);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint { public int X; public int Y; }
 }

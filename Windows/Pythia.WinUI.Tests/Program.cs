@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.IO.Compression;
 using Windows.Globalization;
+using Windows.Graphics;
 using Pythia.Models;
 using Pythia.Services;
 
@@ -145,13 +146,20 @@ Check(settingsPageXaml.Contains("Tag=\"plugins\"", StringComparison.Ordinal) &&
     "Settings owns plugin/About pages, auto-saves, and exposes GitHub/update/license actions");
 Check(llmCardIndex >= 0 && googleCardIndex > llmCardIndex &&
       settingsPageXaml.Contains("x:Name=\"OpenAiApiBox\"", StringComparison.Ordinal) &&
-      settingsPageXaml.Contains("Header=\"划词翻译或截图 OCR 翻译时默认打开简约窗口\"", StringComparison.Ordinal),
-    "large-model service is first and compact translation has a default setting");
+      settingsPageXaml.Contains("Header=\"划词翻译或截图 OCR 翻译时默认打开简约窗口\"", StringComparison.Ordinal) &&
+      settingsPageXaml.Contains("x:Name=\"FloatingSelectionButtonSwitch\"", StringComparison.Ordinal) &&
+      settingsPageXaml.Contains("实验功能：选中文字后显示悬浮翻译按钮", StringComparison.Ordinal),
+    "large-model service is first and compact/floating selection settings are exposed");
 Check(homePageXaml.Contains("x:Name=\"CompactHeader\"", StringComparison.Ordinal) &&
       homePageXaml.Contains("x:Name=\"CompactServiceButtonLabel\"", StringComparison.Ordinal) &&
       homePageXaml.Contains("x:Name=\"ResultsPanel\"", StringComparison.Ordinal) &&
       homePageXaml.Contains("Click=\"CopyResult_Click\"", StringComparison.Ordinal),
     "compact translation keeps synchronized service selection and result copy actions");
+Check(homePageSource.Contains("ScrollViewer.SetVerticalScrollMode(list, ScrollMode.Enabled)", StringComparison.Ordinal) &&
+      homePageSource.Contains("list.Height = Math.Clamp(rootHeight - 190, 96, 520)", StringComparison.Ordinal) &&
+      homePageSource.Contains("SizeChanged += resizeHandler", StringComparison.Ordinal) &&
+      homePageSource.Contains("SizeChanged -= resizeHandler", StringComparison.Ordinal),
+    "service picker keeps a bounded scrolling viewport inside the compact window and follows resize");
 var mainWindowXamlPath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "MainWindow.xaml"));
 var mainWindowXaml = mainWindowXamlPath is null ? string.Empty : File.ReadAllText(mainWindowXamlPath);
 Check(!mainWindowXaml.Contains("Tag=\"plugins\"", StringComparison.Ordinal) &&
@@ -182,14 +190,68 @@ Check(selectionServiceSource.Contains("WaitForModifierReleaseAsync", StringCompa
       selectionServiceSource.Contains("ReadSelectionBoundedAsync", StringComparison.Ordinal) &&
       selectionServiceSource.Contains("WaitAsync(TimeSpan.FromMilliseconds", StringComparison.Ordinal) &&
       !selectionServiceSource.Contains("TreeScope.Subtree", StringComparison.Ordinal) &&
-      selectionServiceSource.Contains("HasAutomationText", StringComparison.Ordinal) &&
+      selectionServiceSource.Contains("HasCapturedText", StringComparison.Ordinal) &&
       selectionServiceSource.Contains("BeginCaptureBeforePythiaActivation", StringComparison.Ordinal) &&
       selectionServiceSource.Contains("CopySelectionWhileSourceIsForeground", StringComparison.Ordinal) &&
+      selectionServiceSource.IndexOf("CopySelectionWhileSourceIsForeground();", StringComparison.Ordinal) >= 0 &&
+      selectionServiceSource.Contains("ClipboardFirstProcessNames", StringComparison.Ordinal) &&
+      SelectionCaptureService.IsClipboardFirstProcessName("wps") &&
+      SelectionCaptureService.IsClipboardFirstProcessName("WPSPDF") &&
+      !SelectionCaptureService.IsClipboardFirstProcessName("notepad") &&
+      selectionServiceSource.Contains("!request.PrefersClipboardCapture", StringComparison.Ordinal) &&
       mainWindowSource.Contains("IsSelectionActionPoint", StringComparison.Ordinal) &&
       selectionMethodSource.IndexOf("PrepareCaptureAsync()", StringComparison.Ordinal) >= 0 &&
       selectionMethodSource.IndexOf("PrepareCaptureAsync()", StringComparison.Ordinal) < selectionMethodSource.IndexOf("AppWindow.Hide()", StringComparison.Ordinal) &&
-      selectionMethodSource.Contains("!captureRequest.HasAutomationText", StringComparison.Ordinal),
-    "selection capture snapshots before mouse activation without blocking WndProc or scanning a full UIA subtree, and keeps the native x64 clipboard fallback");
+      selectionMethodSource.Contains("!captureRequest.HasCapturedText", StringComparison.Ordinal),
+    "selection capture snapshots UIA or clipboard text before mouse activation, avoids a full UIA subtree, and keeps the native x64 clipboard fallback");
+
+Check(WindowPlacementPolicy.DipToPixels(680, 96) == 680 &&
+      WindowPlacementPolicy.DipToPixels(680, 144) == 1020 &&
+      WindowPlacementPolicy.DipToPixels(680, 192) == 1360,
+    "window policy converts logical sizes at 100, 150, and 200 percent DPI");
+var compact4k = WindowPlacementPolicy.CompactBounds(new RectInt32(0, 0, 3840, 2080), 192);
+Check(compact4k.Width == 1360 && compact4k.Height == 860,
+    "compact window preserves its logical size on a 200 percent 4K display");
+var compactSmall = WindowPlacementPolicy.CompactBounds(new RectInt32(0, 0, 800, 560), 192);
+Check(compactSmall.X >= 0 && compactSmall.Y >= 0 &&
+      compactSmall.X + compactSmall.Width <= 800 && compactSmall.Y + compactSmall.Height <= 560,
+    "compact window shrinks inside a small display work area");
+var compactNegativeMonitor = WindowPlacementPolicy.CompactBounds(
+    new RectInt32(-1920, 0, 1920, 1040), 96, new PointInt32(-100, 100));
+Check(compactNegativeMonitor.X >= -1920 && compactNegativeMonitor.Y >= 0 &&
+      compactNegativeMonitor.X + compactNegativeMonitor.Width <= 0 &&
+      compactNegativeMonitor.Y + compactNegativeMonitor.Height <= 1040,
+    "compact window stays on a left-hand monitor with negative virtual coordinates");
+var rescaledFull = WindowPlacementPolicy.FullBounds(
+    new RectInt32(0, 0, 2560, 1400), new RectInt32(100, 100, 1180, 780), 96, 144);
+Check(rescaledFull.Width == 1770 && rescaledFull.Height == 1170,
+    "saved full window size follows the destination monitor DPI");
+var legacyFull = WindowPlacementPolicy.FullBounds(
+    new RectInt32(0, 0, 1920, 1040), new RectInt32(100, 100, 1180, 780), 0, 144);
+Check(legacyFull.Width == 1440 && legacyFull.Height == 1020,
+    "legacy physical window bounds remain compatible while respecting new DPI minimums");
+Check(!new PythiaSettings().ExperimentalFloatingSelectionButton &&
+      FloatingSelectionButtonPolicy.IsSelectionDrag(
+          new PointInt32(10, 10), new PointInt32(20, 10), 100) &&
+      !FloatingSelectionButtonPolicy.IsSelectionDrag(
+          new PointInt32(10, 10), new PointInt32(12, 11), 100) &&
+      !FloatingSelectionButtonPolicy.IsSelectionDrag(
+          new PointInt32(10, 10), new PointInt32(20, 10), 20),
+    "experimental floating button defaults off and ignores clicks or implausibly fast drags");
+Check(FloatingSelectionButtonPolicy.SupportsDragFallback("WINWORD") &&
+      FloatingSelectionButtonPolicy.SupportsDragFallback("AcroRd32") &&
+      FloatingSelectionButtonPolicy.SupportsDragFallback("msedge") &&
+      FloatingSelectionButtonPolicy.SupportsDragFallback("WeChat") &&
+      !FloatingSelectionButtonPolicy.SupportsDragFallback("explorer"),
+    "floating button fallback covers Word, PDF, web, and chat apps without enabling arbitrary drags");
+var floatingServicePath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Services", "FloatingSelectionButtonService.cs"));
+var floatingServiceSource = floatingServicePath is null ? string.Empty : File.ReadAllText(floatingServicePath);
+Check(floatingServiceSource.Contains("WsExNoActivate", StringComparison.Ordinal) &&
+      floatingServiceSource.Contains("AppIcon.ico", StringComparison.Ordinal) &&
+      floatingServiceSource.Contains("TimeSpan.FromSeconds(5)", StringComparison.Ordinal) &&
+      floatingServiceSource.Contains("TryReadSelectionForFloatingButtonAsync", StringComparison.Ordinal) &&
+      mainWindowSource.Contains("TranslateSelectionAsync(true)", StringComparison.Ordinal),
+    "floating Pythia icon is non-activating, auto-dismisses, probes UIA first, and forces compact translation on click");
 var pluginPanelPath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Pages", "PluginSettingsPanel.xaml"));
 var pluginPanelXaml = pluginPanelPath is null ? string.Empty : File.ReadAllText(pluginPanelPath);
 Check(pluginPanelXaml.Contains("Expanding=\"PluginExpander_Expanding\"", StringComparison.Ordinal) &&
@@ -360,6 +422,7 @@ var portableSettings = new PythiaSettings
     TranslateServiceOrder = ["google"],
     OpenAICompatibleApi = "anthropic",
     CompactTranslationWindow = true,
+    ExperimentalFloatingSelectionButton = true,
     WebdavUrl = "https://private.example.invalid/dav",
     WebdavUsername = "private-user",
 };
@@ -372,8 +435,9 @@ var portableRestore = PortableBackupService.Restore(portableJson, []);
 Check(portableRestore.ImportedCount == 1 && portableRestore.Records.Single().SyncStatus == "pendingUpload",
     "portable backup restores mergeable pending history");
 Check(portableRestore.Settings.OpenAICompatibleAPI == "anthropic" &&
-      portableRestore.Settings.CompactTranslationWindow,
-    "portable backup preserves non-secret compact-window and custom-API settings");
+      portableRestore.Settings.CompactTranslationWindow &&
+      portableRestore.Settings.ExperimentalFloatingSelectionButton,
+    "portable backup preserves non-secret compact-window, floating-button, and custom-API settings");
 Check(AppServices.GetSyncInterval(new PythiaSettings
 { WebdavHistorySyncIntervalValue = 2, WebdavHistorySyncIntervalUnit = "week" }) == TimeSpan.FromDays(14),
     "WebDAV week schedule");

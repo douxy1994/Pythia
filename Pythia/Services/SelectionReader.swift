@@ -10,17 +10,20 @@ final class SelectionReader {
         let items: [[NSPasteboard.PasteboardType: Data]]
     }
 
-    /// Apps whose Accessibility selection is unreliable: Microsoft Word's
-    /// AXSelectedText silently drops everything before a page break when the
-    /// selection spans pages, so for these apps copy via ⌘C first and only
-    /// fall back to the Accessibility tree when the copy reads nothing.
+    /// Apps whose Accessibility selection is unreliable. Microsoft Word can
+    /// truncate AXSelectedText across page breaks, while WPS Office uses custom
+    /// document canvases that do not consistently expose AXSelectedText or
+    /// AXSelectedTextRange. Copy via ⌘C first for these apps and only fall back
+    /// to the Accessibility tree when the copy reads nothing.
     private static let clipboardFirstBundleIDs: Set<String> = [
         "com.microsoft.Word",
+        "com.kingsoft.wpsoffice.mac",
     ]
 
     private func prefersClipboardCopy(for app: NSRunningApplication?) -> Bool {
         guard let bundleID = app?.bundleIdentifier else { return false }
         return Self.clipboardFirstBundleIDs.contains(bundleID)
+            || bundleID.hasPrefix("com.kingsoft.wpsoffice.mac.")
     }
 
     func selectedText(targetApplication: NSRunningApplication? = nil, completion: @escaping (String) -> Void) {

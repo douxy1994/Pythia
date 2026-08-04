@@ -25,6 +25,12 @@ Windows Credential Manager. UI Automation reads are bounded and moved off the
 window-message thread; screenshot selection no longer allocates a full virtual-
 desktop bitmap before the user chooses a region.
 
+General settings also provides a default-off experimental floating selection
+button. After a credible mouse text-selection drag in Word, common PDF readers,
+browsers, or chat clients, a 34-DIP non-activating Pythia icon appears beside the
+selection. Clicking it reads the selection and opens the compact translation
+window; dismissing it never changes the clipboard.
+
 Settings shows one category at a time. Plugins have one canonical entry under
 Settings > Plugins, where they can be installed, configured, enabled, disabled,
 renamed, reordered, reconverted, removed, and connectivity-tested. About and updates live only in Settings. Settings also includes
@@ -52,5 +58,5 @@ dotnet run --project ..\Pythia.WinUI.Tests\Pythia.WinUI.Tests.csproj -c Release
 ## Installer
 
 ```powershell
-.\tool\build-installer.ps1 -Version 1.2.1
+.\tool\build-installer.ps1 -Version 1.2.2
 ```

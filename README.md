@@ -7,9 +7,9 @@
 
   A local-first desktop translator for macOS and Windows: multi-service result cards, screenshot OCR, global hotkeys, syncable history, and a real plugin system.
 
-  [![Version](https://img.shields.io/badge/Version-1.2.1-80B847)](#download)
+  [![Version](https://img.shields.io/badge/Version-1.2.2-80B847)](#download)
   [![macOS](https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white)](#macos)
-  [![Windows](https://img.shields.io/badge/Windows_x64-1.2.1-0078D4?logo=windows11&logoColor=white)](#windows)
+  [![Windows](https://img.shields.io/badge/Windows_x64-1.2.2-0078D4?logo=windows11&logoColor=white)](#windows)
   [![Swift](https://img.shields.io/badge/Swift-AppKit-F05138?logo=swift&logoColor=white)](#macos-build)
   [![WinUI](https://img.shields.io/badge/C%23-WinUI_3-512BD4?logo=dotnet&logoColor=white)](#windows-development)
   [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-2ea44f.svg)](./LICENSE)
@@ -55,6 +55,7 @@ flowchart LR
 - Selection and screenshot-OCR translation can open a compact result-only window with retry, copy, synchronized multi-service selection, and one-click expansion.
 - Google works out of the box; custom LLM APIs support OpenAI Chat Completions and Anthropic Messages on both platforms.
 - Custom LLM translation splits long documents at semantic boundaries and applies bounded retries for timeouts, rate limits, and transient upstream failures. On macOS, the shared pipeline also guarantees numeric/grapheme-safe ~1,800-character segments, exact source reconstruction, 300-second full-response attempts, and immediate cancellation. DeepL, Baidu, Youdao, and LibreTranslate keep their existing paths.
+- Windows includes a default-off experimental floating selection button: selecting text in Word, common PDF readers, browsers, or chat clients shows a small Pythia icon that opens compact translation only after an explicit click.
 - **Settings → Services → Verify** runs a real translation against the values you just typed — no guessing whether a key works.
 - Dominant-script Chinese/English routing picks the right direction for mixed text; smart target language follows detection.
 - Result cards support per-card copy, re-translate, TTS, and automatic copy rules.
@@ -92,7 +93,7 @@ flowchart LR
     <td width="50%" align="center">
       <img src="./Docs/images/platform-windows.svg" width="100%" alt="Pythia for Windows">
       <h3 id="windows">Windows</h3>
-      <p><strong>Native WinUI 3 · current release 1.2.1</strong></p>
+      <p><strong>Native WinUI 3 · current release 1.2.2</strong></p>
       <p>C# 14 · .NET 10 · x64 · Windows 10/11</p>
       <p>Compact translation, multi-service cards, Windows OCR, hotkeys, history sync, plugins, and Inno Setup packaging.</p>
     </td>
@@ -111,12 +112,12 @@ flowchart LR
 
 ### Windows
 
-[Download Pythia 1.2.1 for Windows x64](https://github.com/douxy1994/Pythia/releases/download/v1.2.1/Pythia-1.2.1-windows-x64.exe)
+[Download Pythia 1.2.2 for Windows x64](https://github.com/douxy1994/Pythia/releases/download/v1.2.2/Pythia-1.2.2-windows-x64.exe)
 
 - Requires 64-bit Windows 10 or Windows 11.
-- The installer and SHA-256 checksum are published on the [v1.2.1 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.2.1); the macOS 1.2.1 arm64 assets will be added to that same Release after the port is complete.
+- The installer and SHA-256 checksum are published on the [v1.2.2 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.2.2); the macOS 1.2.2 arm64 assets will be added to that same Release after the port is complete.
 - The installer contains Pythia and its isolated runtime only; it bundles no third-party plugin or `.pythia` package.
-- The Windows 1.2.1 installer is not Authenticode-signed yet and might trigger Microsoft Defender SmartScreen. Verify its SHA-256 checksum before installation.
+- The Windows 1.2.2 installer is not Authenticode-signed yet and might trigger Microsoft Defender SmartScreen. Verify its SHA-256 checksum before installation.
 
 ## Downloadable plugins
 
@@ -175,7 +176,7 @@ Set-Location Windows\Pythia.WinUI
 node ..\..\script\validate_pythia_plugins.mjs
 dotnet build .\Pythia.WinUI.csproj -c Release -p:Platform=x64
 dotnet run --project ..\Pythia.WinUI.Tests\Pythia.WinUI.Tests.csproj -c Release
-.\tool\build-installer.ps1 -Version 1.2.1
+.\tool\build-installer.ps1 -Version 1.2.2
 ```
 
 ## Data and privacy
@@ -188,7 +189,7 @@ dotnet run --project ..\Pythia.WinUI.Tests\Pythia.WinUI.Tests.csproj -c Release
 - Portable backups exclude API keys, WebDAV credentials, shortcuts, startup state, and window state.
 - Release packages contain no third-party plugins and are scanned for private material before publishing.
 - The repository and release assets must never contain private keys, API keys, passwords, user history, or local configuration.
-- Windows 1.2.1 is published without Authenticode signing; signing remains planned, and certificate files must never enter Git.
+- Windows 1.2.2 is published without Authenticode signing; signing remains planned, and certificate files must never enter Git.
 
 ## Repository layout
 
@@ -212,6 +213,7 @@ Active development happens on the `master` branch of [github.com/douxy1994/Pythi
 
 ## Documentation
 
+- [Pythia 1.2.2 release notes](Docs/RELEASE_NOTES_1.2.2.md)
 - [Pythia 1.2.1 release notes](Docs/RELEASE_NOTES_1.2.1.md)
 - [Pythia 1.2.0 release notes](Docs/RELEASE_NOTES_1.2.0.md)
 - [Architecture](Docs/ARCHITECTURE.md)
