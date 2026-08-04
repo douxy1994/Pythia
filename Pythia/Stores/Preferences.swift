@@ -183,6 +183,36 @@ final class Preferences {
         set { defaults.set(newValue, forKey: "openAIModel") }
     }
 
+    var openAICompatibleName: String {
+        get { defaults.string(forKey: "openAICompatibleName") ?? "OpenAI" }
+        set { defaults.set(newValue, forKey: "openAICompatibleName") }
+    }
+
+    var openAIBaseURL: String {
+        get { defaults.string(forKey: "openAIBaseURL") ?? "https://api.openai.com/v1" }
+        set { defaults.set(newValue, forKey: "openAIBaseURL") }
+    }
+
+    /// Wire format used by the configurable LLM translation service.
+    /// `openai` uses Chat Completions; `anthropic` uses Messages.
+    var openAICompatibleAPI: String {
+        get {
+            enumString(
+                forKey: "openAICompatibleAPI",
+                defaultValue: "openai",
+                validValues: ["openai", "anthropic"]
+            )
+        }
+        set {
+            setEnumString(
+                newValue,
+                forKey: "openAICompatibleAPI",
+                defaultValue: "openai",
+                validValues: ["openai", "anthropic"]
+            )
+        }
+    }
+
     var deepLKey: String {
         get { credentialString(forKey: "deepLKey") }
         set { setCredentialString(newValue, forKey: "deepLKey") }
@@ -266,6 +296,13 @@ final class Preferences {
     var translateRememberWindowSize: Bool {
         get { defaults.bool(forKey: "translateRememberWindowSize") }
         set { defaults.set(newValue, forKey: "translateRememberWindowSize") }
+    }
+
+    /// Selection translation and screenshot translation open the focused,
+    /// result-only window first. Input translation keeps the full editor.
+    var compactTranslationWindow: Bool {
+        get { defaults.object(forKey: "compactTranslationWindow") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "compactTranslationWindow") }
     }
 
     var translateWindowPosition: String {

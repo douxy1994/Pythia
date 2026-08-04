@@ -1,6 +1,6 @@
 # Pythia Windows x64
 
-This is the 64-bit x64 Flutter Windows client for Pythia 1.0.0, including the native Windows host files required to build and register platform channels. The CMake project rejects non-x64 toolchains, the release verifier requires `Pythia.exe` to use PE machine `0x8664` (AMD64), and GitHub Actions now builds and packages the verified candidate.
+This is the 64-bit x64 Flutter Windows client for Pythia. The repository/macOS release is `1.1.0`; the Windows client remains Preview at Flutter version `1.0.0+100` until its real-machine acceptance and release gates are complete. The CMake project rejects non-x64 toolchains, the release verifier requires `Pythia.exe` to use PE machine `0x8664` (AMD64), and GitHub Actions builds and packages the verified Windows candidate.
 
 Before continuing Windows work, read the repository-level [Windows Codex handoff](../../WINDOWS_CODEX_HANDOFF.md). It is the authoritative continuation document and includes the correct branch baseline, exact toolchain, source map, platform-channel contract, known UI/IME gaps, manual Windows acceptance matrix, release rules, and definition of done.
 
@@ -14,6 +14,19 @@ flutter build windows --release
 dart run tool/verify_release_package.dart build\windows\x64\runner\Release
 ```
 
+## Current Windows Baseline
+
+- Git baseline: `0d286b1a85b5c0a8bfa8f66b53d861f13185e972` (`Release Pythia 1.1.0`).
+- Latest verified workflow: [Windows x64 run 30703218631](https://github.com/douxy1994/Pythia/actions/runs/30703218631).
+- CI passed Flutter `3.44.5 stable`, `flutter analyze`, 85 tests, plugin validation, x64 release verification, installer checksum verification, and Windows runtime/install/restart/uninstall smoke tests.
+- This CI result does not replace the real Windows manual matrix. Continue with live UI Automation, OCR, hotkey, tray, Credential Manager, WebDAV, startup, signed-updater, and DPI/IME checks before changing the Windows version.
+
+To inspect the exact CI evidence from a Windows checkout:
+
+```powershell
+gh run view 30703218631 --repo douxy1994/Pythia
+```
+
 The current published `.pythia` packages are under [`../../Plugins`](../../Plugins/README.md). The complete plugin contract is documented in [`../../Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md`](../../Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md). Public plugin downloads are for interactive testing and must never be copied into the application release directory.
 
 ## Implemented In This Scaffold
@@ -25,7 +38,7 @@ The current published `.pythia` packages are under [`../../Plugins`](../../Plugi
 - `lib/core/local_storage.dart`: local JSON settings/history storage using app support directory, including logical deletion, favorite toggling, clear-history, and search helpers.
 - `lib/core/translation_service.dart`: provider interface plus Local, Google, Baidu, Youdao, OpenAI-compatible, DeepL, and LibreTranslate providers.
 - `lib/core/settings_model.dart`: persisted non-secret provider settings, enabled states, and service order.
-- `lib/core/update_checker.dart`: Pythia GitHub latest-release checker for version `1.0.0`.
+- `lib/core/update_checker.dart`: Pythia GitHub latest-release checker for the current Windows Preview version `1.0.0`.
 - `lib/core/release_package_verifier.dart` and `tool/verify_release_package.dart`: release gate that requires an AMD64 `Pythia.exe` and rejects bundled plugin payloads and private-key/API-token markers.
 - `lib/platform/*`: explicit platform interfaces plus MethodChannel Credential Manager storage for secrets.
 - `lib/platform/platform_services.dart`: MethodChannel contracts for selection translation, screenshot OCR, Windows speech, tray actions, hotkeys, startup, window behavior, system accent color, reduced animation, and native window appearance.

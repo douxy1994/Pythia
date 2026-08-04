@@ -21,7 +21,7 @@ enum PythiaNetworkSession {
         return task
     }
 
-    private static func configuration(for url: URL?) -> URLSessionConfiguration {
+    static func configuration(for url: URL?) -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCredentialStorage = nil
         configuration.httpCookieStorage = nil
@@ -57,7 +57,7 @@ enum PythiaNetworkSession {
         ]
     }
 
-    private static func requestWithProxyAuthorization(_ request: URLRequest) -> URLRequest {
+    static func requestWithProxyAuthorization(_ request: URLRequest) -> URLRequest {
         let preferences = Preferences.shared
         guard preferences.proxyEnabled,
               !preferences.proxyUsername.isEmpty,
@@ -410,22 +410,40 @@ final class TranslationService {
     ) {
         let preferences = Preferences.shared
         guard !preferences.openAIKey.isEmpty else {
-            completion(.failure(TranslationError.missingKey("OpenAI API Key")))
+            completion(.failure(TranslationError.missingKey("自定义 API Key")))
             return
         }
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
+        let api = preferences.openAICompatibleAPI
+        guard let endpoint = Self.customLLMEndpoint(baseURL: preferences.openAIBaseURL, api: api) else {
+            completion(.failure(TranslationError.requestFailed("自定义 API 基础地址无效。")))
+            return
+        }
+        var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(preferences.openAIKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let prompt = "Translate the following text from \(sourceLanguage) to \(targetLanguage). Return only the translation.\n\n\(text)"
-        let body: [String: Any] = [
-            "model": preferences.openAIModel,
-            "messages": [
-                ["role": "system", "content": "You are a concise translation engine."],
-                ["role": "user", "content": prompt],
-            ],
-            "temperature": 0.2,
-        ]
+        let body: [String: Any]
+        if api == "anthropic" {
+            request.setValue(preferences.openAIKey, forHTTPHeaderField: "x-api-key")
+            request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+            body = [
+                "model": preferences.openAIModel,
+                "system": "You are a concise translation engine.",
+                "messages": [["role": "user", "content": prompt]],
+                "max_tokens": 4096,
+                "temperature": 0.2,
+            ]
+        } else {
+            request.setValue("Bearer \(preferences.openAIKey)", forHTTPHeaderField: "Authorization")
+            body = [
+                "model": preferences.openAIModel,
+                "messages": [
+                    ["role": "system", "content": "You are a concise translation engine."],
+                    ["role": "user", "content": prompt],
+                ],
+                "temperature": 0.2,
+            ]
+        }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         PythiaNetworkSession.dataTask(with: request) { data, response, error in
             if let error {
@@ -437,18 +455,61 @@ final class TranslationService {
                 completion(.failure(TranslationError.requestFailed(message)))
                 return
             }
-            guard
-                let data,
-                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let choices = json["choices"] as? [[String: Any]],
-                let message = choices.first?["message"] as? [String: Any],
-                let content = message["content"] as? String
+            guard let data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let content = Self.customLLMContent(from: json, api: api)
             else {
                 completion(.failure(TranslationError.invalidResponse))
                 return
             }
             completion(.success(content.trimmingCharacters(in: .whitespacesAndNewlines)))
         }.resume()
+    }
+
+    static func customLLMEndpoint(baseURL: String, api: String) -> URL? {
+        let raw = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var components = URLComponents(string: raw),
+              let scheme = components.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              components.host != nil
+        else { return nil }
+        components.query = nil
+        components.fragment = nil
+        var path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let suffix = api == "anthropic" ? "messages" : "chat/completions"
+        if path.hasSuffix(suffix) {
+            // The user supplied a complete endpoint.
+        } else if path.isEmpty {
+            path = "v1/\(suffix)"
+        } else {
+            path += "/\(suffix)"
+        }
+        components.path = "/\(path)"
+        return components.url
+    }
+
+    static func customLLMContent(from json: [String: Any], api: String) -> String? {
+        if api == "anthropic" {
+            let blocks = json["content"] as? [[String: Any]]
+            let text = blocks?
+                .filter { ($0["type"] as? String) == "text" }
+                .compactMap { $0["text"] as? String }
+                .joined()
+            return text?.isEmpty == false ? text : nil
+        }
+        guard let choices = json["choices"] as? [[String: Any]],
+              let message = choices.first?["message"] as? [String: Any]
+        else { return nil }
+        if let text = message["content"] as? String { return text }
+        if let blocks = message["content"] as? [[String: Any]] {
+            let text = blocks.compactMap { block -> String? in
+                if let value = block["text"] as? String { return value }
+                if let nested = block["text"] as? [String: Any] { return nested["value"] as? String }
+                return nil
+            }.joined()
+            return text.isEmpty ? nil : text
+        }
+        return nil
     }
 
     private func translateWithDeepL(
@@ -466,13 +527,13 @@ final class TranslationService {
         request.httpMethod = "POST"
         request.setValue("DeepL-Auth-Key \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        let deeplTarget = targetLanguage.replacingOccurrences(of: "-", with: "_").uppercased()
+        let deeplTarget = normalizeDeepLTargetLanguage(targetLanguage)
         var items = [
             URLQueryItem(name: "text", value: text),
             URLQueryItem(name: "target_lang", value: deeplTarget),
         ]
         if !sourceLanguage.isEmpty, sourceLanguage.lowercased() != "auto" {
-            items.append(URLQueryItem(name: "source_lang", value: sourceLanguage.uppercased()))
+            items.append(URLQueryItem(name: "source_lang", value: normalizeDeepLSourceLanguage(sourceLanguage)))
         }
         var components = URLComponents()
         components.queryItems = items
@@ -565,7 +626,7 @@ final class TranslationService {
         var components = URLComponents(string: "https://openapi.youdao.com/api")!
         components.queryItems = [
             URLQueryItem(name: "q", value: text),
-            URLQueryItem(name: "from", value: sourceLanguage.isEmpty ? "auto" : sourceLanguage),
+            URLQueryItem(name: "from", value: sourceLanguage.isEmpty ? "auto" : normalizeYoudaoLanguage(sourceLanguage)),
             URLQueryItem(name: "to", value: targetLanguage.isEmpty ? "zh-CHS" : normalizeYoudaoLanguage(targetLanguage)),
             URLQueryItem(name: "appKey", value: preferences.youdaoAppKey),
             URLQueryItem(name: "salt", value: salt),
@@ -610,7 +671,7 @@ final class TranslationService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body: [String: Any] = [
             "q": text,
-            "source": sourceLanguage.isEmpty ? "auto" : sourceLanguage,
+            "source": sourceLanguage.isEmpty ? "auto" : normalizeSimpleLanguage(sourceLanguage),
             "target": normalizeSimpleLanguage(targetLanguage),
             "format": "text",
             "api_key": preferences.libreTranslateKey,
@@ -622,8 +683,13 @@ final class TranslationService {
                 return
             }
             if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                let message = data.flatMap { String(data: $0, encoding: .utf8) } ?? "HTTP \(http.statusCode)"
-                completion(.failure(TranslationError.requestFailed(message)))
+                let serverMessage = data
+                    .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+                    .flatMap { $0["error"] as? String }
+                let message = serverMessage
+                    ?? data.flatMap { String(data: $0, encoding: .utf8) }
+                    ?? "HTTP \(http.statusCode)"
+                completion(.failure(TranslationError.requestFailed("LibreTranslate 请求失败：\(message)")))
                 return
             }
             guard
@@ -653,9 +719,42 @@ final class TranslationService {
         return String(value.prefix(10)) + String(value.count) + String(value.suffix(10))
     }
 
+    private func normalizeDeepLTargetLanguage(_ value: String) -> String {
+        let lower = value.lowercased()
+        if lower.hasPrefix("zh") {
+            if lower.contains("tw") || lower.contains("hk") || lower.contains("hant") { return "ZH-HANT" }
+            return "ZH-HANS"
+        }
+        if lower.hasPrefix("en") {
+            return lower.contains("gb") ? "EN-GB" : "EN-US"
+        }
+        if lower.hasPrefix("pt") {
+            return lower == "pt-pt" ? "PT-PT" : "PT-BR"
+        }
+        return rootLanguageCode(value).uppercased()
+    }
+
+    private func normalizeDeepLSourceLanguage(_ value: String) -> String {
+        let lower = value.lowercased()
+        if lower.hasPrefix("zh") { return "ZH" }
+        if lower.hasPrefix("en") { return "EN" }
+        if lower.hasPrefix("pt") { return "PT" }
+        return rootLanguageCode(value).uppercased()
+    }
+
+    /// BCP-47 root subtag ("fr-CA" -> "fr"), used so region/script variants
+    /// never leak into provider APIs that only accept root language codes.
+    private func rootLanguageCode(_ value: String) -> String {
+        value.split(separator: "-").first.map(String.init) ?? value
+    }
+
     private func normalizeSimpleLanguage(_ value: String) -> String {
         let lower = value.lowercased()
-        if lower.hasPrefix("zh") { return "zh" }
+        if lower.hasPrefix("zh") {
+            // LibreTranslate 现在使用 zh-Hans / zh-Hant（裸 "zh" 已不被识别）。
+            if lower.contains("tw") || lower.contains("hk") || lower.contains("hant") || lower.contains("mo") { return "zh-Hant" }
+            return "zh-Hans"
+        }
         if lower.hasPrefix("en") { return "en" }
         if lower.hasPrefix("ja") { return "ja" }
         if lower.hasPrefix("ko") { return "ko" }
@@ -674,7 +773,10 @@ final class TranslationService {
 
     private func normalizeYoudaoLanguage(_ value: String) -> String {
         let lower = value.lowercased()
-        if lower.hasPrefix("zh") { return "zh-CHS" }
+        if lower.hasPrefix("zh") {
+            if lower.contains("tw") || lower.contains("hk") || lower.contains("hant") || lower.contains("mo") { return "zh-CHT" }
+            return "zh-CHS"
+        }
         if lower.hasPrefix("en") { return "en" }
         if lower.hasPrefix("ja") { return "ja" }
         if lower.hasPrefix("ko") { return "ko" }

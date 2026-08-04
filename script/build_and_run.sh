@@ -9,6 +9,15 @@ APP="/Applications/Pythia.app"
 SIGN_IDENTITY="Pot Local Code Signing"
 EXPECTED_REQUIREMENT='identifier "com.douxy.pythia" and certificate leaf = H"a493ef6f181ec595f5216b01a4e2008778c4a592"'
 
+# Keep this checkout on the beta toolchain used for the current UI work.
+# Prefer the beta locally without changing the machine-wide xcode-select.
+XCODE_BETA_DEVELOPER="/Applications/Xcode-beta.app/Contents/Developer"
+if [[ -d "$XCODE_BETA_DEVELOPER" ]]; then
+  export DEVELOPER_DIR="$XCODE_BETA_DEVELOPER"
+fi
+
+echo "Using $(xcodebuild -version | tr '\n' ' ')"
+
 verify_stable_identity() {
   local app="$1"
   codesign --verify --deep --strict "$app"

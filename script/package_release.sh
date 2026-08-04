@@ -8,7 +8,10 @@ CONFIGURATION="Release"
 PRODUCTS="$DERIVED_DATA/Build/Products/$CONFIGURATION"
 APP="$PRODUCTS/Pythia.app"
 DIST="$ROOT/release/Pythia"
-DMG="$DIST/Pythia.dmg"
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/Pythia/Info.plist")"
+ASSET_BASENAME="Pythia-$VERSION-macos-arm64.dmg"
+DMG="$DIST/$ASSET_BASENAME"
+CHECKSUM="$DMG.sha256"
 SIGN_IDENTITY="Pot Local Code Signing"
 EXPECTED_REQUIREMENT='identifier "com.douxy.pythia" and certificate leaf = H"a493ef6f181ec595f5216b01a4e2008778c4a592"'
 
@@ -69,6 +72,9 @@ hdiutil create \
   "$DMG" >/dev/null
 
 hdiutil verify "$DMG" >/dev/null
+(cd "$DIST" && shasum -a 256 "$ASSET_BASENAME" > "$ASSET_BASENAME.sha256")
+(cd "$DIST" && shasum -a 256 -c "$ASSET_BASENAME.sha256" >/dev/null)
 
 echo "$DIST/Pythia.app"
 echo "$DMG"
+echo "$CHECKSUM"

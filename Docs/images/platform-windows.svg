@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="240" viewBox="0 0 440 240" font-family="-apple-system,'Helvetica Neue','Segoe UI',sans-serif">
+  <defs>
+    <linearGradient id="wbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4f8fc"/>
+      <stop offset="1" stop-color="#e6eff8"/>
+    </linearGradient>
+    <filter id="wsoft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#1d3a5f" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+  <rect x="1" y="1" width="438" height="238" rx="18" fill="url(#wbg)" stroke="#d5e2ef"/>
+
+  <!-- window -->
+  <g filter="url(#wsoft)">
+    <rect x="96" y="30" width="248" height="150" rx="10" fill="#ffffff" stroke="#d5e2ef"/>
+  </g>
+  <rect x="96" y="30" width="248" height="26" rx="10" fill="#f0f5fa"/>
+  <rect x="96" y="46" width="248" height="10" fill="#f0f5fa"/>
+  <circle cx="112" cy="43" r="5" fill="#5b8dd9"/>
+  <text x="124" y="47" font-size="11" fill="#3d5a7a">Pythia</text>
+  <path d="M322 43 h8 M316 37 l14 12 M330 37 l-14 12" stroke="#8aa2bd" stroke-width="0" fill="none"/>
+  <rect x="318" y="38" width="12" height="2" fill="#8aa2bd"/>
+
+  <rect x="112" y="66" width="90" height="20" rx="10" fill="#e6eef7"/>
+  <text x="157" y="80" font-size="10" fill="#3d5a7a" text-anchor="middle">自动检测</text>
+  <rect x="238" y="66" width="90" height="20" rx="10" fill="#5b8dd9"/>
+  <text x="283" y="80" font-size="10" fill="#ffffff" text-anchor="middle">简体中文</text>
+  <rect x="112" y="96" width="216" height="34" rx="8" fill="#f6f9fc" stroke="#d5e2ef"/>
+  <text x="122" y="117" font-size="11" fill="#22344a">Hello, Windows.</text>
+  <circle cx="124" cy="148" r="3.5" fill="#5b8dd9"/>
+  <text x="134" y="152" font-size="10" fill="#7d93ab">Google</text>
+  <text x="122" y="170" font-size="11.5" fill="#22344a">你好，Windows。</text>
+
+  <!-- taskbar -->
+  <rect x="24" y="196" width="392" height="22" rx="8" fill="#ffffff" stroke="#d5e2ef"/>
+  <rect x="196" y="201" width="12" height="12" rx="3" fill="#5b8dd9"/>
+  <rect x="216" y="201" width="12" height="12" rx="3" fill="#80B847"/>
+  <rect x="236" y="201" width="12" height="12" rx="3" fill="#e6eef7"/>
+
+  <text x="220" y="234" font-size="11" fill="#7d93ab" text-anchor="middle">Flutter · Win32 · Windows x64</text>
+</svg>

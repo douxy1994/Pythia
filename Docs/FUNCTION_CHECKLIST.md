@@ -13,12 +13,14 @@ This checklist tracks visible actions and whether they map to real behavior.
 - Settings: real. Opens the settings window.
 - Source/target language controls: real. Saved preferences affect translation behavior.
 - Multi-service picker: real. Enabled service list and order affect translation requests.
+- Compact translation window: real. Selection and screenshot-OCR translation can show only result cards with retry/copy, synchronized multi-service selection, and a one-click expansion into the full window.
 
 ## macOS Settings
 
 - General appearance/theme color: real for macOS UI preferences.
+- General compact-window toggle: real. Controls the default presentation for selection and screenshot-OCR translation.
 - Translation behavior: real for target language, smart target routing, delete-newline, dynamic/incremental preferences where implemented.
-- Services: real for built-in and local legacy service selection/order/configuration.
+- Services: real for built-in and local legacy service selection/order/configuration. Custom LLM translation services support configurable OpenAI Chat Completions or Anthropic Messages interfaces, name, base URL, model, and private API key.
 - OCR: real for macOS Vision and configured OCR plugin fallback order.
 - TTS: real for macOS Speech and compatible service entries.
 - Collection: real for configured collection plugins.
@@ -35,7 +37,7 @@ This checklist tracks visible actions and whether they map to real behavior.
 - Show translator: real.
 - Selection translate: real if Accessibility can read selection or clipboard fallback works.
 - Input translate: real; focuses source field.
-- Screenshot translate/OCR: real; uses screenshot selection and OCR.
+- Screenshot translate/OCR: real; preflights and requests screen-recording access, relaunches after first grant, captures to a temporary PNG, and distinguishes cancellation from capture failure.
 - Settings/history: real.
 - Clipboard monitor toggle: real.
 - Quit: real.

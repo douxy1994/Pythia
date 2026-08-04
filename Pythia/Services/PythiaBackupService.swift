@@ -107,9 +107,11 @@ enum PythiaBackupService {
                 enabledTranslateServices: services,
                 translateServiceOrder: order,
                 openAICompatibleEnabled: services.contains("openai-compatible"),
-                openAICompatibleName: "OpenAI",
-                openAICompatibleBaseUrl: "https://api.openai.com/v1",
+                openAICompatibleName: preferences.openAICompatibleName,
+                openAICompatibleBaseUrl: preferences.openAIBaseURL,
                 openAICompatibleModel: preferences.openAIModel,
+                openAICompatibleAPI: preferences.openAICompatibleAPI,
+                compactTranslationWindow: preferences.compactTranslationWindow,
                 deepLEnabled: services.contains("deepl"),
                 deepLBaseUrl: "https://api-free.deepl.com/v2",
                 libreTranslateEnabled: services.contains("libretranslate"),
@@ -132,6 +134,10 @@ enum PythiaBackupService {
             preferences.translateServiceOrder = value.map(macOSServiceID)
         }
         if let value = settings.openAICompatibleModel { preferences.openAIModel = value }
+        if let value = settings.openAICompatibleName { preferences.openAICompatibleName = value }
+        if let value = settings.openAICompatibleBaseUrl { preferences.openAIBaseURL = value }
+        if let value = settings.openAICompatibleAPI { preferences.openAICompatibleAPI = value }
+        if let value = settings.compactTranslationWindow { preferences.compactTranslationWindow = value }
         if let value = settings.libreTranslateBaseUrl { preferences.libreTranslateURL = value }
         if let value = settings.saveHistory { preferences.historyDisable = !value }
         if let value = settings.themeMode, ["system", "light", "dark"].contains(value) {
@@ -178,6 +184,9 @@ enum PythiaBackupService {
         if let value = stringValue("sourceLanguage") { preferences.sourceLanguage = value }
         if let value = stringValue("targetLanguage") { preferences.targetLanguage = value }
         if let value = stringValue("openAIModel") { preferences.openAIModel = value }
+        if let value = stringValue("openAICompatibleName") { preferences.openAICompatibleName = value }
+        if let value = stringValue("openAIBaseURL") { preferences.openAIBaseURL = value }
+        if let value = stringValue("openAICompatibleAPI") { preferences.openAICompatibleAPI = value }
         if let value = stringValue("libreTranslateURL") { preferences.libreTranslateURL = value }
         if let value = stringValue("openAIKey") { preferences.openAIKey = value }
         if let value = stringValue("deepLKey") { preferences.deepLKey = value }
@@ -199,6 +208,7 @@ enum PythiaBackupService {
         if let value = dict["translateCloseOnBlur"] as? Bool { preferences.translateCloseOnBlur = value }
         if let value = dict["translateAlwaysOnTop"] as? Bool { preferences.translateAlwaysOnTop = value }
         if let value = dict["translateRememberWindowSize"] as? Bool { preferences.translateRememberWindowSize = value }
+        if let value = dict["compactTranslationWindow"] as? Bool { preferences.compactTranslationWindow = value }
         if let value = stringValue("translateWindowPosition") { preferences.translateWindowPosition = value }
         if let value = stringValue("translateAutoCopy") { preferences.translateAutoCopy = value }
         if let value = dict["translateDeleteNewline"] as? Bool { preferences.translateDeleteNewline = value }

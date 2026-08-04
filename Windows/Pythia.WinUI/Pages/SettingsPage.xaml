@@ -192,7 +192,7 @@
                                 <ToggleSwitch x:Name="CheckUpdateOnStartupSwitch" Header="启动时自动检查更新" OnContent="开启" OffContent="关闭" />
                                 <TextBlock x:Name="UpdateStatusText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                 <TextBlock HorizontalAlignment="Center" Margin="0,14,0,0" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="本地优先 · 原生 Windows · 多服务翻译" />
-                                <TextBlock HorizontalAlignment="Center" Margin="0,2,0,0" FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="© 2026 Pythia Contributors · GPL-3.0" />
+                                <TextBlock HorizontalAlignment="Center" Margin="0,2,0,0" FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="© 2026 Pythia Contributors · AGPL-3.0" />
                             </StackPanel>
                         </Border>
                     </StackPanel>

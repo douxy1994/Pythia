@@ -139,7 +139,7 @@ Check(settingsPageXaml.Contains("Tag=\"plugins\"", StringComparison.Ordinal) &&
       settingsPageXaml.Contains("InstallUpdate_Click", StringComparison.Ordinal) &&
       settingsPageXaml.Contains("OpenGitHub_Click", StringComparison.Ordinal) &&
       settingsPageXaml.Contains("GitHubMark.svg", StringComparison.Ordinal) &&
-      settingsPageXaml.Contains("GPL-3.0", StringComparison.Ordinal) &&
+      settingsPageXaml.Contains("AGPL-3.0", StringComparison.Ordinal) &&
       !settingsPageXaml.Contains("保存全部设置", StringComparison.Ordinal) &&
       settingsPageXaml.Contains("TextWrapping=\"Wrap\"", StringComparison.Ordinal),
     "Settings owns plugin/About pages, auto-saves, and exposes GitHub/update/license actions");

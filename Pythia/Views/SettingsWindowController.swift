@@ -4,16 +4,43 @@ import UniformTypeIdentifiers
 
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let tabTitles = ["通用", "翻译", "服务", "OCR", "TTS", "生词本", "插件", "快捷键", "历史", "代理", "备份", "迁移", "关于"]
+    private let tabSymbols = [
+        "slider.horizontal.3", "character.book.closed", "server.rack", "viewfinder",
+        "speaker.wave.2", "book.closed", "puzzlepiece.extension", "keyboard",
+        "clock.arrow.circlepath", "network", "externaldrive", "arrow.triangle.2.circlepath",
+        "info.circle",
+    ]
+    private let tabSubtitles = [
+        "语言、外观与日常使用体验。",
+        "翻译行为、窗口与服务管理。",
+        "API 密钥、模型与服务连通性。",
+        "截图识别服务与 OCR 行为。",
+        "文字转语音与语音服务。",
+        "管理生词本与收藏服务。",
+        "安装、配置和维护 Pythia 插件。",
+        "设置系统级快捷键。",
+        "历史记录开关与存储行为。",
+        "配置网络代理与免代理地址。",
+        "本地导出和 WebDAV 同步。",
+        "从旧版本导入配置与插件。",
+        "版本信息、更新与项目链接。",
+    ]
     private let sidebarStack = FlippedStackView()
     private var sidebarItems: [SettingsSidebarItemView] = []
     private var selectedSettingsIndex = 0
-    private let tabCard = NSVisualEffectView()
+    // The settings workspace is a flat content plane. Only the About page
+    // creates explicit content cards; navigation gets the system glass layer.
+    private let tabCard = NSView()
     private var activeTabView: NSView?
     private var activeTabConstraints: [NSLayoutConstraint] = []
+    private var isLoadingSettings = false
     private let sourceLanguagePopup = NSPopUpButton()
     private let targetLanguagePopup = NSPopUpButton()
     private let secondTargetLanguagePopup = NSPopUpButton()
     private let openAIKeyField = NSSecureTextField()
+    private let openAINameField = NSTextField()
+    private let openAIBaseURLField = NSTextField()
+    private let openAICompatibleAPIPopup = NSPopUpButton()
     private let openAIModelField = NSTextField()
     private let deepLKeyField = NSSecureTextField()
     private let baiduAppIDField = NSTextField()
@@ -27,7 +54,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let pluginMetadataLabel = NSTextField(wrappingLabelWithString: "")
     private let pluginConfigStack = FullWidthStackView()
     private let pluginTestResultLabel = NSTextField(labelWithString: "")
+    private let pluginListStack = FullWidthStackView()
+    private var pluginListFields: [String: [NSControl]] = [:]
+    private var pluginListStatusLabels: [String: NSTextField] = [:]
+    private var pluginListDetails: [String: NSView] = [:]
+    private var pluginListDisclosureButtons: [String: NSButton] = [:]
+    private var expandedPluginNames = Set<String>()
+    private let serviceTestResultLabel = NSTextField(labelWithString: "")
     private let clipboardCheckbox = NSButton(checkboxWithTitle: "监听剪贴板", target: nil, action: nil)
+    private let compactTranslationWindowCheckbox = NSButton(checkboxWithTitle: "划词翻译或截图 OCR 翻译时默认打开简约窗口", target: nil, action: nil)
     private let recognizeLanguagePopup = NSPopUpButton()
     private let recognizeAutoCopyCheckbox = NSButton(checkboxWithTitle: "OCR 后自动复制", target: nil, action: nil)
     private let recognizeDeleteNewlineCheckbox = NSButton(checkboxWithTitle: "识别结果删除换行", target: nil, action: nil)
@@ -49,8 +84,11 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let closeOnBlurCheckbox = NSButton(checkboxWithTitle: "翻译窗口失焦后关闭", target: nil, action: nil)
     private let alwaysOnTopCheckbox = NSButton(checkboxWithTitle: "翻译窗口总在最前", target: nil, action: nil)
     private let rememberWindowSizeCheckbox = NSButton(checkboxWithTitle: "记住翻译窗口尺寸", target: nil, action: nil)
-    private let saveStatusLabel = NSTextField(labelWithString: "")
-    private let aboutUpdateStatusLabel = NSTextField(labelWithString: "")
+    private var autosaveWorkItem: DispatchWorkItem?
+    private var aboutCheckButton: NSButton?
+    private let updateBanner = PythiaTopInfoBannerView()
+    private var updateBannerDismissWorkItem: DispatchWorkItem?
+    private var updateBannerGeneration = 0
     // Translate behavior (aligned with original Pot)
     private let translateDeleteNewlineCheckbox = NSButton(checkboxWithTitle: "翻译结果删除换行", target: nil, action: nil)
     private let smartTargetCheckbox = NSButton(checkboxWithTitle: "自动检测时智能选择目标语言", target: nil, action: nil)
@@ -100,7 +138,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     init() {
         let window = StableWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 900, height: 640),
+            contentRect: NSRect(x: 0, y: 0, width: 1080, height: 720),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
@@ -112,12 +150,23 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.isOpaque = true
         window.backgroundColor = .windowBackgroundColor
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 820, height: 560)
+        window.minSize = NSSize(width: 980, height: 660)
+        window.setContentSize(NSSize(width: 1080, height: 720))
         super.init(window: window)
+        window.stableMinWidth = 1080
         window.delegate = self
         recognizeServiceList.optionProvider = { PluginManager.shared.serviceOptions(for: "recognize") }
         ttsServiceList.optionProvider = { PluginManager.shared.serviceOptions(for: "tts") }
         collectionServiceList.optionProvider = { PluginManager.shared.serviceOptions(for: "collection") }
+        for list in [serviceOrderList, recognizeServiceList, ttsServiceList, collectionServiceList] {
+            list.onChange = { [weak self] _ in self?.scheduleAutosave() }
+        }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(editableControlDidEndEditing(_:)),
+            name: NSControl.textDidEndEditingNotification,
+            object: nil
+        )
         configureSettingsLanguagePopup(secondTargetLanguagePopup, includeAuto: false)
         buildUI()
         load()
@@ -153,24 +202,27 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             background.bottomAnchor.constraint(equalTo: content.bottomAnchor),
         ])
 
-        let title = NSTextField(labelWithString: "设置")
-        title.translatesAutoresizingMaskIntoConstraints = false
-        title.font = .systemFont(ofSize: 28, weight: .bold)
-        title.textColor = .labelColor
-        content.addSubview(title)
-
+        // Match the macOS 27 / ChatGPT settings composition: one full-height
+        // system sidebar layer, no inset card, no custom border or corner
+        // treatment. AppKit adapts `.sidebar` to the current system appearance.
         let sidebarMaterial = NSVisualEffectView()
         sidebarMaterial.translatesAutoresizingMaskIntoConstraints = false
         sidebarMaterial.material = .sidebar
         sidebarMaterial.blendingMode = .withinWindow
         sidebarMaterial.state = .active
-        sidebarMaterial.wantsLayer = true
-        sidebarMaterial.layer?.cornerRadius = 18
-        sidebarMaterial.layer?.cornerCurve = .continuous
-        sidebarMaterial.layer?.masksToBounds = true
-        sidebarMaterial.layer?.borderWidth = 1
-        sidebarMaterial.layer?.borderColor = PythiaDesign.glassBorderColor(for: content.effectiveAppearance).cgColor
         content.addSubview(sidebarMaterial)
+
+        let sidebarDivider = NSView()
+        sidebarDivider.translatesAutoresizingMaskIntoConstraints = false
+        sidebarDivider.wantsLayer = true
+        sidebarDivider.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
+        content.addSubview(sidebarDivider)
+
+        let sidebarTitle = NSTextField(labelWithString: "设置")
+        sidebarTitle.translatesAutoresizingMaskIntoConstraints = false
+        sidebarTitle.font = .systemFont(ofSize: 24, weight: .semibold)
+        sidebarTitle.textColor = .labelColor
+        sidebarMaterial.addSubview(sidebarTitle)
 
         let sidebarScroll = NSScrollView()
         sidebarScroll.translatesAutoresizingMaskIntoConstraints = false
@@ -181,59 +233,60 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         sidebarStack.orientation = .vertical
         sidebarStack.alignment = .width
         sidebarStack.spacing = 4
-        sidebarStack.edgeInsets = NSEdgeInsets(top: 10, left: 0, bottom: 10, right: 0)
+        sidebarStack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 12, right: 0)
         sidebarStack.translatesAutoresizingMaskIntoConstraints = false
         sidebarScroll.documentView = sidebarStack
         sidebarMaterial.addSubview(sidebarScroll)
         buildSidebarItems()
 
+        // Keep the workspace surface flat. About is the only page that creates
+        // explicit content cards; regular settings pages stay on this plane.
         tabCard.translatesAutoresizingMaskIntoConstraints = false
-        tabCard.material = .contentBackground
-        tabCard.blendingMode = .withinWindow
-        tabCard.state = .active
-        tabCard.wantsLayer = true
-        tabCard.layer?.cornerRadius = 20
-        tabCard.layer?.cornerCurve = .continuous
-        tabCard.layer?.masksToBounds = true
-        tabCard.layer?.borderWidth = 1
-        tabCard.layer?.borderColor = PythiaDesign.glassBorderColor(for: content.effectiveAppearance).cgColor
         content.addSubview(tabCard)
         showTab(index: 0)
 
-        let buttons = NSStackView()
-        buttons.translatesAutoresizingMaskIntoConstraints = false
-        buttons.orientation = .horizontal
-        buttons.spacing = 10
-        saveStatusLabel.textColor = PythiaDesign.themeColor()
-        saveStatusLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        buttons.addArrangedSubview(saveStatusLabel)
-        buttons.addArrangedSubview(PillButton("保存", target: self, action: #selector(save)))
-        content.addSubview(buttons)
+        updateBanner.translatesAutoresizingMaskIntoConstraints = false
+        updateBanner.isHidden = true
+        updateBanner.onDismiss = { [weak self] in
+            self?.dismissUpdateBanner()
+        }
+        content.addSubview(updateBanner)
 
         NSLayoutConstraint.activate([
-            title.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 28),
-            title.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),
+            sidebarMaterial.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            sidebarMaterial.topAnchor.constraint(equalTo: content.topAnchor),
+            sidebarMaterial.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            // Keep the navigation column compact like ChatGPT's settings
+            // sidebar; the content grid gets the reclaimed width.
+            sidebarMaterial.widthAnchor.constraint(equalToConstant: 248),
 
-            sidebarMaterial.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 22),
-            sidebarMaterial.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 18),
-            sidebarMaterial.bottomAnchor.constraint(equalTo: buttons.topAnchor, constant: -14),
-            sidebarMaterial.widthAnchor.constraint(equalToConstant: 168),
+            sidebarDivider.leadingAnchor.constraint(equalTo: sidebarMaterial.trailingAnchor),
+            sidebarDivider.topAnchor.constraint(equalTo: content.topAnchor),
+            sidebarDivider.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            sidebarDivider.widthAnchor.constraint(equalToConstant: 1),
+
+            sidebarTitle.leadingAnchor.constraint(equalTo: sidebarMaterial.leadingAnchor, constant: 18),
+            sidebarTitle.trailingAnchor.constraint(equalTo: sidebarMaterial.trailingAnchor, constant: -18),
+            sidebarTitle.topAnchor.constraint(equalTo: sidebarMaterial.topAnchor, constant: 18),
 
             sidebarScroll.leadingAnchor.constraint(equalTo: sidebarMaterial.leadingAnchor, constant: 8),
             sidebarScroll.trailingAnchor.constraint(equalTo: sidebarMaterial.trailingAnchor, constant: -8),
-            sidebarScroll.topAnchor.constraint(equalTo: sidebarMaterial.topAnchor, constant: 10),
+            sidebarScroll.topAnchor.constraint(equalTo: sidebarTitle.bottomAnchor, constant: 16),
             sidebarScroll.bottomAnchor.constraint(equalTo: sidebarMaterial.bottomAnchor, constant: -10),
             sidebarStack.widthAnchor.constraint(equalTo: sidebarScroll.contentView.widthAnchor),
             sidebarStack.heightAnchor.constraint(greaterThanOrEqualTo: sidebarScroll.contentView.heightAnchor),
 
-            tabCard.leadingAnchor.constraint(equalTo: sidebarMaterial.trailingAnchor, constant: 16),
+            tabCard.leadingAnchor.constraint(equalTo: sidebarDivider.trailingAnchor),
             tabCard.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22),
             tabCard.topAnchor.constraint(equalTo: sidebarMaterial.topAnchor),
             tabCard.bottomAnchor.constraint(equalTo: sidebarMaterial.bottomAnchor),
 
-            buttons.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22),
-            buttons.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -18),
-            buttons.heightAnchor.constraint(equalToConstant: 34),
+            updateBanner.topAnchor.constraint(equalTo: content.topAnchor, constant: 10),
+            updateBanner.centerXAnchor.constraint(equalTo: content.centerXAnchor),
+            updateBanner.widthAnchor.constraint(equalToConstant: 680),
+            updateBanner.leadingAnchor.constraint(greaterThanOrEqualTo: content.leadingAnchor, constant: 24),
+            updateBanner.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -24),
+            updateBanner.heightAnchor.constraint(greaterThanOrEqualToConstant: 40),
         ])
     }
 
@@ -243,7 +296,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             item.removeFromSuperview()
         }
         sidebarItems = tabTitles.enumerated().map { index, title in
-            SettingsSidebarItemView(title: title, index: index, target: self, action: #selector(sidebarItemClicked(_:)))
+            SettingsSidebarItemView(
+                title: title,
+                symbolName: tabSymbols[index],
+                index: index,
+                target: self,
+                action: #selector(sidebarItemClicked(_:))
+            )
         }
         sidebarItems.forEach { item in
             sidebarStack.addArrangedSubview(item)
@@ -259,6 +318,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func sidebarItemClicked(_ sender: SettingsSidebarItemView) {
+        autosaveWorkItem?.cancel()
+        persistSettings()
         showTab(index: sender.index)
     }
 
@@ -277,32 +338,57 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         trayClickPopup.addItems(withTitles: ["显示设置", "显示翻译窗口", "显示历史记录"])
         trayClickPopup.target = self
         trayClickPopup.action = #selector(trayClickEventChanged)
-        stack.addArrangedSubview(row("翻译服务", serviceOrderList))
-        stack.addArrangedSubview(note("主界面翻译会同时请求此处勾选的服务，并按此处顺序在译文区分组显示。"))
-        stack.addArrangedSubview(row("外观", themePopup))
-        stack.addArrangedSubview(row("主题色", themeColorWell))
-        stack.addArrangedSubview(row("界面字体", appFontField))
-        stack.addArrangedSubview(row("界面字号", appFontSizeField))
-        stack.addArrangedSubview(row("回退字体", appFallbackFontField))
-        stack.addArrangedSubview(row("源语言", sourceLanguagePopup))
-        stack.addArrangedSubview(row("目标语言", targetLanguagePopup))
         autoCopyPopup.removeAllItems()
         autoCopyPopup.addItems(withTitles: ["不自动复制", "复制原文", "复制译文", "复制原文和译文"])
-        stack.addArrangedSubview(row("自动复制", autoCopyPopup))
-        stack.addArrangedSubview(indented(clipboardCheckbox))
-        stack.addArrangedSubview(row("托盘点击", trayClickPopup))
-        stack.addArrangedSubview(indented(launchAtLoginCheckbox))
-        stack.addArrangedSubview(indented(checkUpdateCheckbox))
-        stack.addArrangedSubview(note("开机启动使用 macOS 登录项注册。如果系统要求批准，请在「系统设置 > 通用 > 登录项」允许 Pythia。"))
-        stack.addArrangedSubview(row("外部服务端口", serverPortField))
+
+        stack.addArrangedSubview(settingsSection(
+            "翻译服务",
+            icon: "square.stack.3d.up",
+            detail: "主界面翻译会同时请求勾选的服务，并按此处顺序在译文区分组显示。",
+            views: [row("已启用服务", serviceOrderList)]
+        ))
+        stack.addArrangedSubview(settingsSection(
+            "外观与语言",
+            icon: "paintbrush",
+            views: [
+                row("外观", themePopup),
+                row("主题色", themeColorWell),
+                row("界面字体", appFontField),
+                row("界面字号", appFontSizeField),
+                row("回退字体", appFallbackFontField),
+                row("源语言", sourceLanguagePopup),
+                row("目标语言", targetLanguagePopup),
+            ]
+        ))
+        stack.addArrangedSubview(settingsSection(
+            "日常使用",
+            icon: "hand.tap",
+            views: [
+                row("自动复制", autoCopyPopup),
+                indented(clipboardCheckbox),
+                indented(compactTranslationWindowCheckbox),
+                row("托盘点击", trayClickPopup),
+            ]
+        ))
+
         // System permissions (辅助功能 / 屏幕录制) only need to be requested once;
         // keep the action here in 通用 instead of in the always-visible footer.
         let permButtons = NSStackView()
         permButtons.orientation = .horizontal
         permButtons.spacing = 10
-        permButtons.addArrangedSubview(PillButton("请求系统权限", target: self, action: #selector(requestPermissions)))
-        stack.addArrangedSubview(leadingFullWidth(permButtons, minHeight: 0))
-        stack.addArrangedSubview(note("点击后请在系统设置中允许「辅助功能」（划词翻译需要）；截图 OCR 还需要「屏幕录制」权限。"))
+        permButtons.addArrangedSubview(PillButton("请求辅助功能与屏幕录制权限", target: self, action: #selector(requestPermissions)))
+        stack.addArrangedSubview(settingsSection(
+            "启动与系统集成",
+            icon: "power",
+            detail: "开机启动使用 macOS 登录项注册；外部服务端口用于本地 API 调用。",
+            views: [
+                indented(launchAtLoginCheckbox),
+                indented(checkUpdateCheckbox),
+                row("外部服务端口", serverPortField),
+                leadingFullWidth(permButtons, minHeight: 0),
+                note("点击后请在系统设置中允许「辅助功能」（划词翻译需要）；截图 OCR 还需要「屏幕录制」权限。"),
+            ]
+        ))
         return stack
     }
 
@@ -316,133 +402,546 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         svcButtons.spacing = 10
         svcButtons.addArrangedSubview(PillButton("+ 添加自定义服务 ID", target: self, action: #selector(addCustomServiceID)))
         svcButtons.addArrangedSubview(PillButton("重置为内置服务", target: self, action: #selector(resetTranslateServices)))
-        stack.addArrangedSubview(leadingFullWidth(svcButtons, minHeight: 0))
-        stack.addArrangedSubview(note("自定义 ID 示例：plugin:custom-name。服务的启用与排序请在「通用」页操作。"))
-        stack.addArrangedSubview(note("翻译行为（与原版一致）："))
-        stack.addArrangedSubview(indented(translateDeleteNewlineCheckbox))
-        stack.addArrangedSubview(indented(smartTargetCheckbox))
-        stack.addArrangedSubview(row("第二目标语言", secondTargetLanguagePopup))
-        stack.addArrangedSubview(note("启用智能目标语言时，自动检测到中文会翻译到第二目标语言；检测到非中文会翻译到通用页的目标语言；中英文混合内容仍以当前目标语言为准。"))
-        stack.addArrangedSubview(indented(hideSourceCheckbox))
-        stack.addArrangedSubview(indented(hideLanguageCheckbox))
-        stack.addArrangedSubview(indented(dynamicTranslateCheckbox))
-        stack.addArrangedSubview(indented(incrementalTranslateCheckbox))
-        stack.addArrangedSubview(note("窗口："))
-        stack.addArrangedSubview(row("翻译窗口位置", windowPositionPopup))
-        stack.addArrangedSubview(indented(closeOnBlurCheckbox))
-        stack.addArrangedSubview(indented(alwaysOnTopCheckbox))
-        stack.addArrangedSubview(indented(rememberWindowSizeCheckbox))
+        stack.addArrangedSubview(settingsSection(
+            "服务管理",
+            icon: "square.stack.3d.up",
+            detail: "自定义服务只需填写一个稳定 ID；服务启用和排序请在「通用」页调整。",
+            views: [
+                leadingFullWidth(svcButtons, minHeight: 0),
+                note("自定义 ID 示例：plugin:custom-name。"),
+            ]
+        ))
+        stack.addArrangedSubview(settingsSection(
+            "翻译行为",
+            icon: "text.bubble",
+            detail: "这些选项与原版 Pot 保持一致。",
+            views: [
+                indented(translateDeleteNewlineCheckbox),
+                indented(smartTargetCheckbox),
+                row("第二目标语言", secondTargetLanguagePopup),
+                note("启用智能目标语言时，自动检测到中文会翻译到第二目标语言；检测到非中文会翻译到通用页的目标语言；中英文混合内容仍以当前目标语言为准。"),
+                indented(hideSourceCheckbox),
+                indented(hideLanguageCheckbox),
+                indented(dynamicTranslateCheckbox),
+                indented(incrementalTranslateCheckbox),
+            ]
+        ))
+        stack.addArrangedSubview(settingsSection(
+            "翻译窗口",
+            icon: "macwindow",
+            views: [
+                row("翻译窗口位置", windowPositionPopup),
+                indented(closeOnBlurCheckbox),
+                indented(alwaysOnTopCheckbox),
+                indented(rememberWindowSizeCheckbox),
+            ]
+        ))
         return stack
     }
 
     private func servicesTab() -> NSView {
         let stack = formStack()
-        stack.addArrangedSubview(row("OpenAI API key", openAIKeyField))
-        stack.addArrangedSubview(row("OpenAI 模型", openAIModelField))
-        stack.addArrangedSubview(row("DeepL API key", deepLKeyField))
-        stack.addArrangedSubview(row("百度 AppID", baiduAppIDField))
-        stack.addArrangedSubview(row("百度密钥", baiduSecretField))
-        stack.addArrangedSubview(row("有道 AppKey", youdaoAppKeyField))
-        stack.addArrangedSubview(row("有道密钥", youdaoSecretField))
-        stack.addArrangedSubview(row("LibreTranslate URL", libreURLField))
-        stack.addArrangedSubview(row("LibreTranslate Key", libreKeyField))
+        openAICompatibleAPIPopup.removeAllItems()
+        openAICompatibleAPIPopup.addItems(withTitles: ["OpenAI", "Anthropic"])
+        let verifyButtons = NSStackView()
+        verifyButtons.orientation = .horizontal
+        verifyButtons.spacing = 10
+        for (title, identifier) in [
+            ("验证 OpenAI", "OpenAI"),
+            ("验证 DeepL", "DeepL"),
+            ("验证 百度", "Baidu"),
+            ("验证 有道", "Youdao"),
+            ("验证 LibreTranslate", "LibreTranslate"),
+        ] {
+            let button = PillButton(title, target: self, action: #selector(verifyBuiltInService(_:)))
+            button.identifier = NSUserInterfaceItemIdentifier(identifier)
+            verifyButtons.addArrangedSubview(button)
+        }
+        serviceTestResultLabel.lineBreakMode = .byTruncatingTail
+        serviceTestResultLabel.maximumNumberOfLines = 1
+        serviceTestResultLabel.font = .systemFont(ofSize: 12)
+        let serviceResultCaption = NSTextField(labelWithString: "检测结果：")
+        serviceResultCaption.font = .systemFont(ofSize: 12)
+        serviceResultCaption.textColor = .secondaryLabelColor
+        let serviceResultBox = NSStackView()
+        serviceResultBox.orientation = .horizontal
+        serviceResultBox.alignment = .firstBaseline
+        serviceResultBox.spacing = 6
+        serviceResultBox.addArrangedSubview(serviceResultCaption)
+        serviceResultBox.addArrangedSubview(serviceTestResultLabel)
+        stack.addArrangedSubview(settingsSection(
+            "自定义大模型 API",
+            icon: "key",
+            detail: "大模型翻译服务可连接 OpenAI Chat Completions 或 Anthropic Messages 兼容接口；密钥只写入本地凭据文件。",
+            views: [
+                row("显示名称", openAINameField),
+                row("接口类型", openAICompatibleAPIPopup),
+                row("API 基础地址", openAIBaseURLField),
+                row("模型", openAIModelField),
+                row("API Key", openAIKeyField),
+            ]
+        ))
+        stack.addArrangedSubview(settingsSection(
+            "其它服务凭据",
+            icon: "key.fill",
+            detail: "密钥只写入 Pythia 的本地凭据文件，不进入普通设置 JSON。",
+            views: [
+                row("DeepL API key", deepLKeyField),
+                row("百度 AppID", baiduAppIDField),
+                row("百度密钥", baiduSecretField),
+                row("有道 AppKey", youdaoAppKeyField),
+                row("有道密钥", youdaoSecretField),
+                row("LibreTranslate URL", libreURLField),
+                row("LibreTranslate Key", libreKeyField),
+            ]
+        ))
+        stack.addArrangedSubview(settingsSection(
+            "验证服务",
+            icon: "checkmark.shield",
+            detail: "填写上方 Key 后点击按钮，会按当前输入保存并发起一次真实翻译测试。",
+            views: [
+                leadingFullWidth(verifyButtons, minHeight: 0),
+                leadingFullWidth(serviceResultBox, minHeight: 0),
+                note("自定义大模型 API / DeepL / 百度 / 有道 / LibreTranslate 均需自行配置 API Key；基础地址可填写服务根地址、/v1 地址或完整请求端点。Google 与「本地预览」无需 Key。"),
+            ]
+        ))
         return stack
     }
 
     private func ocrTab() -> NSView {
         let stack = formStack()
         configureSettingsLanguagePopup(recognizeLanguagePopup, includeAuto: true)
-        stack.addArrangedSubview(row("OCR 服务", recognizeServiceList))
-        stack.addArrangedSubview(note("内置系统 OCR 使用 macOS Vision；旧版 recognize 插件会在导入或安装后自动列在这里，可启用和调整顺序。"))
-        stack.addArrangedSubview(row("OCR 语言", recognizeLanguagePopup))
-        stack.addArrangedSubview(indented(recognizeAutoCopyCheckbox))
-        stack.addArrangedSubview(indented(recognizeDeleteNewlineCheckbox))
-        stack.addArrangedSubview(indented(recognizeHideWindowCheckbox))
-        stack.addArrangedSubview(indented(recognizeCloseOnBlurCheckbox))
-        stack.addArrangedSubview(note("截图 OCR 会按上方启用顺序逐个尝试：系统 OCR 和旧版 recognize 插件都可参与；某个服务失败或返回空结果时会自动尝试下一个。"))
+        stack.addArrangedSubview(settingsSection(
+            "OCR 服务",
+            icon: "viewfinder",
+            detail: "内置系统 OCR 使用 macOS Vision；旧版 recognize 插件会在导入或安装后自动列在这里。",
+            views: [row("已启用服务", recognizeServiceList)]
+        ))
+        stack.addArrangedSubview(settingsSection(
+            "识别行为",
+            icon: "text.viewfinder",
+            views: [
+                row("OCR 语言", recognizeLanguagePopup),
+                indented(recognizeAutoCopyCheckbox),
+                indented(recognizeDeleteNewlineCheckbox),
+                indented(recognizeHideWindowCheckbox),
+                indented(recognizeCloseOnBlurCheckbox),
+                note("截图 OCR 会按上方启用顺序逐个尝试：系统 OCR 和旧版 recognize 插件都可参与；某个服务失败或返回空结果时会自动尝试下一个。"),
+            ]
+        ))
         return stack
     }
 
     private func ttsTab() -> NSView {
         let stack = formStack()
-        stack.addArrangedSubview(row("TTS 服务", ttsServiceList))
-        stack.addArrangedSubview(note("内置 macOS Speech 会按目标语言自动选择系统语音；旧版 TTS 插件会在导入或安装后自动列在这里。"))
+        stack.addArrangedSubview(settingsSection(
+            "TTS 服务",
+            icon: "speaker.wave.2",
+            detail: "内置 macOS Speech 会按目标语言自动选择系统语音；旧版 TTS 插件会在导入或安装后自动列在这里。",
+            showsHeader: false,
+            views: [row("已启用服务", ttsServiceList)]
+        ))
         return stack
     }
 
     private func collectionTab() -> NSView {
         let stack = formStack()
-        stack.addArrangedSubview(row("生词本服务", collectionServiceList))
-        stack.addArrangedSubview(note("旧版 collection 插件会在导入或安装后自动列在这里。服务启用和顺序会随配置备份/恢复。"))
+        stack.addArrangedSubview(settingsSection(
+            "生词本服务",
+            icon: "book.closed",
+            detail: "旧版 collection 插件会在导入或安装后自动列在这里。服务启用和顺序会随配置备份/恢复。",
+            showsHeader: false,
+            views: [row("已启用服务", collectionServiceList)]
+        ))
         return stack
     }
 
     private func pluginsTab() -> NSView {
         let stack = formStack()
 
-        stack.addArrangedSubview(sectionHeader(
-            "安装新插件",
-            detail: "支持 .pythia 和 .potext 格式，优先推荐 .pythia。.potext 会先自动转换，转换失败时再使用兼容模式运行。"
-        ))
         let installButtons = NSStackView()
         installButtons.orientation = .horizontal
         installButtons.spacing = 10
         installButtons.addArrangedSubview(PillButton("安装插件", target: self, action: #selector(installPlugin)))
         installButtons.addArrangedSubview(PillButton("打开插件目录", target: self, action: #selector(openPluginFolder)))
+        installButtons.addArrangedSubview(PillButton("刷新列表", target: self, action: #selector(refreshPlugins)))
         installButtons.addArrangedSubview(PillButton("插件开发指南", target: self, action: #selector(openPluginDevelopmentGuide)))
-        stack.addArrangedSubview(leadingFullWidth(installButtons, minHeight: 0))
+        stack.addArrangedSubview(settingsSection(
+            "安装插件",
+            icon: "square.and.arrow.down",
+            detail: "支持 .pythia 和 .potext 格式；安装后所有插件都会在下方列表中显示。",
+            views: [leadingFullWidth(installButtons, minHeight: 0)]
+        ))
 
-        stack.addArrangedSubview(sectionHeader("已安装插件", detail: "选择插件后可查看格式和位置、修改显示名称、刷新或彻底删除。"))
+        // Keep the popup/config fields alive for existing migration and load
+        // paths, but make the list the only visible plugin management surface.
         rebuildPluginPopup()
-        pluginPopup.target = self
-        pluginPopup.action = #selector(pluginSelectionChanged)
-        stack.addArrangedSubview(row("当前插件", pluginPopup))
-        pluginPathLabel.lineBreakMode = .byTruncatingMiddle
-        pluginPathLabel.textColor = .secondaryLabelColor
-        stack.addArrangedSubview(row("插件目录", pluginPathLabel))
-        pluginMetadataLabel.textColor = .secondaryLabelColor
-        pluginMetadataLabel.maximumNumberOfLines = 3
-        stack.addArrangedSubview(row("插件信息", pluginMetadataLabel))
-        let buttons = NSStackView()
-        buttons.orientation = .horizontal
-        buttons.spacing = 10
-        buttons.addArrangedSubview(PillButton("重命名插件", target: self, action: #selector(renamePlugin)))
-        buttons.addArrangedSubview(PillButton("刷新插件", target: self, action: #selector(refreshPlugins)))
-        buttons.addArrangedSubview(PillButton("重新转换 .potext", target: self, action: #selector(reconvertSelectedPlugin)))
-        buttons.addArrangedSubview(PillButton("删除插件", target: self, action: #selector(deleteSelectedPlugin), tintColor: .systemRed))
-        stack.addArrangedSubview(leadingFullWidth(buttons, minHeight: 0))
+        pluginListStack.orientation = .vertical
+        pluginListStack.alignment = .width
+        pluginListStack.spacing = 0
+        pluginListStack.edgeInsets = NSEdgeInsets(top: 2, left: 0, bottom: 2, right: 0)
+        pluginListStack.translatesAutoresizingMaskIntoConstraints = false
+        rebuildPluginList()
 
-        stack.addArrangedSubview(sectionHeader("插件配置", detail: "配置项由所选插件提供。保存后可直接测试当前插件是否可用。"))
-        pluginConfigStack.orientation = .vertical
-        pluginConfigStack.alignment = .width
-        pluginConfigStack.spacing = 8
-        pluginConfigStack.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(pluginConfigStack)
-        let configButtons = NSStackView()
-        configButtons.orientation = .horizontal
-        configButtons.spacing = 10
-        configButtons.addArrangedSubview(PillButton("保存插件配置", target: self, action: #selector(savePluginConfig)))
-        configButtons.addArrangedSubview(PillButton("测试连通性", target: self, action: #selector(testPluginConnection)))
-        stack.addArrangedSubview(leadingFullWidth(configButtons, minHeight: 0))
-        pluginTestResultLabel.lineBreakMode = .byTruncatingTail
-        pluginTestResultLabel.maximumNumberOfLines = 1
-        pluginTestResultLabel.font = .systemFont(ofSize: 12)
-        // Result row: caption + result, both at the left edge, baseline-aligned.
-        let pluginResultCaption = NSTextField(labelWithString: "检测结果：")
-        pluginResultCaption.font = .systemFont(ofSize: 12)
-        pluginResultCaption.textColor = .secondaryLabelColor
-        let pluginResultBox = NSStackView()
-        pluginResultBox.orientation = .horizontal
-        pluginResultBox.alignment = .firstBaseline
-        pluginResultBox.spacing = 6
-        pluginResultBox.addArrangedSubview(pluginResultCaption)
-        pluginResultBox.addArrangedSubview(pluginTestResultLabel)
-        stack.addArrangedSubview(leadingFullWidth(pluginResultBox, minHeight: 0))
-        stack.addArrangedSubview(note("选中插件后会显示它需要的配置项。Manifest 标记为 secret 的密钥保存在仅当前用户可读的 Pythia 本地凭据文件中，不访问 macOS 钥匙串，也不会弹出钥匙串密码框。点「测试连通性」可验证当前插件。"))
-        stack.addArrangedSubview(note("原生命令插件：也可放入 JSON/.potplugin，包含 name、command、arguments、environment。待翻译文本会通过 stdin 和 POT_TEXT 环境变量传入。"))
-        rebuildPluginConfigFields()
-        updatePluginPathLabel()
+        stack.addArrangedSubview(settingsSection(
+            "已安装插件",
+            icon: "puzzlepiece.extension",
+            detail: "全部已安装插件按列表展示；点击左侧箭头展开二级配置，右侧垃圾桶可直接删除。",
+            alignBodyToHeaderText: false,
+            // Give the nested list an explicit leading/trailing constraint
+            // chain. A bare nested NSStackView has no intrinsic width, which
+            // was the source of the right-shifted/zero-height plugin section.
+            // Keep the list itself away from the scroll indicator. The outer
+            // settings scroll view also reserves a small trailing inset for
+            // every page; this extra inset keeps the expanded plugin fields
+            // from visually running into the indicator as well.
+            views: [leadingFullWidth(pluginListStack, trailingInset: 14, minHeight: 0)]
+        ))
         return stack
+    }
+
+    private func rebuildPluginList() {
+        pluginListStack.arrangedSubviews.forEach {
+            pluginListStack.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
+        pluginListFields.removeAll()
+        pluginListStatusLabels.removeAll()
+        pluginListDetails.removeAll()
+        pluginListDisclosureButtons.removeAll()
+
+        let plugins = PluginManager.shared.plugins()
+            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        let currentNames = Set(plugins.map(\.name))
+        expandedPluginNames.formIntersection(currentNames)
+
+        guard !plugins.isEmpty else {
+            pluginListStack.addArrangedSubview(note("尚未安装插件。点击上方「安装插件」选择 .pythia 或 .potext 文件。"))
+            return
+        }
+        plugins.forEach { plugin in
+            pluginListStack.addArrangedSubview(pluginListItem(for: plugin))
+        }
+    }
+
+    private func pluginListItem(for plugin: CommandPlugin) -> NSView {
+        // Plugin rows are a flat list, not nested cards. A separator keeps
+        // rows readable without adding another rounded container.
+        let card = NSView()
+        card.translatesAutoresizingMaskIntoConstraints = false
+
+        let isExpanded = expandedPluginNames.contains(plugin.name)
+        let disclosure = GlassIconButton(
+            systemName: isExpanded ? "chevron.down" : "chevron.right",
+            accessibility: isExpanded ? "收起 \(plugin.title)" : "展开 \(plugin.title)",
+            target: self,
+            action: #selector(togglePluginDisclosure(_:)),
+            width: 18
+        )
+        disclosure.identifier = NSUserInterfaceItemIdentifier(plugin.name)
+        disclosure.toolTip = isExpanded ? "收起插件配置" : "展开插件配置"
+
+        let titleLabel = NSTextField(labelWithString: plugin.title)
+        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        titleLabel.textColor = PythiaDesign.themeColor()
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+
+        let format = plugin.packageFormat ?? (plugin.legacyType == nil ? "command" : "potext")
+        var summaryParts = [".\(format)"]
+        if let version = plugin.packageVersion, !version.isEmpty {
+            summaryParts.append("v\(version)")
+        }
+        if let author = plugin.packageAuthor, !author.isEmpty {
+            summaryParts.append(author)
+        }
+        let needsCount = PluginManager.shared.pluginNeeds(forPluginName: plugin.name).count
+        summaryParts.append(needsCount == 0 ? "无配置项" : "\(needsCount) 项配置")
+        let summaryLabel = NSTextField(labelWithString: summaryParts.joined(separator: "  ·  "))
+        summaryLabel.font = .systemFont(ofSize: 11)
+        summaryLabel.textColor = .secondaryLabelColor
+        summaryLabel.lineBreakMode = .byTruncatingTail
+        summaryLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let textStack = NSStackView(views: [titleLabel, summaryLabel])
+        textStack.orientation = .vertical
+        textStack.alignment = .leading
+        textStack.spacing = 3
+        textStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        textStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let deleteButton = GlassIconButton(
+            systemName: "trash",
+            accessibility: "删除 \(plugin.title)",
+            target: self,
+            action: #selector(deletePluginFromList(_:))
+        )
+        deleteButton.identifier = NSUserInterfaceItemIdentifier(plugin.name)
+        deleteButton.contentTintColor = .systemRed
+        deleteButton.toolTip = "删除插件"
+
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        spacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let header = NSStackView(views: [disclosure, textStack, spacer, deleteButton])
+        header.translatesAutoresizingMaskIntoConstraints = false
+        header.orientation = .horizontal
+        header.alignment = .centerY
+        header.spacing = 8
+        // The disclosure control is the list's leading icon. Keep its visual
+        // center on the same vertical grid as the section/page icons; the
+        // title text then starts on the same column as the section title.
+        header.edgeInsets = NSEdgeInsets(top: 6, left: 0, bottom: 6, right: 10)
+        header.heightAnchor.constraint(equalToConstant: 58).isActive = true
+
+        let detail = FullWidthStackView()
+        detail.translatesAutoresizingMaskIntoConstraints = false
+        detail.orientation = .vertical
+        detail.alignment = .width
+        detail.spacing = 9
+        // Detail text and action buttons share the title text column rather
+        // than inheriting an extra, unrelated indentation from the arrow.
+        // FullWidthStackView pins arranged views to its own width, so apply
+        // this inset explicitly to each detail row instead of relying only
+        // on NSStackView.edgeInsets.
+        detail.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 14, right: 18)
+        detail.isHidden = !isExpanded
+
+        let detailText = PluginManager.shared.pluginDetails(forPluginName: plugin.name)
+        if !detailText.isEmpty {
+            detail.addArrangedSubview(pluginDetailAligned(note(detailText)))
+        }
+        let pluginPath = PluginManager.shared.legacyPluginDirectory(named: plugin.name)?.path
+            ?? PluginManager.shared.pluginsDirectory.appendingPathComponent("\(plugin.name).pythia").path
+        detail.addArrangedSubview(pluginDetailAligned(note("目录：\(pluginPath)")))
+
+        let (configurationView, controls) = pluginConfigurationView(for: plugin.name)
+        detail.addArrangedSubview(pluginDetailAligned(configurationView))
+
+        let actions = NSStackView()
+        actions.orientation = .horizontal
+        actions.alignment = .centerY
+        actions.spacing = 8
+        let testButton = PillButton("测试连通性", target: self, action: #selector(testPluginListConnection(_:)))
+        testButton.identifier = NSUserInterfaceItemIdentifier(plugin.name)
+        let renameButton = PillButton("重命名", target: self, action: #selector(renamePluginFromList(_:)))
+        renameButton.identifier = NSUserInterfaceItemIdentifier(plugin.name)
+        actions.addArrangedSubview(testButton)
+        actions.addArrangedSubview(renameButton)
+
+        let statusLabel = NSTextField(labelWithString: "")
+        statusLabel.font = .systemFont(ofSize: 12)
+        statusLabel.textColor = .secondaryLabelColor
+        statusLabel.lineBreakMode = .byTruncatingTail
+        statusLabel.maximumNumberOfLines = 1
+        statusLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        actions.addArrangedSubview(statusLabel)
+        detail.addArrangedSubview(pluginDetailAligned(actions))
+
+        let content = FullWidthStackView(views: [header, detail])
+        content.translatesAutoresizingMaskIntoConstraints = false
+        content.orientation = .vertical
+        content.alignment = .width
+        content.spacing = 0
+        card.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            content.topAnchor.constraint(equalTo: card.topAnchor),
+            content.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+            // FullWidthStackView's intrinsic-width alignment is intentionally
+            // overridden here with required edge constraints. Without this,
+            // an expanded plugin's detail stack can keep its fitting width and
+            // drift to the right while the header still looks correct.
+            header.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            header.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            detail.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            detail.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+        ])
+
+        let separator = NSView()
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        separator.wantsLayer = true
+        separator.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
+        card.addSubview(separator)
+        NSLayoutConstraint.activate([
+            separator.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            separator.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+            separator.heightAnchor.constraint(equalToConstant: 1),
+        ])
+
+        pluginListFields[plugin.name] = controls
+        pluginListStatusLabels[plugin.name] = statusLabel
+        pluginListDetails[plugin.name] = detail
+        pluginListDisclosureButtons[plugin.name] = disclosure
+        return card
+    }
+
+    private func pluginDetailAligned(_ control: NSView) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        control.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(control)
+        NSLayoutConstraint.activate([
+            control.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 26),
+            control.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
+            control.topAnchor.constraint(equalTo: container.topAnchor),
+            control.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        return container
+    }
+
+    private func pluginConfigurationView(for name: String) -> (NSView, [NSControl]) {
+        let stack = FullWidthStackView()
+        stack.orientation = .vertical
+        stack.alignment = .width
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        let needs = PluginManager.shared.pluginNeeds(forPluginName: name)
+        guard !needs.isEmpty else {
+            stack.addArrangedSubview(note("该插件没有配置项。"))
+            return (stack, [])
+        }
+
+        let stored = PluginManager.shared.pluginConfig(forPluginName: name)
+        var controls: [NSControl] = []
+        for need in needs {
+            guard let key = need["key"] as? String,
+                  let display = need["display"] as? String
+            else { continue }
+            let type = (need["type"] as? String)?.lowercased() ?? "input"
+            if type == "select", let options = need["options"] as? [String: String], !options.isEmpty {
+                let popup = NSPopUpButton()
+                let ordered = options.sorted { $0.key < $1.key }
+                for (optionKey, label) in ordered {
+                    let item = NSMenuItem(title: label, action: nil, keyEquivalent: "")
+                    item.representedObject = optionKey
+                    popup.menu?.addItem(item)
+                }
+                let desired = stored[key] ?? (need["default"] as? String ?? "")
+                if let item = popup.itemArray.first(where: { ($0.representedObject as? String) == desired }) {
+                    popup.select(item)
+                } else if let first = popup.itemArray.first {
+                    popup.select(first)
+                }
+                popup.identifier = NSUserInterfaceItemIdentifier(key)
+                controls.append(popup)
+                stack.addArrangedSubview(row(display, popup))
+            } else {
+                let field = ((need["secret"] as? Bool == true)
+                    || PythiaPluginSecretPolicy.isLikelySecretKey(key))
+                    ? NSSecureTextField() : NSTextField()
+                field.stringValue = stored[key] ?? (need["default"] as? String ?? "")
+                field.identifier = NSUserInterfaceItemIdentifier(key)
+                field.placeholderString = display
+                controls.append(field)
+                stack.addArrangedSubview(row(display, field))
+            }
+        }
+        return (stack, controls)
+    }
+
+    private func collectPluginConfig(for name: String) -> [String: String] {
+        var config: [String: String] = [:]
+        for control in pluginListFields[name] ?? [] {
+            guard let key = control.identifier?.rawValue else { continue }
+            if let popup = control as? NSPopUpButton {
+                config[key] = (popup.selectedItem?.representedObject as? String) ?? ""
+            } else if let field = control as? NSTextField {
+                config[key] = field.stringValue
+            }
+        }
+        return config
+    }
+
+    @objc private func togglePluginDisclosure(_ sender: NSButton) {
+        guard let name = sender.identifier?.rawValue,
+              let detail = pluginListDetails[name],
+              let disclosure = pluginListDisclosureButtons[name],
+              let plugin = PluginManager.shared.plugins().first(where: { $0.name == name })
+        else { return }
+        if expandedPluginNames.contains(name) {
+            expandedPluginNames.remove(name)
+            detail.isHidden = true
+            disclosure.image = NSImage(systemSymbolName: "chevron.right", accessibilityDescription: "展开 \(plugin.title)")
+            disclosure.toolTip = "展开插件配置"
+            disclosure.setAccessibilityLabel("展开 \(plugin.title)")
+        } else {
+            expandedPluginNames.insert(name)
+            detail.isHidden = false
+            disclosure.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "收起 \(plugin.title)")
+            disclosure.toolTip = "收起插件配置"
+            disclosure.setAccessibilityLabel("收起 \(plugin.title)")
+        }
+    }
+
+    @objc private func testPluginListConnection(_ sender: NSButton) {
+        guard let name = sender.identifier?.rawValue,
+              let status = pluginListStatusLabels[name]
+        else { return }
+        var config = collectPluginConfig(for: name)
+        if config["enable"] == nil { config["enable"] = "true" }
+        do {
+            try PluginManager.shared.setPluginConfig(config, forPluginName: name)
+        } catch {
+            status.stringValue = "保存失败：\(error.localizedDescription)"
+            status.textColor = .systemRed
+            return
+        }
+        status.stringValue = "检测中…"
+        status.textColor = .secondaryLabelColor
+        let serviceID = "plugin:\(name)"
+        let type = PluginManager.shared.plugin(forServiceIdentifier: serviceID)?.legacyType ?? "translate"
+        runPluginConnectionTest(serviceID: serviceID, type: type, resultLabel: status)
+    }
+
+    @objc private func deletePluginFromList(_ sender: NSButton) {
+        guard let name = sender.identifier?.rawValue,
+              let plugin = PluginManager.shared.plugins().first(where: { $0.name == name })
+        else { return }
+        deletePlugin(named: name, displayName: plugin.title)
+    }
+
+    @objc private func renamePluginFromList(_ sender: NSButton) {
+        guard let name = sender.identifier?.rawValue,
+              let plugin = PluginManager.shared.plugins().first(where: { $0.name == name })
+        else { return }
+        let alert = NSAlert()
+        alert.messageText = "重命名插件"
+        alert.informativeText = "只修改 Pythia 中显示的名称，不会改动插件目录、服务标识或已有配置。"
+        alert.addButton(withTitle: "保存")
+        alert.addButton(withTitle: "取消")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
+        field.stringValue = plugin.title
+        alert.accessoryView = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let newName = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !newName.isEmpty else {
+            showAlert("插件名称不能为空。")
+            return
+        }
+        PluginManager.shared.renamePluginDisplay(name: name, displayName: newName)
+        expandedPluginNames.insert(name)
+        refreshPlugins()
+        NotificationCenter.default.post(name: .preferencesChanged, object: nil)
+        pluginListStatusLabels[name]?.stringValue = "已重命名为 \(newName)"
+        pluginListStatusLabels[name]?.textColor = PythiaDesign.themeColor()
+    }
+
+    @objc private func reconvertPluginFromList(_ sender: NSButton) {
+        guard let name = sender.identifier?.rawValue else { return }
+        do {
+            let target = try PluginManager.shared.convertLegacyPlugin(name: name, replaceExisting: true)
+            refreshPlugins()
+            expandedPluginNames.insert(name)
+            NotificationCenter.default.post(name: .preferencesChanged, object: nil)
+            showAlert("已重新转换为 \(target.lastPathComponent)。原 .potext 备份保持不变。")
+        } catch {
+            showAlert("重新转换失败，插件继续使用当前可用版本：\(error.localizedDescription)")
+        }
     }
 
     /// The currently selected legacy plugin directory name (e.g. plugin.com.xiaomi.mimo).
@@ -491,6 +990,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func pluginSelectionChanged() {
+        persistSettings()
         rebuildPluginConfigFields()
         pluginTestResultLabel.stringValue = ""
         updatePluginPathLabel()
@@ -633,25 +1133,31 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    private func runPluginConnectionTest(serviceID: String, type: String) {
+    private func runPluginConnectionTest(
+        serviceID: String,
+        type: String,
+        resultLabel: NSTextField? = nil
+    ) {
         switch type {
         case "translate":
-            testTranslatePluginConnection(serviceID: serviceID)
+            testTranslatePluginConnection(serviceID: serviceID, resultLabel: resultLabel)
         case "recognize":
-            testRecognizePluginConnection(serviceID: serviceID)
+            testRecognizePluginConnection(serviceID: serviceID, resultLabel: resultLabel)
         case "tts":
-            testTTSPluginConnection(serviceID: serviceID)
+            testTTSPluginConnection(serviceID: serviceID, resultLabel: resultLabel)
         case "collection":
-            testCollectionPluginConnection(serviceID: serviceID)
+            testCollectionPluginConnection(serviceID: serviceID, resultLabel: resultLabel)
         default:
-            pluginTestResultLabel.stringValue = "✗ 不支持的插件类型：\(type)"
-            pluginTestResultLabel.textColor = .systemRed
+            let outputLabel = resultLabel ?? pluginTestResultLabel
+            outputLabel.stringValue = "✗ 不支持的插件类型：\(type)"
+            outputLabel.textColor = .systemRed
         }
     }
 
-    private func testTranslatePluginConnection(serviceID: String) {
-        pluginTestResultLabel.stringValue = "检测中…"
-        pluginTestResultLabel.textColor = .secondaryLabelColor
+    private func testTranslatePluginConnection(serviceID: String, resultLabel: NSTextField? = nil) {
+        let outputLabel = resultLabel ?? pluginTestResultLabel
+        outputLabel.stringValue = "检测中…"
+        outputLabel.textColor = .secondaryLabelColor
         TranslationService.shared.translateService(
             identifier: serviceID,
             text: "hello",
@@ -659,15 +1165,146 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             targetLanguage: Preferences.shared.targetLanguage.isEmpty ? "zh-CN" : Preferences.shared.targetLanguage
         ) { [weak self] result in
             DispatchQueue.main.async {
+                guard self != nil else { return }
+                switch result {
+                case .success(let output):
+                    let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                    outputLabel.stringValue = "✓ 连通正常：hello → \(trimmed)"
+                    outputLabel.textColor = NSColor(calibratedRed: 0.2, green: 0.6, blue: 0.2, alpha: 1)
+                case .failure(let error):
+                    outputLabel.stringValue = "✗ 失败：\(error.localizedDescription)"
+                    outputLabel.textColor = .systemRed
+                }
+            }
+        }
+    }
+
+    private func testRecognizePluginConnection(serviceID: String, resultLabel: NSTextField? = nil) {
+        let outputLabel = resultLabel ?? pluginTestResultLabel
+        outputLabel.stringValue = "检测中…"
+        outputLabel.textColor = .secondaryLabelColor
+        PluginManager.shared.runLegacyService(
+            serviceIdentifier: serviceID,
+            expectedType: "recognize",
+            input: Self.samplePNGBase64,
+            sourceLanguage: Preferences.shared.recognizeLanguage,
+            targetLanguage: Preferences.shared.targetLanguage
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                guard self != nil else { return }
+                switch result {
+                case .success(let output):
+                    let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                    outputLabel.stringValue = trimmed.isEmpty ? "✓ OCR 插件已执行，但未返回文本" : "✓ OCR 插件已执行：\(trimmed)"
+                    outputLabel.textColor = PythiaDesign.themeColor()
+                case .failure(let error):
+                    outputLabel.stringValue = "✗ OCR 测试失败：\(error.localizedDescription)"
+                    outputLabel.textColor = .systemRed
+                }
+            }
+        }
+    }
+
+    private func testTTSPluginConnection(serviceID: String, resultLabel: NSTextField? = nil) {
+        let outputLabel = resultLabel ?? pluginTestResultLabel
+        outputLabel.stringValue = "检测中…"
+        outputLabel.textColor = .secondaryLabelColor
+        PluginManager.shared.runLegacyService(
+            serviceIdentifier: serviceID,
+            expectedType: "tts",
+            input: "hello",
+            sourceLanguage: Preferences.shared.targetLanguage,
+            targetLanguage: Preferences.shared.targetLanguage
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                guard self != nil else { return }
+                switch result {
+                case .success(let output):
+                    outputLabel.stringValue = output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "✓ TTS 插件已执行" : "✓ TTS 插件已返回音频/结果"
+                    outputLabel.textColor = PythiaDesign.themeColor()
+                case .failure(let error):
+                    outputLabel.stringValue = "✗ TTS 测试失败：\(error.localizedDescription)"
+                    outputLabel.textColor = .systemRed
+                }
+            }
+        }
+    }
+
+    private func testCollectionPluginConnection(serviceID: String, resultLabel: NSTextField? = nil) {
+        let outputLabel = resultLabel ?? pluginTestResultLabel
+        outputLabel.stringValue = "检测中…"
+        outputLabel.textColor = .secondaryLabelColor
+        PluginManager.shared.runLegacyService(
+            serviceIdentifier: serviceID,
+            expectedType: "collection",
+            input: "hello",
+            sourceLanguage: Preferences.shared.sourceLanguage,
+            targetLanguage: Preferences.shared.targetLanguage,
+            targetPayload: "你好"
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                guard self != nil else { return }
+                switch result {
+                case .success:
+                    outputLabel.stringValue = "✓ 生词本插件已执行：hello → 你好"
+                    outputLabel.textColor = PythiaDesign.themeColor()
+                case .failure(let error):
+                    outputLabel.stringValue = "✗ 生词本测试失败：\(error.localizedDescription)"
+                    outputLabel.textColor = .systemRed
+                }
+            }
+        }
+    }
+
+    /// Saves only the 服务 tab fields so verification uses what the user just
+    /// typed without waiting for the normal autosave debounce.
+    private func persistServiceFields() {
+        let preferences = Preferences.shared
+        preferences.openAIKey = openAIKeyField.stringValue
+        let displayName = openAINameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        preferences.openAICompatibleName = displayName.isEmpty ? "OpenAI" : displayName
+        let baseURL = openAIBaseURLField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        preferences.openAIBaseURL = baseURL.isEmpty ? "https://api.openai.com/v1" : baseURL
+        preferences.openAICompatibleAPI = selectedPopupValue(
+            openAICompatibleAPIPopup,
+            mapping: ["openai": "OpenAI", "anthropic": "Anthropic"]
+        )
+        preferences.openAIModel = openAIModelField.stringValue.isEmpty ? "gpt-4o-mini" : openAIModelField.stringValue
+        preferences.deepLKey = deepLKeyField.stringValue
+        preferences.baiduAppID = baiduAppIDField.stringValue
+        preferences.baiduSecret = baiduSecretField.stringValue
+        preferences.youdaoAppKey = youdaoAppKeyField.stringValue
+        preferences.youdaoSecret = youdaoSecretField.stringValue
+        preferences.libreTranslateURL = libreURLField.stringValue.isEmpty ? "https://libretranslate.com" : libreURLField.stringValue
+        preferences.libreTranslateKey = libreKeyField.stringValue
+    }
+
+    /// Verifies a built-in key-based translation service by saving the typed
+    /// fields and running one real translation through TranslationService.
+    @objc private func verifyBuiltInService(_ sender: NSButton) {
+        guard
+            let identifier = sender.identifier?.rawValue,
+            let provider = PythiaProvider.allCases.first(where: { $0.rawValue == identifier })
+        else { return }
+        persistServiceFields()
+        serviceTestResultLabel.stringValue = "检测中…"
+        serviceTestResultLabel.textColor = .secondaryLabelColor
+        TranslationService.shared.translate(
+            text: "hello",
+            provider: provider,
+            sourceLanguage: "auto",
+            targetLanguage: "zh-CN"
+        ) { [weak self] result in
+            DispatchQueue.main.async {
                 guard let self else { return }
                 switch result {
                 case .success(let output):
                     let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                    self.pluginTestResultLabel.stringValue = "✓ 连通正常：hello → \(trimmed)"
-                    self.pluginTestResultLabel.textColor = NSColor(calibratedRed: 0.2, green: 0.6, blue: 0.2, alpha: 1)
+                    self.serviceTestResultLabel.stringValue = "✓ \(provider.rawValue) 连通正常：hello → \(trimmed)"
+                    self.serviceTestResultLabel.textColor = NSColor(calibratedRed: 0.2, green: 0.6, blue: 0.2, alpha: 1)
                 case .failure(let error):
-                    self.pluginTestResultLabel.stringValue = "✗ 失败：\(error.localizedDescription)"
-                    self.pluginTestResultLabel.textColor = .systemRed
+                    self.serviceTestResultLabel.stringValue = "✗ \(provider.rawValue) 失败：\(error.localizedDescription)"
+                    self.serviceTestResultLabel.textColor = .systemRed
                 }
             }
         }
@@ -764,11 +1401,19 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             // shrink the container and push the label right.
             field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
-        stack.addArrangedSubview(row("划词翻译", hotkeySelectionField))
-        stack.addArrangedSubview(row("输入翻译", hotkeyInputField))
-        stack.addArrangedSubview(row("截图翻译", hotkeyOCRTranslateField))
-        stack.addArrangedSubview(row("截图 OCR", hotkeyOCRRecognizeField))
-        stack.addArrangedSubview(note("格式示例：⇧⌘E、⌥⌘D、⌃⇧R。保存后会重新注册系统级快捷键。"))
+        stack.addArrangedSubview(settingsSection(
+            "系统级快捷键",
+            icon: "keyboard",
+            detail: "点击输入框后按下组合键即可录制；保存后会重新注册系统级快捷键。",
+            showsHeader: false,
+            views: [
+                row("划词翻译", hotkeySelectionField),
+                row("输入翻译", hotkeyInputField),
+                row("截图翻译", hotkeyOCRTranslateField),
+                row("截图 OCR", hotkeyOCRRecognizeField),
+                note("格式示例：⇧⌘E、⌥⌘D、⌃⇧R。快捷键不能使用重复组合。"),
+            ]
+        ))
         return stack
     }
 
@@ -778,20 +1423,20 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         backupTypePopup.addItems(withTitles: ["本地", "WebDAV"])
         backupTypePopup.target = self
         backupTypePopup.action = #selector(backupTypeChanged)
-        stack.addArrangedSubview(row("备份方式", backupTypePopup))
+        stack.addArrangedSubview(sectionTextAligned(row("备份方式", backupTypePopup), minHeight: 0))
 
         // Add the WebDAV-specific rows directly to the main form (so they share
         // the exact same left edge as "备份方式"), but keep references so we can
         // show/hide them when 备份方式 changes.
-        let urlRow = row("WebDAV 地址", webdavURLField)
-        let userRow = row("WebDAV 用户名", webdavUsernameField)
-        let passRow = row("WebDAV 密码", webdavPasswordField)
+        let urlRow = sectionTextAligned(row("WebDAV 地址", webdavURLField), minHeight: 0)
+        let userRow = sectionTextAligned(row("WebDAV 用户名", webdavUsernameField), minHeight: 0)
+        let passRow = sectionTextAligned(row("WebDAV 密码", webdavPasswordField), minHeight: 0)
         webdavHistorySyncIntervalField.placeholderString = "1"
         webdavHistorySyncIntervalUnitPopup.removeAllItems()
         webdavHistorySyncIntervalUnitPopup.addItems(withTitles: ["分钟", "小时", "天", "周"])
         webdavHistoryAutoSyncCheckbox.target = self
         webdavHistoryAutoSyncCheckbox.action = #selector(webDAVAutoSyncChanged)
-        let autoSyncRow = indented(webdavHistoryAutoSyncCheckbox)
+        let autoSyncRow = sectionTextAligned(indented(webdavHistoryAutoSyncCheckbox), minHeight: 0)
         let intervalControls = NSStackView()
         intervalControls.orientation = .horizontal
         intervalControls.alignment = .centerY
@@ -800,12 +1445,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         intervalControls.addArrangedSubview(webdavHistorySyncIntervalUnitPopup)
         webdavHistorySyncIntervalField.widthAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
         webdavHistorySyncIntervalUnitPopup.widthAnchor.constraint(equalToConstant: 92).isActive = true
-        let intervalRow = row("自动同步间隔", intervalControls)
+        let intervalRow = sectionTextAligned(row("自动同步间隔", intervalControls), minHeight: 0)
         webdavHistorySyncStatusLabel.lineBreakMode = .byWordWrapping
         webdavHistorySyncStatusLabel.maximumNumberOfLines = 3
         webdavHistorySyncStatusLabel.font = .systemFont(ofSize: 12)
         webdavHistorySyncStatusLabel.textColor = .secondaryLabelColor
-        let statusRow = leadingFullWidth(webdavHistorySyncStatusLabel, minHeight: 0)
+        let statusRow = sectionTextAligned(
+            leadingFullWidth(webdavHistorySyncStatusLabel, minHeight: 0),
+            minHeight: 0
+        )
         webdavTestResultLabel.lineBreakMode = .byTruncatingTail
         webdavTestResultLabel.maximumNumberOfLines = 1
         webdavTestResultLabel.font = .systemFont(ofSize: 12)
@@ -821,7 +1469,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         resultBox.spacing = 6
         resultBox.addArrangedSubview(resultCaption)
         resultBox.addArrangedSubview(webdavTestResultLabel)
-        let resultRow = leadingFullWidth(resultBox, minHeight: 0)
+        let resultRow = sectionTextAligned(leadingFullWidth(resultBox, minHeight: 0), minHeight: 0)
         webdavRows = [urlRow, userRow, passRow, autoSyncRow, intervalRow, statusRow, resultRow]
         webdavRows.forEach { stack.addArrangedSubview($0) }
 
@@ -831,7 +1479,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         buttons.addArrangedSubview(PillButton("导出配置到本地", target: self, action: #selector(exportConfig)))
         buttons.addArrangedSubview(PillButton("从本地导入配置", target: self, action: #selector(importConfig)))
         buttons.addArrangedSubview(PillButton("导出历史到本地", target: self, action: #selector(exportHistoryFromSettings)))
-        let localButtonsRow = leadingFullWidth(buttons, minHeight: 0)
+        let localButtonsRow = sectionTextAligned(leadingFullWidth(buttons, minHeight: 0), minHeight: 0)
         stack.addArrangedSubview(localButtonsRow)
         localActionButtons = localButtonsRow
 
@@ -842,12 +1490,18 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         webdavButtons.addArrangedSubview(PillButton("同步历史", target: self, action: #selector(syncHistoryWithWebDAV)))
         webdavButtons.addArrangedSubview(PillButton("备份到 WebDAV", target: self, action: #selector(backupToWebDAV)))
         webdavButtons.addArrangedSubview(PillButton("从 WebDAV 恢复", target: self, action: #selector(restoreFromWebDAV)))
-        let webdavButtonsRow = leadingFullWidth(webdavButtons, minHeight: 0)
+        let webdavButtonsRow = sectionTextAligned(leadingFullWidth(webdavButtons, minHeight: 0), minHeight: 0)
         stack.addArrangedSubview(webdavButtonsRow)
         webdavActionButtons = webdavButtonsRow
 
-        let localNote = note("本地导出/导入即时生效，文件保存在你选择的位置。")
-        let webdavNote = note("坚果云需用应用专属密码（非登录密码）。历史同步使用 /Pythia/history/history.json；配置备份仍兼容旧备份目录。")
+        let localNote = sectionTextAligned(
+            note("本地导出/导入即时生效，文件保存在你选择的位置。"),
+            minHeight: 0
+        )
+        let webdavNote = sectionTextAligned(
+            note("坚果云需用应用专属密码（非登录密码）。历史同步使用 /Pythia/history/history.json；配置备份仍兼容旧备份目录。"),
+            minHeight: 0
+        )
         localNoteRow = localNote
         webdavNoteRow = webdavNote
         stack.addArrangedSubview(localNote)
@@ -860,6 +1514,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     @objc private func webDAVAutoSyncChanged() {
         updateWebDAVAutoSyncControls()
+        scheduleAutosave()
     }
 
     private func updateWebDAVAutoSyncControls() {
@@ -871,6 +1526,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     /// Shows or hides the WebDAV fields depending on 备份方式.
     @objc private func backupTypeChanged() {
         updateWebDAVFieldsVisibility()
+        scheduleAutosave()
     }
 
     private func updateWebDAVFieldsVisibility() {
@@ -897,123 +1553,416 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private func proxyTab() -> NSView {
         let stack = formStack()
-        stack.addArrangedSubview(indented(proxyEnabledCheckbox))
-        stack.addArrangedSubview(row("代理主机", proxyHostField))
-        stack.addArrangedSubview(row("代理端口", proxyPortField))
-        stack.addArrangedSubview(row("代理用户名", proxyUsernameField))
-        stack.addArrangedSubview(row("代理密码", proxyPasswordField))
-        stack.addArrangedSubview(row("不代理地址", noProxyField))
-        stack.addArrangedSubview(note("保存后会设置当前进程的 http_proxy/https_proxy/all_proxy 环境变量。"))
+        stack.addArrangedSubview(settingsSection(
+            "网络代理",
+            icon: "network",
+            detail: "设置会应用到当前进程的 HTTP、HTTPS 与 ALL_PROXY 网络请求。",
+            showsHeader: false,
+            views: [
+                indented(proxyEnabledCheckbox),
+                row("代理主机", proxyHostField),
+                row("代理端口", proxyPortField),
+                row("代理用户名", proxyUsernameField),
+                row("代理密码", proxyPasswordField),
+                row("不代理地址", noProxyField),
+                note("多个免代理地址可用逗号、分号或换行分隔。保存后会设置当前进程的 http_proxy/https_proxy/all_proxy 环境变量。"),
+            ]
+        ))
         return stack
     }
 
     private func historyTab() -> NSView {
         let stack = formStack()
-        stack.addArrangedSubview(indented(historyDisableCheckbox))
-        stack.addArrangedSubview(note("关闭后不会记录任何翻译历史。已有的历史可在历史窗口手动清除。"))
+        stack.addArrangedSubview(settingsSection(
+            "历史记录",
+            icon: "clock.arrow.circlepath",
+            detail: "控制翻译结果是否写入本机历史记录。",
+            showsHeader: false,
+            views: [
+                indented(historyDisableCheckbox),
+                note("关闭后不会记录任何翻译历史。已有的历史可在历史窗口手动清除。"),
+            ]
+        ))
         return stack
     }
 
     private func migrationTab() -> NSView {
         let stack = formStack()
-        stack.addArrangedSubview(note("迁移会扫描本机旧 Pot/Tauri 配置目录，导入可识别的语言和服务密钥字段。旧 Pot 插件会直接转换为 .pythia；转换成功后，Pythia 不保留旧插件或 .potext 备份。密钥写入仅当前用户可读的 Pythia 本地凭据文件，不访问 macOS 钥匙串，也不会输出到日志。"))
         let buttons = NSStackView()
         buttons.orientation = .horizontal
         buttons.spacing = 10
         buttons.addArrangedSubview(PillButton("导入旧版配置和插件", target: self, action: #selector(migrateConfig)))
         buttons.addArrangedSubview(PillButton("仅导入旧版插件", target: self, action: #selector(importLegacyPlugins)))
-        stack.addArrangedSubview(buttons)
-        stack.addArrangedSubview(note("外部调用 API：127.0.0.1:60828，支持 /translate、/selection_translate、/input_translate、/ocr_recognize、/ocr_translate、/config。"))
+        stack.addArrangedSubview(settingsSection(
+            "迁移旧版数据",
+            icon: "arrow.triangle.2.circlepath",
+            detail: "扫描本机旧 Pot/Tauri 配置目录，并将可识别内容导入 Pythia。",
+            views: [
+                note("旧 Pot 插件会直接转换为 .pythia；转换成功后，Pythia 不保留旧插件或 .potext 备份。密钥写入仅当前用户可读的 Pythia 本地凭据文件，不访问 macOS 钥匙串，也不会输出到日志。"),
+                leadingFullWidth(buttons, minHeight: 0),
+            ]
+        ))
+        stack.addArrangedSubview(settingsSection(
+            "本地 API",
+            icon: "network.badge.shield.half.filled",
+            detail: "供外部工具调用的本地服务端点。",
+            views: [note("外部调用 API：127.0.0.1:60828，支持 /translate、/selection_translate、/input_translate、/ocr_recognize、/ocr_translate、/config。")]
+        ))
         return stack
     }
 
     private func aboutTab() -> NSView {
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
+        let build = Self.sourceRevision
 
+        let stack = FlippedStackView()
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 18
+        stack.edgeInsets = NSEdgeInsets(top: 28, left: 42, bottom: 28, right: 42)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        // Hero: icon, name, version pills, description.
         let icon = NSImageView()
         icon.translatesAutoresizingMaskIntoConstraints = false
         icon.image = NSApp.applicationIconImage
         icon.imageScaling = .scaleProportionallyUpOrDown
         icon.wantsLayer = true
-        icon.layer?.shadowColor = NSColor.black.cgColor
-        icon.layer?.shadowOpacity = 0.16
-        icon.layer?.shadowRadius = 18
-        icon.layer?.shadowOffset = NSSize(width: 0, height: -6)
+        icon.layer?.cornerRadius = 22
+        icon.layer?.masksToBounds = true
+        NSLayoutConstraint.activate([
+            icon.widthAnchor.constraint(equalToConstant: 96),
+            icon.heightAnchor.constraint(equalToConstant: 96),
+        ])
 
         let nameLabel = NSTextField(labelWithString: "Pythia")
-        nameLabel.font = .systemFont(ofSize: 34, weight: .bold)
-        nameLabel.textColor = .labelColor
+        nameLabel.font = .systemFont(ofSize: 30, weight: .bold)
+        nameLabel.textColor = PythiaDesign.themeColor()
         nameLabel.alignment = .center
 
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
-        let versionText = build.isEmpty ? "版本 \(version)" : "版本 \(version)（\(build)）"
-        let versionLabel = NSTextField(labelWithString: versionText)
-        versionLabel.font = .systemFont(ofSize: 14, weight: .semibold)
-        versionLabel.textColor = PythiaDesign.themeColor()
-        versionLabel.alignment = .center
+        let pills = NSStackView(views: [
+            aboutVersionPill("正式版本 \(version)"),
+            aboutVersionPill("开发版本 \(build)"),
+        ])
+        pills.orientation = .horizontal
+        pills.spacing = 8
 
-        let descriptionLabel = NSTextField(labelWithString: "多服务翻译与插件平台")
-        descriptionLabel.font = .systemFont(ofSize: 14)
+        let descriptionLabel = AutoWrappingLabel(wrappingLabelWithString: "本地优先的多服务桌面翻译：划词、输入、截图即翻，多个翻译服务并排作答。")
+        descriptionLabel.font = .systemFont(ofSize: 13)
         descriptionLabel.textColor = .secondaryLabelColor
         descriptionLabel.alignment = .center
+        descriptionLabel.maximumNumberOfLines = 2
+        descriptionLabel.lineBreakMode = .byWordWrapping
+        descriptionLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        descriptionLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // This width constraint is activated only after the label has been
+        // inserted into the stack. AppKit raises NSGenericException when a
+        // constraint is activated before both items share a view hierarchy.
+        let descriptionWidthConstraint = descriptionLabel.widthAnchor.constraint(
+            lessThanOrEqualTo: stack.widthAnchor,
+            constant: -24
+        )
 
-        let updateButton = PillButton("检查更新", target: self, action: #selector(checkForUpdates))
-        updateButton.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "检查更新")
-        updateButton.imagePosition = .imageLeading
-        updateButton.imageHugsTitle = true
-
-        let githubButton = PillButton("GitHub 项目", target: self, action: #selector(openGitHubProject))
-        githubButton.image = NSImage(systemSymbolName: "link", accessibilityDescription: "GitHub 项目")
+        // Action bar: GitHub + 检查更新（含忙碌状态）。
+        let githubButton = PillButton("GitHub", target: self, action: #selector(openGitHubProject))
+        if let mark = NSImage(named: "GitHubMark") {
+            mark.isTemplate = true
+            mark.size = NSSize(width: 15, height: 15)
+            githubButton.image = mark
+        } else {
+            githubButton.image = NSImage(systemSymbolName: "link", accessibilityDescription: "GitHub")
+        }
         githubButton.imagePosition = .imageLeading
         githubButton.imageHugsTitle = true
+        githubButton.imageScaling = .scaleProportionallyDown
+        githubButton.widthAnchor.constraint(equalToConstant: 94).isActive = true
 
-        let actionStack = NSStackView(views: [updateButton, githubButton])
+        let checkButton = PillButton("检查更新", target: self, action: #selector(checkForUpdates))
+        checkButton.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "检查更新")
+        checkButton.imagePosition = .imageLeading
+        checkButton.imageHugsTitle = true
+        checkButton.imageScaling = .scaleProportionallyDown
+        checkButton.widthAnchor.constraint(equalToConstant: 110).isActive = true
+        aboutCheckButton = checkButton
+
+        // Keep the centered group limited to the two visible actions.
+        let actionStack = NSStackView(views: [githubButton, checkButton])
         actionStack.orientation = .horizontal
         actionStack.alignment = .centerY
         actionStack.spacing = 10
-
-        aboutUpdateStatusLabel.font = .systemFont(ofSize: 12, weight: .medium)
-        aboutUpdateStatusLabel.textColor = .secondaryLabelColor
-        aboutUpdateStatusLabel.alignment = .center
-        aboutUpdateStatusLabel.maximumNumberOfLines = 1
-
-        let copyrightLabel = NSTextField(labelWithString: "© 2026 Pythia Contributors · GPL-3.0")
-        copyrightLabel.font = .systemFont(ofSize: 11)
-        copyrightLabel.textColor = .tertiaryLabelColor
-        copyrightLabel.alignment = .center
-
-        let hero = NSStackView(views: [
-            icon,
-            nameLabel,
-            versionLabel,
-            descriptionLabel,
-            actionStack,
-            aboutUpdateStatusLabel,
-            copyrightLabel,
-        ])
-        hero.translatesAutoresizingMaskIntoConstraints = false
-        hero.orientation = .vertical
-        hero.alignment = .centerX
-        hero.spacing = 9
-        hero.setCustomSpacing(16, after: icon)
-        hero.setCustomSpacing(3, after: nameLabel)
-        hero.setCustomSpacing(18, after: descriptionLabel)
-        hero.setCustomSpacing(6, after: actionStack)
-        hero.setCustomSpacing(18, after: aboutUpdateStatusLabel)
-        container.addSubview(hero)
-
+        actionStack.translatesAutoresizingMaskIntoConstraints = false
+        let actionContainer = NSView()
+        actionContainer.translatesAutoresizingMaskIntoConstraints = false
+        actionContainer.addSubview(actionStack)
         NSLayoutConstraint.activate([
-            icon.widthAnchor.constraint(equalToConstant: 124),
-            icon.heightAnchor.constraint(equalToConstant: 124),
-            hero.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            hero.centerYAnchor.constraint(equalTo: container.centerYAnchor, constant: -6),
-            hero.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 24),
-            hero.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -24),
-            hero.topAnchor.constraint(greaterThanOrEqualTo: container.topAnchor, constant: 20),
-            hero.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -20),
-            aboutUpdateStatusLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 260),
+            actionStack.centerXAnchor.constraint(equalTo: actionContainer.centerXAnchor),
+            actionStack.topAnchor.constraint(equalTo: actionContainer.topAnchor),
+            actionStack.bottomAnchor.constraint(equalTo: actionContainer.bottomAnchor),
+        ])
+
+        // Cards.
+        let releaseCard = aboutReleaseNotesCard(version: version)
+        let aboutCard = aboutSoftwareCard()
+
+        // Footer.
+        let footerLine = NSTextField(labelWithString: "本地优先 · 原生 macOS · 多服务翻译")
+        footerLine.font = .systemFont(ofSize: 11, weight: .medium)
+        footerLine.textColor = .secondaryLabelColor
+        let copyrightLabel = NSTextField(labelWithString: "Copyright © 2026 douxy1994")
+        copyrightLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        copyrightLabel.textColor = .secondaryLabelColor
+        let licenseLabel = NSTextField(labelWithString: "Licensed under GNU Affero General Public License v3.0")
+        licenseLabel.font = .systemFont(ofSize: 10)
+        licenseLabel.textColor = .tertiaryLabelColor
+        let bundleLabel = NSTextField(labelWithString: "Bundle ID  com.douxy.pythia")
+        bundleLabel.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+        bundleLabel.textColor = .tertiaryLabelColor
+        let footer = NSStackView(views: [footerLine, copyrightLabel, licenseLabel, bundleLabel])
+        footer.orientation = .vertical
+        footer.alignment = .centerX
+        footer.spacing = 5
+
+        for view in [icon, nameLabel, pills, descriptionLabel, actionContainer, releaseCard, aboutCard, footer] {
+            stack.addArrangedSubview(view)
+        }
+        // Natural width remains one line at the normal window size and wraps
+        // to at most two lines only when the user narrows the window.
+        descriptionWidthConstraint.isActive = true
+        // Keep the hero compact so the title sits slightly higher and the
+        // visible top/bottom breathing room stays balanced above the cards.
+        stack.setCustomSpacing(8, after: icon)
+        // Keep a deliberate breathing gap below the app name before the
+        // version pills; the title should not visually touch the metadata.
+        stack.setCustomSpacing(8, after: nameLabel)
+        stack.setCustomSpacing(10, after: pills)
+        stack.setCustomSpacing(10, after: actionContainer)
+        stack.setCustomSpacing(16, after: aboutCard)
+
+        for card in [releaseCard, aboutCard] {
+            card.translatesAutoresizingMaskIntoConstraints = false
+            card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -84).isActive = true
+        }
+        return stack
+    }
+
+    /// Mirrors AI Memory's About page: the development version is the short
+    /// source revision recorded into the app bundle during the Xcode build,
+    /// rather than the numeric marketing/build setting.
+    private static var sourceRevision: String {
+        let bundledRevision = Bundle.main.url(
+            forResource: "PythiaSourceRevision",
+            withExtension: "txt"
+        ).flatMap { try? String(contentsOf: $0, encoding: .utf8) }
+        let plistRevision = Bundle.main.object(
+            forInfoDictionaryKey: "PythiaSourceRevision"
+        ) as? String
+        let revision = (bundledRevision ?? plistRevision)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let revision, !revision.isEmpty, revision != "uncommitted" else {
+            return "未提交构建"
+        }
+        return revision
+    }
+
+    private func aboutVersionPill(_ text: String) -> NSView {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 11, weight: .medium)
+        label.textColor = .secondaryLabelColor
+        label.lineBreakMode = .byTruncatingMiddle
+        label.translatesAutoresizingMaskIntoConstraints = false
+        let pill = NSView()
+        pill.wantsLayer = true
+        pill.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
+        pill.layer?.cornerRadius = 10
+        pill.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: pill.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
+            pill.widthAnchor.constraint(equalTo: label.widthAnchor, constant: 20),
+            pill.widthAnchor.constraint(lessThanOrEqualToConstant: 220),
+            pill.heightAnchor.constraint(equalToConstant: 20),
+        ])
+        return pill
+    }
+
+    private func aboutCardContainer() -> NSView {
+        let view = NSVisualEffectView()
+        view.material = .contentBackground
+        view.blendingMode = .withinWindow
+        view.state = .active
+        view.wantsLayer = true
+        // Keep the cards visibly distinct from the About page surface, like
+        // AI Memory's white content cards on a quiet neutral background.
+        view.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        view.layer?.cornerRadius = 14
+        view.layer?.cornerCurve = .continuous
+        view.layer?.borderWidth = 1
+        view.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.65).cgColor
+        view.layer?.shadowColor = NSColor.black.withAlphaComponent(0.12).cgColor
+        view.layer?.shadowOpacity = 1
+        view.layer?.shadowRadius = 8
+        view.layer?.shadowOffset = NSSize(width: 0, height: -2)
+        return view
+    }
+
+    /// A card title row pinned to the leading edge; plain NSTextFields in a
+    /// .width-aligned NSStackView don't reliably stretch, which centered them.
+    private func aboutCardTitle(_ text: String) -> NSView {
+        let container = NSView()
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 15, weight: .semibold)
+        label.alignment = .left
+        label.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            label.topAnchor.constraint(equalTo: container.topAnchor),
+            label.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        return container
+    }
+
+    private func aboutReleaseNotesCard(version: String) -> NSView {
+        let card = aboutCardContainer()
+        let titleLabel = NSTextField(labelWithString: "最近版本更新")
+        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        titleLabel.alignment = .left
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        let versionTag = NSTextField(labelWithString: "v\(version)")
+        versionTag.font = .systemFont(ofSize: 11, weight: .semibold)
+        versionTag.textColor = PythiaDesign.themeColor()
+        versionTag.translatesAutoresizingMaskIntoConstraints = false
+        let header = NSView()
+        header.addSubview(titleLabel)
+        header.addSubview(versionTag)
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            titleLabel.topAnchor.constraint(equalTo: header.topAnchor),
+            titleLabel.bottomAnchor.constraint(equalTo: header.bottomAnchor),
+            versionTag.trailingAnchor.constraint(equalTo: header.trailingAnchor),
+            versionTag.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+        ])
+
+        let updateItems = [
+            aboutUpdateItem("简约翻译窗口", "划词与截图 OCR 翻译可只显示译文、重试和复制；右上角可随时展开完整窗口。"),
+            aboutUpdateItem("多服务同步选择", "简约窗口支持多选翻译服务，并与完整窗口的选择和排序实时同步。"),
+            aboutUpdateItem("自定义大模型 API", "可配置显示名称、基础地址、模型与密钥，兼容 OpenAI Chat Completions 和 Anthropic Messages。"),
+            aboutUpdateItem("屏幕录制权限修复", "重新检测系统授权并在必要时自动重启，解决已开启权限仍无法截图的问题。"),
+        ]
+        let rows = FullWidthStackView()
+        updateItems.forEach { item in
+            rows.addArrangedSubview(item)
+            let width = item.widthAnchor.constraint(equalTo: rows.widthAnchor)
+            width.priority = .required
+            width.isActive = true
+        }
+        rows.orientation = .vertical
+        rows.alignment = .width
+        rows.spacing = 12
+
+        // Keep the header and update list on one explicit horizontal grid.
+        // Intrinsic-width stack rows otherwise remain centered in AppKit.
+        let content = NSView()
+        content.translatesAutoresizingMaskIntoConstraints = false
+        header.translatesAutoresizingMaskIntoConstraints = false
+        rows.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(header)
+        content.addSubview(rows)
+        card.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            content.topAnchor.constraint(equalTo: card.topAnchor),
+            content.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+            header.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
+            header.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
+            header.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
+            rows.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
+            rows.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
+            rows.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 12),
+            rows.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -18),
+        ])
+        return card
+    }
+
+    private func aboutSoftwareCard() -> NSView {
+        let card = aboutCardContainer()
+        let titleLabel = NSTextField(labelWithString: "关于本软件")
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        titleLabel.alignment = .left
+
+        let bodyLabel = AutoWrappingLabel(wrappingLabelWithString: "Pythia 是一款本地优先的桌面翻译工具。一个快捷键即可从划词、输入或截图中取词，在简约或完整窗口中让多个翻译服务并排作答；内置服务、自定义大模型 API 与 .pythia 插件可共同使用，历史记录可通过 WebDAV 在 macOS 与 Windows 之间同步，API Key 只保存在本机私有凭据文件中。")
+        bodyLabel.translatesAutoresizingMaskIntoConstraints = false
+        bodyLabel.font = .systemFont(ofSize: 13)
+        bodyLabel.textColor = .secondaryLabelColor
+        bodyLabel.alignment = .left
+        bodyLabel.maximumNumberOfLines = 0
+        bodyLabel.lineBreakMode = .byWordWrapping
+        bodyLabel.cell?.wraps = true
+        bodyLabel.cell?.truncatesLastVisibleLine = false
+        bodyLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        bodyLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let content = NSView()
+        let bodyContainer = NSView()
+        content.translatesAutoresizingMaskIntoConstraints = false
+        bodyContainer.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(content)
+        content.addSubview(titleLabel)
+        content.addSubview(bodyContainer)
+        bodyContainer.addSubview(bodyLabel)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            content.topAnchor.constraint(equalTo: card.topAnchor),
+            content.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+            titleLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
+            titleLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
+            titleLabel.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
+            bodyContainer.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            bodyContainer.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+            bodyContainer.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
+            bodyContainer.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -18),
+            bodyLabel.leadingAnchor.constraint(equalTo: bodyContainer.leadingAnchor),
+            bodyLabel.trailingAnchor.constraint(equalTo: bodyContainer.trailingAnchor),
+            bodyLabel.topAnchor.constraint(equalTo: bodyContainer.topAnchor),
+            bodyLabel.bottomAnchor.constraint(equalTo: bodyContainer.bottomAnchor),
+        ])
+        return card
+    }
+
+    private func aboutUpdateItem(_ title: String, _ detail: String) -> NSView {
+        let container = NSView()
+        let symbol = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
+        let check = NSImageView(image: symbol ?? NSImage())
+        check.contentTintColor = PythiaDesign.themeColor()
+        check.translatesAutoresizingMaskIntoConstraints = false
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        titleLabel.alignment = .left
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        let detailLabel = NSTextField(wrappingLabelWithString: detail)
+        detailLabel.font = .systemFont(ofSize: 11)
+        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.alignment = .left
+        detailLabel.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(check)
+        container.addSubview(titleLabel)
+        container.addSubview(detailLabel)
+        NSLayoutConstraint.activate([
+            check.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            check.topAnchor.constraint(equalTo: container.topAnchor, constant: 1),
+            check.widthAnchor.constraint(equalToConstant: 14),
+            check.heightAnchor.constraint(equalToConstant: 14),
+            titleLabel.leadingAnchor.constraint(equalTo: check.trailingAnchor, constant: 9),
+            titleLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            titleLabel.topAnchor.constraint(equalTo: container.topAnchor),
+            detailLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            detailLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            detailLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 2),
+            detailLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
         return container
     }
@@ -1043,14 +1992,111 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         // Instead let the document size to its content; the scroll view scrolls
         // when content is taller than the visible area.
         NSLayoutConstraint.activate([
-            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+            // Reserve an explicit breathing space before the vertical scroll
+            // indicator on every settings page. Pinning the document to the
+            // clip view's full width made rows and plugin fields look attached
+            // to the indicator at the right edge.
+            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor, constant: -18),
         ])
         return scroll
     }
 
+    /// Keeps the selected category's title and explanation fixed above the
+    /// scrollable form, matching the compact two-column settings pattern used
+    /// by AI Memory. The form itself remains an AppKit view so every existing
+    /// setting control and action keeps its current responder behavior.
+    private func settingsPage(_ document: NSView, index: Int, showsHeader: Bool = true) -> NSView {
+        let page = NSView()
+        page.translatesAutoresizingMaskIntoConstraints = false
+        page.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        page.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        guard showsHeader else {
+            page.addSubview(document)
+            NSLayoutConstraint.activate([
+                document.leadingAnchor.constraint(equalTo: page.leadingAnchor),
+                document.trailingAnchor.constraint(equalTo: page.trailingAnchor),
+                document.topAnchor.constraint(equalTo: page.topAnchor),
+                document.bottomAnchor.constraint(equalTo: page.bottomAnchor),
+            ])
+            return page
+        }
+
+        let header = settingsPageHeader(
+            title: tabTitles[index],
+            subtitle: tabSubtitles[index],
+            symbolName: tabSymbols[index]
+        )
+        page.addSubview(header)
+        page.addSubview(document)
+        NSLayoutConstraint.activate([
+            // The page title uses the same horizontal grid as the document;
+            // the icon and title therefore line up with section icons and
+            // labels below instead of starting one inset farther right.
+            header.leadingAnchor.constraint(equalTo: page.leadingAnchor, constant: 10),
+            header.trailingAnchor.constraint(equalTo: page.trailingAnchor, constant: -10),
+            // The page header shares the sidebar title's top baseline: the
+            // active tab content starts 16pt below the tab card, so 2pt here
+            // matches the sidebar's 18pt title inset.
+            header.topAnchor.constraint(equalTo: page.topAnchor, constant: 2),
+            document.leadingAnchor.constraint(equalTo: page.leadingAnchor, constant: 10),
+            document.trailingAnchor.constraint(equalTo: page.trailingAnchor, constant: -10),
+            document.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 14),
+            document.bottomAnchor.constraint(equalTo: page.bottomAnchor),
+        ])
+        return page
+    }
+
+    private func settingsPageHeader(title: String, subtitle: String, symbolName: String) -> NSView {
+        let header = NSView()
+        header.translatesAutoresizingMaskIntoConstraints = false
+
+        let symbol = NSImageView(
+            image: NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) ?? NSImage()
+        )
+        symbol.translatesAutoresizingMaskIntoConstraints = false
+        symbol.setAccessibilityElement(false)
+        symbol.imageScaling = .scaleProportionallyDown
+        symbol.contentTintColor = PythiaDesign.themeColor()
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = .systemFont(ofSize: 26, weight: .semibold)
+        titleLabel.textColor = PythiaDesign.themeColor()
+
+        let subtitleLabel = AutoWrappingLabel(wrappingLabelWithString: subtitle)
+        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        subtitleLabel.font = .systemFont(ofSize: 13)
+        subtitleLabel.textColor = .secondaryLabelColor
+        subtitleLabel.maximumNumberOfLines = 2
+        subtitleLabel.lineBreakMode = .byWordWrapping
+        subtitleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        subtitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let copy = NSStackView(views: [titleLabel, subtitleLabel])
+        copy.translatesAutoresizingMaskIntoConstraints = false
+        copy.orientation = .vertical
+        copy.alignment = .leading
+        copy.spacing = 5
+
+        header.addSubview(symbol)
+        header.addSubview(copy)
+        NSLayoutConstraint.activate([
+            symbol.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            symbol.topAnchor.constraint(equalTo: header.topAnchor, constant: 6),
+            symbol.widthAnchor.constraint(equalToConstant: 18),
+            symbol.heightAnchor.constraint(equalToConstant: 18),
+            copy.leadingAnchor.constraint(equalTo: symbol.trailingAnchor, constant: 10),
+            copy.trailingAnchor.constraint(equalTo: header.trailingAnchor),
+            copy.topAnchor.constraint(equalTo: header.topAnchor),
+            copy.bottomAnchor.constraint(equalTo: header.bottomAnchor),
+        ])
+        return header
+    }
+
     /// The window width the user has chosen (set by real user resizing). Restored
     /// after every tab switch so the window does not shrink to a tab's fitting size.
-    private var settingsUserWidth: CGFloat = 900
+    private var settingsUserWidth: CGFloat = 1080
 
     // MARK: - NSWindowDelegate
 
@@ -1067,28 +2113,50 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    func windowWillClose(_ notification: Notification) {
+        flushPendingAutosave()
+    }
+
+    /// Commits the current editor value even when the app quits inside the
+    /// debounce window, so automatic saving never depends on a Save button or
+    /// on a delayed work item getting another main-run-loop turn.
+    func flushPendingAutosave() {
+        window?.makeFirstResponder(nil)
+        autosaveWorkItem?.cancel()
+        autosaveWorkItem = nil
+        persistSettings()
+    }
+
+    /// Selects the 关于 tab; used by the app menu's 关于 Pythia item so the
+    /// custom about page (version pills, update check) shows instead of the
+    /// standard macOS about panel.
+    func selectAboutTab() {
+        showTab(index: tabTitles.firstIndex(of: "关于") ?? (tabTitles.count - 1))
+    }
+
     private func showTab(index: Int) {
         selectedSettingsIndex = max(0, min(index, tabTitles.count - 1))
         updateSidebarSelection()
         NSLayoutConstraint.deactivate(activeTabConstraints)
         activeTabConstraints.removeAll()
         activeTabView?.removeFromSuperview()
-        let content: NSView
+        let document: NSView
         switch selectedSettingsIndex {
-        case 1: content = scrollTab(translateTab())
-        case 2: content = scrollTab(servicesTab())
-        case 3: content = scrollTab(ocrTab())
-        case 4: content = scrollTab(ttsTab())
-        case 5: content = scrollTab(collectionTab())
-        case 6: content = scrollTab(pluginsTab())
-        case 7: content = scrollTab(shortcutsTab())
-        case 8: content = scrollTab(historyTab())
-        case 9: content = scrollTab(proxyTab())
-        case 10: content = scrollTab(backupTab())
-        case 11: content = scrollTab(migrationTab())
-        case 12: content = aboutTab()
-        default: content = scrollTab(generalTab())
+        case 1: document = scrollTab(translateTab())
+        case 2: document = scrollTab(servicesTab())
+        case 3: document = scrollTab(ocrTab())
+        case 4: document = scrollTab(ttsTab())
+        case 5: document = scrollTab(collectionTab())
+        case 6: document = scrollTab(pluginsTab())
+        case 7: document = scrollTab(shortcutsTab())
+        case 8: document = scrollTab(historyTab())
+        case 9: document = scrollTab(proxyTab())
+        case 10: document = scrollTab(backupTab())
+        case 11: document = scrollTab(migrationTab())
+        case 12: document = scrollTab(aboutTab())
+        default: document = scrollTab(generalTab())
         }
+        let content = settingsPage(document, index: selectedSettingsIndex, showsHeader: selectedSettingsIndex != 12)
         activeTabView = content
         tabCard.addSubview(content)
         activeTabConstraints = [
@@ -1099,14 +2167,67 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         ]
         NSLayoutConstraint.activate(activeTabConstraints)
         load()
+        installAutosaveHandlers(in: content)
+
+        // Reset after `load()` has populated dynamic service/plugin lists.
+        // Resetting earlier lets AppKit restore the old bottom origin when a
+        // list changes height, which clips the first section on a fresh tab.
+        if let scroll = document as? NSScrollView {
+            let resetToTop = { [weak scroll] in
+                guard let scroll else { return }
+                scroll.layoutSubtreeIfNeeded()
+                scroll.contentView.setBoundsOrigin(.zero)
+                scroll.contentView.scroll(to: .zero)
+                scroll.reflectScrolledClipView(scroll.contentView)
+            }
+            DispatchQueue.main.async(execute: resetToTop)
+            DispatchQueue.main.async {
+                DispatchQueue.main.async(execute: resetToTop)
+            }
+        }
+    }
+
+    private func installAutosaveHandlers(in root: NSView) {
+        func visit(_ view: NSView) {
+            if let button = view as? NSButton, button.target == nil, button.action == nil {
+                button.target = self
+                button.action = #selector(autosaveControlChanged(_:))
+            } else if let popup = view as? NSPopUpButton, popup.target == nil, popup.action == nil {
+                popup.target = self
+                popup.action = #selector(autosaveControlChanged(_:))
+            }
+            view.subviews.forEach(visit)
+        }
+        visit(root)
+    }
+
+    @objc private func autosaveControlChanged(_ sender: NSControl) {
+        guard !isLoadingSettings else { return }
+        scheduleAutosave()
+    }
+
+    @objc private func editableControlDidEndEditing(_ notification: Notification) {
+        guard !isLoadingSettings,
+              let control = notification.object as? NSControl,
+              control.window === window
+        else { return }
+        scheduleAutosave()
+    }
+
+    private func scheduleAutosave() {
+        guard !isLoadingSettings else { return }
+        autosaveWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in self?.persistSettings() }
+        autosaveWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: item)
     }
 
     private func formStack() -> NSStackView {
         let stack = FullWidthStackView()
         stack.orientation = .vertical
         stack.alignment = .width
-        stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 18, left: 14, bottom: 14, right: 14)
+        stack.spacing = 12
+        stack.edgeInsets = NSEdgeInsets(top: 6, left: 16, bottom: 28, right: 16)
         return stack
     }
 
@@ -1126,6 +2247,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         labelView.translatesAutoresizingMaskIntoConstraints = false
         labelView.alignment = .left
         labelView.textColor = .labelColor
+        labelView.font = .systemFont(ofSize: 13)
         control.translatesAutoresizingMaskIntoConstraints = false
 
         container.addSubview(labelView)
@@ -1134,17 +2256,17 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         NSLayoutConstraint.activate([
             labelView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             labelView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            labelView.widthAnchor.constraint(equalToConstant: 150),
+            labelView.widthAnchor.constraint(equalToConstant: 176),
             control.leadingAnchor.constraint(equalTo: labelView.trailingAnchor, constant: 12),
             control.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             control.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            control.heightAnchor.constraint(greaterThanOrEqualToConstant: 24),
+            control.heightAnchor.constraint(greaterThanOrEqualToConstant: 28),
             // Make the container's height follow the control's height, so tall
             // controls (e.g. the multi-checkbox service list) expand the row
             // instead of overflowing and overlapping the rows below.
             container.topAnchor.constraint(lessThanOrEqualTo: control.topAnchor, constant: -2),
             container.bottomAnchor.constraint(greaterThanOrEqualTo: control.bottomAnchor, constant: 2),
-            container.heightAnchor.constraint(greaterThanOrEqualToConstant: 34),
+            container.heightAnchor.constraint(greaterThanOrEqualToConstant: 40),
         ])
         // Low hugging so the container stretches; control fills remaining width.
         container.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -1161,6 +2283,17 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     /// width (because it has no intrinsic size), and the control sits at its
     /// leading edge regardless of its own hugging priority.
     private func leadingFullWidth(_ control: NSView, minHeight: CGFloat = 28) -> NSView {
+        leadingFullWidth(control, trailingInset: 0, minHeight: minHeight)
+    }
+
+    /// Variant of `leadingFullWidth` that preserves a trailing breathing space
+    /// inside the form. This is used by the plugin list, where a nested detail
+    /// stack should stop before the settings page's scroll indicator.
+    private func leadingFullWidth(
+        _ control: NSView,
+        trailingInset: CGFloat,
+        minHeight: CGFloat = 28
+    ) -> NSView {
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false
         control.translatesAutoresizingMaskIntoConstraints = false
@@ -1172,7 +2305,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             // Pin the trailing edge too, so wrapping labels are constrained to
             // the container width and wrap to multiple lines instead of growing
             // one very long line that overflows the window.
-            control.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            control.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -trailingInset),
             container.heightAnchor.constraint(greaterThanOrEqualToConstant: minHeight),
         ])
         // The container fills the stack slot; the control fills its width.
@@ -1183,6 +2316,25 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             label.setContentHuggingPriority(.defaultLow, for: .horizontal)
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
+        return container
+    }
+
+    /// Aligns body content to the text column established by a section header:
+    /// icon at the section leading edge, then 18pt icon width plus a 10pt gap.
+    /// This keeps notes, controls, and action buttons from protruding left of
+    /// the title and its explanation text.
+    private func sectionTextAligned(_ control: NSView, minHeight: CGFloat = 28) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        control.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(control)
+        NSLayoutConstraint.activate([
+            control.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 28),
+            control.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            control.topAnchor.constraint(equalTo: container.topAnchor),
+            control.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            container.heightAnchor.constraint(greaterThanOrEqualToConstant: minHeight),
+        ])
         return container
     }
 
@@ -1227,12 +2379,101 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         return leadingFullWidth(header, minHeight: 0)
     }
 
+    /// Creates a flat settings section. About is the only page that uses
+    /// explicit content cards; all regular settings pages share this open
+    /// layout so section titles and rows sit on one left-aligned grid.
+    private func settingsSection(
+        _ title: String,
+        icon: String,
+        detail: String? = nil,
+        showsHeader: Bool = true,
+        alignBodyToHeaderText: Bool = true,
+        views: [NSView]
+    ) -> NSView {
+        let content = FullWidthStackView()
+        content.translatesAutoresizingMaskIntoConstraints = false
+        content.orientation = .vertical
+        content.alignment = .width
+        content.spacing = 8
+        content.edgeInsets = NSEdgeInsets(top: 6, left: 18, bottom: 8, right: 18)
+        if showsHeader {
+            content.addArrangedSubview(settingsSectionHeader(title, icon: icon, detail: detail))
+        }
+        views.forEach {
+            if alignBodyToHeaderText {
+                content.addArrangedSubview(sectionTextAligned($0, minHeight: 0))
+            } else {
+                content.addArrangedSubview($0)
+            }
+        }
+        return content
+    }
+
+    private func settingsSectionHeader(_ title: String, icon: String, detail: String?) -> NSView {
+        let header = NSView()
+        header.translatesAutoresizingMaskIntoConstraints = false
+
+        let symbol = NSImageView(
+            image: NSImage(systemSymbolName: icon, accessibilityDescription: nil) ?? NSImage()
+        )
+        symbol.setAccessibilityElement(false)
+        symbol.translatesAutoresizingMaskIntoConstraints = false
+        symbol.imageScaling = .scaleProportionallyDown
+        symbol.contentTintColor = PythiaDesign.themeColor()
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        titleLabel.textColor = .labelColor
+
+        let textStack = NSStackView()
+        textStack.translatesAutoresizingMaskIntoConstraints = false
+        textStack.orientation = .vertical
+        textStack.alignment = .leading
+        textStack.spacing = 3
+        textStack.addArrangedSubview(titleLabel)
+        if let detail, !detail.isEmpty {
+            let detailLabel = AutoWrappingLabel(wrappingLabelWithString: detail)
+            detailLabel.font = .systemFont(ofSize: 11)
+            detailLabel.textColor = .secondaryLabelColor
+            detailLabel.maximumNumberOfLines = 2
+            detailLabel.lineBreakMode = .byWordWrapping
+            detailLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            detailLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            textStack.addArrangedSubview(detailLabel)
+        }
+
+        header.addSubview(symbol)
+        header.addSubview(textStack)
+        NSLayoutConstraint.activate([
+            symbol.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            symbol.topAnchor.constraint(equalTo: header.topAnchor, constant: 2),
+            symbol.widthAnchor.constraint(equalToConstant: 18),
+            symbol.heightAnchor.constraint(equalToConstant: 18),
+            textStack.leadingAnchor.constraint(equalTo: symbol.trailingAnchor, constant: 10),
+            textStack.trailingAnchor.constraint(equalTo: header.trailingAnchor),
+            textStack.topAnchor.constraint(equalTo: header.topAnchor),
+            textStack.bottomAnchor.constraint(equalTo: header.bottomAnchor),
+        ])
+        return header
+    }
+
     private func load() {
+        // `themeColorWell.color = ...` sends the color-well action on some
+        // AppKit releases. Suppress that programmatic notification while a
+        // page is being rebuilt, otherwise themeColorChanged() calls showTab(),
+        // which calls load() again and traps the main thread in a callback
+        // loop.
+        isLoadingSettings = true
+        defer { isLoadingSettings = false }
         let preferences = Preferences.shared
         selectLanguage(preferences.sourceLanguage, in: sourceLanguagePopup)
         selectLanguage(preferences.targetLanguage, in: targetLanguagePopup)
         selectLanguage(preferences.translateSecondLanguage, in: secondTargetLanguagePopup)
         openAIKeyField.stringValue = preferences.openAIKey
+        openAINameField.stringValue = preferences.openAICompatibleName
+        openAIBaseURLField.stringValue = preferences.openAIBaseURL
+        selectPopup(openAICompatibleAPIPopup, value: preferences.openAICompatibleAPI, mapping: ["openai": "OpenAI", "anthropic": "Anthropic"])
         openAIModelField.stringValue = preferences.openAIModel
         deepLKeyField.stringValue = preferences.deepLKey
         baiduAppIDField.stringValue = preferences.baiduAppID
@@ -1290,6 +2531,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         updateWebDAVFieldsVisibility()
         updateWebDAVAutoSyncControls()
         clipboardCheckbox.state = preferences.clipboardMonitoring ? .on : .off
+        compactTranslationWindowCheckbox.state = preferences.compactTranslationWindow ? .on : .off
         refreshPlugins()
         if let plugin = PluginManager.shared.plugins().first(where: { $0.name == preferences.pluginName || $0.title == preferences.pluginName }) {
             let represented = (plugin.legacyDirectory as NSString?)?.lastPathComponent ?? plugin.name
@@ -1301,35 +2543,32 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    @objc private func save() {
+    private func persistSettings() {
+        guard !isLoadingSettings else { return }
         let preferences = Preferences.shared
         let requestedAutoSync = webdavHistoryAutoSyncCheckbox.state == .on
         let webdavAddress = webdavURLField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        var effectiveAutoSync = requestedAutoSync
+        var autoSyncWarning: String?
         if requestedAutoSync && webdavAddress.isEmpty {
-            showAlert("启用自动同步前，请先填写 WebDAV 地址。")
-            return
+            effectiveAutoSync = false
+            webdavHistoryAutoSyncCheckbox.state = .off
+            autoSyncWarning = "WebDAV 地址为空，自动同步保持关闭"
         }
-        guard let syncIntervalValue = Int(webdavHistorySyncIntervalField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)), syncIntervalValue > 0 else {
-            showAlert("自动同步间隔必须是大于 0 的整数。")
-            return
-        }
+        let typedSyncInterval = Int(webdavHistorySyncIntervalField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
         let syncIntervalUnit = selectedPopupValue(webdavHistorySyncIntervalUnitPopup, mapping: ["minute": "分钟", "hour": "小时", "day": "天", "week": "周"])
         let secondsPerUnit = ["minute": 60, "hour": 3_600, "day": 86_400, "week": 604_800][syncIntervalUnit] ?? 3_600
-        guard syncIntervalValue <= (366 * 86_400) / secondsPerUnit else {
-            showAlert("自动同步间隔不能超过 366 天。")
-            return
+        let maximumInterval = (366 * 86_400) / secondsPerUnit
+        let validTypedInterval = typedSyncInterval.flatMap { (1...maximumInterval).contains($0) ? $0 : nil }
+        let syncIntervalValue = validTypedInterval ?? preferences.webdavHistorySyncIntervalValue
+        if requestedAutoSync && validTypedInterval == nil {
+            effectiveAutoSync = false
+            webdavHistoryAutoSyncCheckbox.state = .off
+            autoSyncWarning = "自动同步间隔无效，自动同步保持关闭"
         }
         preferences.sourceLanguage = selectedLanguageCode(sourceLanguagePopup)
         preferences.targetLanguage = selectedLanguageCode(targetLanguagePopup)
-        preferences.openAIKey = openAIKeyField.stringValue
-        preferences.openAIModel = openAIModelField.stringValue.isEmpty ? "gpt-4o-mini" : openAIModelField.stringValue
-        preferences.deepLKey = deepLKeyField.stringValue
-        preferences.baiduAppID = baiduAppIDField.stringValue
-        preferences.baiduSecret = baiduSecretField.stringValue
-        preferences.youdaoAppKey = youdaoAppKeyField.stringValue
-        preferences.youdaoSecret = youdaoSecretField.stringValue
-        preferences.libreTranslateURL = libreURLField.stringValue.isEmpty ? "https://libretranslate.com" : libreURLField.stringValue
-        preferences.libreTranslateKey = libreKeyField.stringValue
+        persistServiceFields()
         preferences.translateServiceList = serviceOrderList.orderedEnabledServices
         preferences.translateServiceOrder = serviceOrderList.orderedServices
         preferences.recognizeServiceList = recognizeServiceList.orderedEnabledServices
@@ -1383,7 +2622,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         preferences.webdavURL = webdavAddress
         preferences.webdavUsername = webdavUsernameField.stringValue
         preferences.webdavPassword = webdavPasswordField.stringValue
-        preferences.webdavHistoryAutoSync = requestedAutoSync
+        preferences.webdavHistoryAutoSync = effectiveAutoSync
         preferences.webdavHistorySyncIntervalUnit = syncIntervalUnit
         preferences.webdavHistorySyncIntervalValue = syncIntervalValue
         webdavHistorySyncIntervalField.stringValue = "\(preferences.webdavHistorySyncIntervalValue)"
@@ -1392,22 +2631,26 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         } else {
             preferences.pluginName = ""
         }
+        for name in pluginListFields.keys {
+            do {
+                try PluginManager.shared.setPluginConfig(collectPluginConfig(for: name), forPluginName: name)
+            } catch {
+                showInfoBanner("插件 \(name) 自动保存失败：\(error.localizedDescription)")
+            }
+        }
         preferences.clipboardMonitoring = clipboardCheckbox.state == .on
+        preferences.compactTranslationWindow = compactTranslationWindowCheckbox.state == .on
         updateSidebarSelection()
-        saveStatusLabel.textColor = PythiaDesign.themeColor()
         PythiaAppDelegate.shared?.applyClipboardPreference()
         let runtimeWarning = PythiaAppDelegate.shared?.applyRuntimePreferences()
         NotificationCenter.default.post(name: .preferencesChanged, object: nil)
-        window?.title = "Pythia 设置 - 已保存"
         let portWarning = rawServerPort == normalizedServerPort ? nil : "外部服务端口无效，已恢复为 60828"
         let credentialWarning = preferences.consumeCredentialStorageError().map { "凭据未能保存到本地：\($0)" }
-        let warning = [duplicateHotkeyWarning, portWarning, fontWarning, runtimeWarning, credentialWarning]
+        let warning = [autoSyncWarning, duplicateHotkeyWarning, portWarning, fontWarning, runtimeWarning, credentialWarning]
             .compactMap { $0 }
             .joined(separator: "；")
-        saveStatusLabel.stringValue = warning.isEmpty ? "已保存" : "已保存，\(warning)"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            self?.saveStatusLabel.stringValue = ""
-            self?.window?.title = "Pythia 设置"
+        if !warning.isEmpty {
+            showInfoBanner("设置已自动保存；\(warning)")
         }
     }
 
@@ -1485,12 +2728,16 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func themeColorChanged() {
+        guard !isLoadingSettings else { return }
         Preferences.shared.themeColorHex = themeColorWell.color.potHexRGB
-        saveStatusLabel.textColor = PythiaDesign.themeColor()
         updateSidebarSelection()
         // Re-color the live translation window's icon buttons / titles now.
         PythiaAppDelegate.shared?.applyRuntimePreferences()
         NotificationCenter.default.post(name: .preferencesChanged, object: nil)
+        // Recreate the visible page so the large title and About hero use the
+        // new theme color immediately, without requiring a window reopen.
+        persistSettings()
+        showTab(index: selectedSettingsIndex)
     }
 
     @objc private func trayClickEventChanged() {
@@ -1498,12 +2745,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             trayClickPopup,
             mapping: ["config": "显示设置", "translate": "显示翻译窗口", "history": "显示历史记录"]
         )
-        saveStatusLabel.textColor = PythiaDesign.themeColor()
-        saveStatusLabel.stringValue = "托盘点击已应用"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
-            guard self?.saveStatusLabel.stringValue == "托盘点击已应用" else { return }
-            self?.saveStatusLabel.stringValue = ""
-        }
+        scheduleAutosave()
     }
 
     private func selectPopup(_ popup: NSPopUpButton, value: String, mapping: [String: String]) {
@@ -1522,57 +2764,171 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func requestPermissions() {
-        _ = SelectionReader.shared.requestAccessibilityPermission()
-        let alert = NSAlert()
-        alert.messageText = "已请求权限"
-        alert.informativeText = "请在系统设置中允许辅助功能；截图 OCR 还需要屏幕录制权限。"
-        alert.runModal()
+        let accessibilityGranted = SelectionReader.shared.requestAccessibilityPermission()
+        let screenWasGranted = OCRService.shared.hasScreenCapturePermission
+        let screenGranted = screenWasGranted || OCRService.shared.requestScreenCapturePermission()
+        if screenGranted && !screenWasGranted {
+            showInfoBanner("屏幕录制权限已启用，Pythia 将自动重启使权限生效。")
+            PythiaAppDelegate.shared?.relaunchAfterPermissionChange()
+        } else if accessibilityGranted && screenGranted {
+            showInfoBanner("辅助功能与屏幕录制权限均已启用。")
+        } else {
+            showInfoBanner("请在系统设置中允许 Pythia 使用辅助功能与屏幕录制。")
+        }
     }
 
     @objc private func checkForUpdates() {
-        saveStatusLabel.textColor = .secondaryLabelColor
-        saveStatusLabel.stringValue = "正在检查更新..."
-        aboutUpdateStatusLabel.textColor = .secondaryLabelColor
-        aboutUpdateStatusLabel.stringValue = "正在检查更新..."
+        setAboutUpdateBusy(true)
+        showUpdateBanner("正在检查更新…", kind: .info, duration: nil)
         PythiaUpdateChecker.shared.check { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
+                self.setAboutUpdateBusy(false)
                 switch result {
                 case .success(let info):
-                    self.saveStatusLabel.textColor = PythiaDesign.themeColor()
-                    self.saveStatusLabel.stringValue = info.isNewer ? "发现新版本 \(info.latestVersion)" : "当前已是最新版本"
-                    self.aboutUpdateStatusLabel.textColor = PythiaDesign.themeColor()
-                    self.aboutUpdateStatusLabel.stringValue = self.saveStatusLabel.stringValue
-                    self.showUpdateResult(info)
+                    if info.isNewer {
+                        self.showUpdateAvailable(info)
+                    } else {
+                        self.showUpdateBanner(
+                            "当前版本 \(info.currentVersion) 已是最新版本。",
+                            kind: .success
+                        )
+                    }
                 case .failure(let error):
-                    self.saveStatusLabel.textColor = .systemRed
-                    self.saveStatusLabel.stringValue = "更新检查失败"
-                    self.aboutUpdateStatusLabel.textColor = .systemRed
-                    self.aboutUpdateStatusLabel.stringValue = "更新检查失败"
-                    let alert = NSAlert()
-                    alert.messageText = "更新检查失败"
-                    alert.informativeText = error.localizedDescription
-                    alert.runModal()
+                    self.showUpdateBanner(
+                        "检查更新失败：\(error.localizedDescription)",
+                        kind: .error
+                    )
                 }
             }
         }
     }
 
-    private func showUpdateResult(_ info: PythiaUpdateInfo) {
-        let alert = NSAlert()
-        if info.isNewer {
-            alert.messageText = "发现新版本 \(info.latestVersion)"
-            alert.informativeText = "当前版本：\(info.currentVersion)\n发布版本：\(info.releaseName)"
-            alert.addButton(withTitle: "打开发布页")
-            alert.addButton(withTitle: "稍后")
-            let response = alert.runModal()
-            if response == .alertFirstButtonReturn, let url = info.releaseURL {
+    private func setAboutUpdateBusy(_ busy: Bool) {
+        aboutCheckButton?.isEnabled = !busy
+    }
+
+    private func showUpdateAvailable(_ info: PythiaUpdateInfo) {
+        // Keep the main-window action in sync with the About-page banner so a
+        // manual check also exposes the same one-click hot update beside the
+        // Pythia title.
+        PythiaAppDelegate.shared?.showAvailableUpdateOnMain(info)
+        let openRelease: (() -> Void)? = info.releaseURL.map { url in
+            { [weak self] in
+                self?.dismissUpdateBanner()
                 NSWorkspace.shared.open(url)
             }
-        } else {
-            alert.messageText = "当前已是最新版本"
-            alert.informativeText = "当前版本：\(info.currentVersion)"
-            alert.runModal()
+        }
+        let startUpdate: (() -> Void)? = info.assetURL == nil ? nil : { [weak self] in
+            self?.dismissUpdateBanner()
+            self?.startHotUpdate(info)
+        }
+        showUpdateBanner(
+            "发现新版本 \(info.latestVersion)：\(info.releaseName)",
+            kind: .success,
+            primaryTitle: startUpdate == nil ? nil : "立即更新",
+            primaryAction: startUpdate,
+            secondaryTitle: openRelease == nil ? nil : "打开发布页",
+            secondaryAction: openRelease
+        )
+    }
+
+    private func showUpdateBanner(
+        _ message: String,
+        kind: PythiaTopInfoBannerKind,
+        duration: TimeInterval? = 5,
+        primaryTitle: String? = nil,
+        primaryAction: (() -> Void)? = nil,
+        secondaryTitle: String? = nil,
+        secondaryAction: (() -> Void)? = nil
+    ) {
+        updateBannerGeneration += 1
+        let generation = updateBannerGeneration
+        updateBannerDismissWorkItem?.cancel()
+        updateBannerDismissWorkItem = nil
+        updateBanner.configure(
+            message: message,
+            kind: kind,
+            primaryTitle: primaryTitle,
+            primaryAction: primaryAction,
+            secondaryTitle: secondaryTitle,
+            secondaryAction: secondaryAction
+        )
+        updateBanner.alphaValue = 1
+        updateBanner.isHidden = false
+
+        guard let duration else { return }
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.updateBannerGeneration == generation else { return }
+            self.dismissUpdateBanner()
+        }
+        updateBannerDismissWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: workItem)
+    }
+
+    private func dismissUpdateBanner() {
+        updateBannerGeneration += 1
+        updateBannerDismissWorkItem?.cancel()
+        updateBannerDismissWorkItem = nil
+        updateBanner.isHidden = true
+        updateBanner.alphaValue = 1
+    }
+
+    /// Hot update: download the release DMG, verify its signing identity,
+    /// replace /Applications/Pythia.app, and relaunch. Falls back to opening
+    /// the DMG when /Applications is not writable.
+    private func startHotUpdate(_ info: PythiaUpdateInfo) {
+        setAboutUpdateBusy(true)
+        showUpdateBanner("正在下载 \(info.latestVersion)…", kind: .info, duration: nil)
+        PythiaUpdateInstaller.shared.download(
+            info: info,
+            progress: { [weak self] fraction in
+                DispatchQueue.main.async {
+                    self?.showUpdateBanner(
+                        "正在下载 \(info.latestVersion)… \(Int(fraction * 100))%",
+                        kind: .info,
+                        duration: nil
+                    )
+                }
+            }
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .success(let dmgURL):
+                    self.showUpdateBanner("下载完成，正在校验并安装…", kind: .info, duration: nil)
+                    PythiaUpdateInstaller.shared.install(from: dmgURL) { [weak self] installResult in
+                        DispatchQueue.main.async {
+                            guard let self else { return }
+                            self.setAboutUpdateBusy(false)
+                            switch installResult {
+                            case .success(.installed(let appURL, let rollbackURL)):
+                                self.showUpdateBanner("版本 \(info.latestVersion) 安装完成，正在重启…", kind: .success)
+                                self.relaunch(updatedApp: appURL, rollbackURL: rollbackURL)
+                            case .success(.openedInstaller(let url)):
+                                self.showUpdateBanner(
+                                    "已打开 \(url.lastPathComponent)，请将 Pythia 拖入「应用程序」完成更新。",
+                                    kind: .success
+                                )
+                            case .failure(let error):
+                                self.showUpdateBanner("更新失败：\(error.localizedDescription)", kind: .error)
+                            }
+                        }
+                    }
+                case .failure(let error):
+                    self.setAboutUpdateBusy(false)
+                    self.showUpdateBanner("更新失败：\(error.localizedDescription)", kind: .error)
+                }
+            }
+        }
+    }
+
+    private func relaunch(updatedApp appURL: URL, rollbackURL: URL?) {
+        PythiaUpdateInstaller.shared.relaunch(appURL: appURL, rollbackURL: rollbackURL) { [weak self] _ in
+            self?.showInfoBanner(
+                "更新已安装，请退出当前 Pythia 后重新打开 /Applications/Pythia.app。",
+                isError: true
+            )
         }
     }
 
@@ -1608,6 +2964,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let displayName = (pluginPopup.titleOfSelectedItem ?? name)
             .components(separatedBy: " · ")
             .first ?? name
+        deletePlugin(named: name, displayName: displayName)
+    }
+
+    private func deletePlugin(named name: String, displayName: String) {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "删除「\(displayName)」？"
@@ -1655,6 +3015,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     @objc private func refreshPlugins() {
         rebuildPluginPopup()
         rebuildPluginConfigFields()
+        rebuildPluginList()
         updatePluginPathLabel()
         reloadServiceLists()
         pluginTestResultLabel.stringValue = ""
@@ -1994,10 +3355,181 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    /// Presents the same transient top information strip used by update
+    /// checking for settings-page results and runtime reminders.
+    func showInfoBanner(_ message: String, isError: Bool = false) {
+        showUpdateBanner(message, kind: isError ? .error : .info)
+    }
+
+    /// Used by the app delegate's background update check so startup updates
+    /// use the same non-modal presentation as a manual check.
+    func showAvailableUpdateBanner(_ info: PythiaUpdateInfo) {
+        showUpdateAvailable(info)
+    }
+
     private func showAlert(_ message: String) {
-        let alert = NSAlert()
-        alert.messageText = "Pythia"
-        alert.informativeText = message
-        alert.runModal()
+        showInfoBanner(message)
+    }
+}
+
+enum PythiaTopInfoBannerKind {
+    case info
+    case success
+    case error
+
+    var iconName: String {
+        switch self {
+        case .info, .success:
+            return "info.circle.fill"
+        case .error:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+
+    func backgroundColor() -> NSColor {
+        switch self {
+        case .info, .success:
+            return PythiaDesign.themeColor()
+        case .error:
+            return .systemRed
+        }
+    }
+}
+
+/// A compact transient banner matching AI Memory's top information strip.
+/// It owns only presentation; SettingsWindowController supplies the actions.
+final class PythiaTopInfoBannerView: AdaptiveLiquidGlassView {
+    var onDismiss: (() -> Void)?
+
+    private let iconView = NSImageView()
+    private let messageLabel = NSTextField(labelWithString: "")
+    private let actions = NSStackView()
+    private let primaryButton = NSButton(title: "", target: nil, action: nil)
+    private let secondaryButton = NSButton(title: "", target: nil, action: nil)
+    private let dismissButton = NSButton(
+        image: NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "关闭提示") ?? NSImage(),
+        target: nil,
+        action: nil
+    )
+    private var primaryAction: (() -> Void)?
+    private var secondaryAction: (() -> Void)?
+
+    init() {
+        super.init(cornerRadius: 14, interactive: true)
+
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.imageScaling = .scaleProportionallyDown
+        iconView.contentTintColor = PythiaDesign.themeColor()
+
+        messageLabel.translatesAutoresizingMaskIntoConstraints = false
+        messageLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        messageLabel.textColor = .labelColor
+        messageLabel.lineBreakMode = .byTruncatingTail
+        messageLabel.maximumNumberOfLines = 1
+        messageLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        messageLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        configureActionButton(primaryButton, action: #selector(primaryButtonClicked(_:)))
+        configureActionButton(secondaryButton, action: #selector(secondaryButtonClicked(_:)))
+
+        dismissButton.translatesAutoresizingMaskIntoConstraints = false
+        dismissButton.isBordered = false
+        dismissButton.bezelStyle = .inline
+        dismissButton.imagePosition = .imageOnly
+        dismissButton.contentTintColor = .secondaryLabelColor
+        dismissButton.toolTip = "关闭提示"
+        dismissButton.target = self
+        dismissButton.action = #selector(dismissButtonClicked(_:))
+
+        actions.translatesAutoresizingMaskIntoConstraints = false
+        actions.orientation = .horizontal
+        actions.alignment = .centerY
+        actions.spacing = 6
+        actions.addArrangedSubview(primaryButton)
+        actions.addArrangedSubview(secondaryButton)
+
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        spacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let row = NSStackView(views: [iconView, messageLabel, spacer, actions, dismissButton])
+        row.translatesAutoresizingMaskIntoConstraints = false
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 10
+        row.edgeInsets = NSEdgeInsets(top: 7, left: 14, bottom: 7, right: 10)
+        contentView.addSubview(row)
+
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            row.topAnchor.constraint(equalTo: contentView.topAnchor),
+            row.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 17),
+            iconView.heightAnchor.constraint(equalToConstant: 17),
+            dismissButton.widthAnchor.constraint(equalToConstant: 18),
+            dismissButton.heightAnchor.constraint(equalToConstant: 18),
+        ])
+        configure(
+            message: "",
+            kind: .info,
+            primaryTitle: nil,
+            primaryAction: nil,
+            secondaryTitle: nil,
+            secondaryAction: nil
+        )
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(
+        message: String,
+        kind: PythiaTopInfoBannerKind,
+        primaryTitle: String?,
+        primaryAction: (() -> Void)?,
+        secondaryTitle: String?,
+        secondaryAction: (() -> Void)?
+    ) {
+        iconView.image = NSImage(systemSymbolName: kind.iconName, accessibilityDescription: nil)
+        iconView.contentTintColor = kind.backgroundColor()
+        messageLabel.textColor = .labelColor
+        primaryButton.contentTintColor = kind.backgroundColor()
+        secondaryButton.contentTintColor = kind.backgroundColor()
+        messageLabel.stringValue = message
+
+        self.primaryAction = primaryAction
+        self.secondaryAction = secondaryAction
+        primaryButton.title = primaryTitle ?? ""
+        primaryButton.isHidden = primaryTitle == nil || primaryAction == nil
+        secondaryButton.title = secondaryTitle ?? ""
+        secondaryButton.isHidden = secondaryTitle == nil || secondaryAction == nil
+        primaryButton.sizeToFit()
+        secondaryButton.sizeToFit()
+    }
+
+    private func configureActionButton(_ button: NSButton, action: Selector) {
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.isBordered = false
+        button.bezelStyle = .inline
+        button.setButtonType(.momentaryPushIn)
+        button.font = .systemFont(ofSize: 12, weight: .semibold)
+        button.contentTintColor = .white
+        button.target = self
+        button.action = action
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        button.setContentCompressionResistancePriority(.required, for: .horizontal)
+    }
+
+    @objc private func primaryButtonClicked(_ sender: NSButton) {
+        primaryAction?()
+    }
+
+    @objc private func secondaryButtonClicked(_ sender: NSButton) {
+        secondaryAction?()
+    }
+
+    @objc private func dismissButtonClicked(_ sender: NSButton) {
+        onDismiss?()
     }
 }

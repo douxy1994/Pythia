@@ -10,6 +10,7 @@
 		A10000000000000000000001 /* Pythia.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* Pythia.swift */; };
 		A10000000000000000000002 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* AppIcon.icns */; };
 		A10000000000000000000003 /* PythiaStatusTemplate.png in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* PythiaStatusTemplate.png */; };
+		A100000000000000000000B2 /* GitHubMark.pdf in Resources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B3 /* GitHubMark.pdf */; };
 		A10000000000000000000004 /* PythiaBaseIcon.png in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* PythiaBaseIcon.png */; };
 		A100000000000000000000A4 /* pythia-plugin-runner.cjs in Resources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A5 /* pythia-plugin-runner.cjs */; };
 		A10000000000000000000005 /* PythiaModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017 /* PythiaModels.swift */; };
@@ -32,6 +33,7 @@
 				A1000000000000000000002C /* TranslatorWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002D /* TranslatorWindowController.swift */; };
 				A1000000000000000000002E /* PythiaBackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002F /* PythiaBackupService.swift */; };
 				A10000000000000000000092 /* PythiaUpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000093 /* PythiaUpdateChecker.swift */; };
+				A100000000000000000000B0 /* PythiaUpdateInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B1 /* PythiaUpdateInstaller.swift */; };
 				A10000000000000000000095 /* HistorySync.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000094 /* HistorySync.swift */; };
 				A10000000000000000000097 /* NodeRuntimeResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000096 /* NodeRuntimeResolver.swift */; };
 				A10000000000000000000099 /* TextSubmissionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000098 /* TextSubmissionPolicy.swift */; };
@@ -50,6 +52,7 @@
 		A10000000000000000000013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000000000000000000014 /* Pythia.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Pythia.entitlements; sourceTree = "<group>"; };
 		A10000000000000000000015 /* PythiaStatusTemplate.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = PythiaStatusTemplate.png; sourceTree = "<group>"; };
+		A100000000000000000000B3 /* GitHubMark.pdf */ = {isa = PBXFileReference; lastKnownFileType = image.pdf; path = GitHubMark.pdf; sourceTree = "<group>"; };
 		A10000000000000000000016 /* PythiaBaseIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = PythiaBaseIcon.png; sourceTree = "<group>"; };
 		A100000000000000000000A5 /* pythia-plugin-runner.cjs */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "pythia-plugin-runner.cjs"; sourceTree = "<group>"; };
 		A10000000000000000000017 /* PythiaModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaModels.swift; sourceTree = "<group>"; };
@@ -72,6 +75,7 @@
 				A1000000000000000000002D /* TranslatorWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslatorWindowController.swift; sourceTree = "<group>"; };
 				A1000000000000000000002F /* PythiaBackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaBackupService.swift; sourceTree = "<group>"; };
 				A10000000000000000000093 /* PythiaUpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaUpdateChecker.swift; sourceTree = "<group>"; };
+				A100000000000000000000B1 /* PythiaUpdateInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaUpdateInstaller.swift; sourceTree = "<group>"; };
 				A10000000000000000000094 /* HistorySync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/HistorySync.swift; sourceTree = SOURCE_ROOT; };
 				A10000000000000000000096 /* NodeRuntimeResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/NodeRuntimeResolver.swift; sourceTree = SOURCE_ROOT; };
 				A10000000000000000000098 /* TextSubmissionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/TextSubmissionPolicy.swift; sourceTree = SOURCE_ROOT; };
@@ -136,6 +140,7 @@
 			children = (
 				A10000000000000000000012 /* AppIcon.icns */,
 				A10000000000000000000015 /* PythiaStatusTemplate.png */,
+				A100000000000000000000B3 /* GitHubMark.pdf */,
 				A10000000000000000000016 /* PythiaBaseIcon.png */,
 				A100000000000000000000A5 /* pythia-plugin-runner.cjs */,
 			);
@@ -171,6 +176,7 @@
 						A1000000000000000000001E /* OCRService.swift */,
 						A1000000000000000000002F /* PythiaBackupService.swift */,
 						A10000000000000000000093 /* PythiaUpdateChecker.swift */,
+						A100000000000000000000B1 /* PythiaUpdateInstaller.swift */,
 				A1000000000000000000001A /* MigrationService.swift */,
 				A1000000000000000000001B /* TranslationService.swift */,
 			);
@@ -207,6 +213,7 @@
 				A10000000000000000000050 /* Sources */,
 				A10000000000000000000020 /* Frameworks */,
 				A10000000000000000000051 /* Resources */,
+				A100000000000000000000A9 /* Record source revision */,
 				A100000000000000000000A6 /* Embed Pythia Plugin Runtime */,
 			);
 			buildRules = (
@@ -225,11 +232,11 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2660;
-				LastUpgradeCheck = 2660;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					A10000000000000000000040 = {
-						CreatedOnToolsVersion = 26.6;
+						CreatedOnToolsVersion = 27.0;
 					};
 				};
 			};
@@ -265,6 +272,7 @@
 			files = (
 				A10000000000000000000002 /* AppIcon.icns in Resources */,
 				A10000000000000000000003 /* PythiaStatusTemplate.png in Resources */,
+				A100000000000000000000B2 /* GitHubMark.pdf in Resources */,
 				A10000000000000000000004 /* PythiaBaseIcon.png in Resources */,
 				A100000000000000000000A4 /* pythia-plugin-runner.cjs in Resources */,
 			);
@@ -273,6 +281,26 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		A100000000000000000000A9 /* Record source revision */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Record source revision";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/PythiaSourceRevision.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\nrevision=\"$(git -C \"${SRCROOT}\" rev-parse --short=7 HEAD 2>/dev/null || true)\"\nif [ -z \"${revision}\" ]; then\n  revision=\"uncommitted\"\nfi\nresource_dir=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nmkdir -p \"${resource_dir}\"\nprintf '%s\\n' \"${revision}\" > \"${resource_dir}/PythiaSourceRevision.txt\"\n";
+		};
 		A100000000000000000000A6 /* Embed Pythia Plugin Runtime */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -318,6 +346,7 @@
 						A1000000000000000000002C /* TranslatorWindowController.swift in Sources */,
 						A1000000000000000000002E /* PythiaBackupService.swift in Sources */,
 						A10000000000000000000092 /* PythiaUpdateChecker.swift in Sources */,
+						A100000000000000000000B0 /* PythiaUpdateInstaller.swift in Sources */,
 						A10000000000000000000095 /* HistorySync.swift in Sources */,
 						A10000000000000000000097 /* NodeRuntimeResolver.swift in Sources */,
 						A10000000000000000000099 /* TextSubmissionPolicy.swift in Sources */,
@@ -382,7 +411,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -436,7 +465,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -453,19 +482,20 @@
 				CODE_SIGN_IDENTITY = "Pot Local Code Signing";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Pythia/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.douxy.pythia;
 				PRODUCT_NAME = Pythia;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
@@ -478,19 +508,20 @@
 				CODE_SIGN_IDENTITY = "Pot Local Code Signing";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Pythia/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.douxy.pythia;
 				PRODUCT_NAME = Pythia;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;

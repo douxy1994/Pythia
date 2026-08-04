@@ -2,8 +2,8 @@
 
 > 面向接手 Windows 版 Pythia 的 Codex。请先完整阅读本文，再修改代码。
 >
-> 更新日期：2026-07-18（2026-08-01 增补 WinUI 转向说明）
-> 产品版本：Pythia 1.0.0
+> 更新日期：2026-08-04
+> 产品版本：Pythia 1.2.0
 > Windows 目标：Windows 11 x64 / AMD64
 > 仓库：<https://github.com/douxy1994/Pythia>
 
@@ -111,7 +111,7 @@ git switch -c codex/windows-final origin/codex/final-acceptance
 | Flutter build number | `100` |
 | Windows 架构 | x64 / AMD64 only |
 | Windows EXE | `Pythia.exe` |
-| Windows 安装程序 | `Pythia-1.0.0-windows-x64.exe` |
+| Windows 安装程序 | `Pythia-1.2.0-windows-x64.exe` |
 | 校验文件 | `Pythia-1.0.0-windows-x64.exe.sha256` |
 | Inno Setup AppId | `{6F96CE7A-6729-4F43-9878-FF171728A2D4}` |
 | GitHub Release 地址 | `https://github.com/douxy1994/Pythia/releases` |

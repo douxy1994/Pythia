@@ -4,6 +4,7 @@ import Foundation
 
 final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerDelegate, NSWindowDelegate {
     private static let defaultWindowSize = NSSize(width: 1120, height: 720)
+    private static let compactWindowSize = NSSize(width: 680, height: 430)
     private static let fixedSourceTextHeight: CGFloat = 180
     private enum ContentMode {
         case translation
@@ -18,10 +19,15 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private var resultOrder: [String] = []
     private var resultHeightConstraints: [String: NSLayoutConstraint] = [:]
     private var resultCollapseButtons: [String: NSButton] = [:]
+    private var resultRetranslateButtons: [String: NSButton] = [:]
     private var collapsedResultKeys = Set<String>()
     private var failedResultKeys = Set<String>()
     private let servicePicker = TranslationServicePickerButton()
+    private let compactServicePicker = TranslationServicePickerButton()
     private let pinWindowButton = GlassIconButton(systemName: "pin", accessibility: "窗口置顶", target: nil, action: nil)
+    private let updateButton = PillButton("下载更新", target: nil, action: nil)
+    private var availableUpdateInfo: PythiaUpdateInfo?
+    private var isUpdating = false
     private let sourceLanguagePopup = NSPopUpButton()
     private let targetLanguagePopup = NSPopUpButton()
     private let statusLabel = NSTextField(labelWithString: "就绪")
@@ -30,16 +36,29 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private let sourcePanelTitle = NSTextField(labelWithString: "原文")
     private let resultPanelTitle = NSTextField(labelWithString: "译文")
     private weak var sourcePanelContainer: NSView?
+    private weak var fullHeaderContainer: NSView?
+    private weak var compactHeaderContainer: NSView?
+    private weak var resultPanelContainer: NSView?
+    private weak var footerContainer: NSView?
     private var languageControls: [NSView] = []
     private var sourcePanelTopConstraint: NSLayoutConstraint?
     private var resultPanelTopToSourceConstraint: NSLayoutConstraint?
     private var resultPanelTopToHeaderConstraint: NSLayoutConstraint?
+    private var fullResultLeadingConstraint: NSLayoutConstraint?
+    private var fullResultTrailingConstraint: NSLayoutConstraint?
+    private var fullResultBottomConstraint: NSLayoutConstraint?
+    private var compactResultTopConstraint: NSLayoutConstraint?
+    private var compactResultLeadingConstraint: NSLayoutConstraint?
+    private var compactResultTrailingConstraint: NSLayoutConstraint?
+    private var compactResultBottomConstraint: NSLayoutConstraint?
     private weak var backgroundView: LiquidGlassBackgroundView?
     private var dynamicTranslateWorkItem: DispatchWorkItem?
     private var resultHeightRefreshWorkItem: DispatchWorkItem?
+    private var closeOnBlurWorkItem: DispatchWorkItem?
     private var hasPresentedWindow = false
     private var isApplyingWindowPlacement = false
     private var contentMode: ContentMode = .translation
+    private var isCompactPresentation = false
 
     init() {
         let window = NSWindow(
@@ -88,10 +107,11 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         fatalError("init(coder:) has not been implemented")
     }
 
-    func showAndFocus(with text: String? = nil) {
+    func showAndFocus(with text: String? = nil, compact: Bool = false) {
         if let text, !text.isEmpty {
             sourceView.setPlainText(text)
         }
+        setCompactPresentation(compact)
         updateSourceHeight()
         applyWindowPlacementForPresentation()
         hasPresentedWindow = true
@@ -116,7 +136,9 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         let savedFrame = savedWindowFrame()
         var frame = window.frame
 
-        if preferences.translateRememberWindowSize, let savedFrame {
+        if isCompactPresentation {
+            frame.size = Self.compactWindowSize
+        } else if preferences.translateRememberWindowSize, let savedFrame {
             frame.size = savedFrame.size
         } else if !window.isVisible {
             frame.size = Self.defaultWindowSize
@@ -176,7 +198,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     }
 
     private func persistWindowFrame() {
-        guard hasPresentedWindow, !isApplyingWindowPlacement, let window else { return }
+        guard hasPresentedWindow, !isApplyingWindowPlacement, !isCompactPresentation, let window else { return }
         Preferences.shared.translateWindowFrame = NSStringFromRect(window.frame)
     }
 
@@ -198,7 +220,24 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         case .recognition:
             guard preferences.recognizeCloseOnBlur else { return }
         }
-        window?.orderOut(nil)
+        // Defer hiding so transient key-window changes (update alert panels,
+        // third-party IME candidate windows, menu tracking) don't make the
+        // window vanish while the user is typing. A pending hide is cancelled
+        // if this window becomes key again, and it only fires when no window
+        // of this app holds key status anymore (a genuine blur to another app).
+        closeOnBlurWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, let window = self.window else { return }
+            guard !window.isKeyWindow, NSApp.keyWindow == nil else { return }
+            window.orderOut(nil)
+        }
+        closeOnBlurWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        closeOnBlurWorkItem?.cancel()
+        closeOnBlurWorkItem = nil
     }
 
     func translate(_ text: String? = nil, completion: ((Result<String, Error>) -> Void)? = nil) {
@@ -229,8 +268,9 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         }
         let requestedSourceLanguage = Preferences.shared.sourceLanguage
         var requestedTargetLanguage = Preferences.shared.targetLanguage
-        // Automatic direction: pure Chinese -> English, pure English -> Chinese;
-        // mixed Chinese/English keeps the target selected by the user.
+        // Automatic direction: dominant Chinese -> English, dominant
+        // English -> Chinese (embedded terms/abbreviations don't flip it);
+        // ties keep the target selected by the user.
         if requestedSourceLanguage.lowercased() == "auto" {
             let smartTarget = AutomaticLanguagePolicy.targetLanguage(
                 for: input,
@@ -266,6 +306,8 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
             guard !finishedServices.contains(service) else { return }
             finishedServices.insert(service)
             completed += 1
+            // A finished service (success or failure) may be re-translated.
+            self.resultRetranslateButtons[service]?.isEnabled = true
             let displayName = PluginManager.shared.displayName(forServiceIdentifier: service)
             switch result {
             case .success(let output):
@@ -569,6 +611,85 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         status("已复制 \(PluginManager.shared.displayName(forServiceIdentifier: key)) 译文")
     }
 
+    @objc private func retranslateResultForService(_ sender: NSButton) {
+        guard let key = sender.identifier?.rawValue else { return }
+        retranslateService(key)
+    }
+
+    /// Re-runs a single service card with the current input and language
+    /// settings, without disturbing the other cards.
+    private func retranslateService(_ service: String) {
+        let input = sourceView.textView.string
+        guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            status("没有可翻译的文本")
+            return
+        }
+        guard resultViews[service] != nil else { return }
+        // Resolve languages exactly as translate() does so the retry uses the
+        // same effective source/target languages.
+        let requestedSourceLanguage = Preferences.shared.sourceLanguage
+        var requestedTargetLanguage = Preferences.shared.targetLanguage
+        if requestedSourceLanguage.lowercased() == "auto" {
+            requestedTargetLanguage = AutomaticLanguagePolicy.targetLanguage(
+                for: input,
+                selectedTarget: requestedTargetLanguage
+            )
+        }
+        let effectiveLanguages = TranslationService.resolvedLanguages(
+            text: input,
+            sourceLanguage: requestedSourceLanguage,
+            targetLanguage: requestedTargetLanguage
+        )
+        let displayName = PluginManager.shared.displayName(forServiceIdentifier: service)
+        resultRetranslateButtons[service]?.isEnabled = false
+        failedResultKeys.remove(service)
+        setResult("等待 \(displayName) 返回...", for: service)
+        status("正在重新翻译 \(displayName)...")
+
+        var finished = false
+        let finishOnce: (Result<String, Error>) -> Void = { [weak self] result in
+            guard let self, !finished else { return }
+            finished = true
+            self.resultRetranslateButtons[service]?.isEnabled = true
+            switch result {
+            case .success(let output):
+                self.failedResultKeys.remove(service)
+                let finalOutput = Preferences.shared.translateDeleteNewline ? Self.compactWhitespace(output) : output
+                self.setResult(finalOutput, for: service)
+                HistoryStore.shared.add(PythiaHistoryRecord(
+                    sourceText: input,
+                    translatedText: finalOutput,
+                    sourceLanguage: effectiveLanguages.source,
+                    targetLanguage: effectiveLanguages.target,
+                    service: displayName,
+                    deviceId: ""
+                ))
+                self.status("已重新翻译 \(displayName)")
+            case .failure(let error):
+                self.failedResultKeys.insert(service)
+                self.setResult(error.localizedDescription, for: service)
+                self.status("重新翻译失败：\(displayName)")
+            }
+        }
+
+        let serviceTimeout = timeoutInterval(forServiceIdentifier: service, text: input)
+        let timeout = DispatchWorkItem {
+            finishOnce(.failure(TranslationError.requestFailed("服务超时：\(displayName) 未在 \(Int(serviceTimeout)) 秒内返回。")))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + serviceTimeout, execute: timeout)
+        TranslationService.shared.translateService(
+            identifier: service,
+            text: input,
+            sourceLanguage: effectiveLanguages.source,
+            targetLanguage: effectiveLanguages.target
+        ) { result in
+            DispatchQueue.main.async {
+                timeout.cancel()
+                finishOnce(result)
+            }
+        }
+    }
+
     func clearInput() {
         dynamicTranslateWorkItem?.cancel()
         sourceView.setPlainText("")
@@ -578,6 +699,29 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
 
     func setStatus(_ text: String) {
         status(text)
+    }
+
+    /// Shows the update action beside the main Pythia title without opening a
+    /// second settings window. The button stays available for the whole
+    /// session, including when the same release was already reported during a
+    /// previous launch.
+    func showAvailableUpdate(_ info: PythiaUpdateInfo) {
+        availableUpdateInfo = info
+        guard info.isNewer else {
+            updateButton.isHidden = true
+            return
+        }
+        let hasDownload = info.assetURL != nil
+        updateButton.title = hasDownload ? "下载更新" : "查看更新"
+        updateButton.image = NSImage(
+            systemSymbolName: hasDownload ? "arrow.down.circle.fill" : "arrow.up.right",
+            accessibilityDescription: hasDownload ? "下载更新" : "打开发布页"
+        )
+        updateButton.isEnabled = true
+        updateButton.toolTip = hasDownload
+            ? "下载并安装 Pythia \(info.latestVersion)"
+            : "打开 Pythia \(info.latestVersion) 发布页"
+        updateButton.isHidden = false
     }
 
     func showMessage(title: String, text: String, status statusText: String) {
@@ -605,6 +749,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         header.alignment = .width
         header.spacing = 12
         header.translatesAutoresizingMaskIntoConstraints = false
+        fullHeaderContainer = header
 
         let titleRow = NSStackView()
         titleRow.orientation = .horizontal
@@ -620,6 +765,14 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         title.textColor = .labelColor
         titleRow.addArrangedSubview(icon)
         titleRow.addArrangedSubview(title)
+        updateButton.target = self
+        updateButton.action = #selector(downloadAvailableUpdate)
+        updateButton.imagePosition = .imageLeading
+        updateButton.imageHugsTitle = true
+        updateButton.imageScaling = .scaleProportionallyDown
+        updateButton.widthAnchor.constraint(equalToConstant: 112).isActive = true
+        updateButton.isHidden = true
+        titleRow.addArrangedSubview(updateButton)
         titleRow.addArrangedSubview(NSView())
         pinWindowButton.target = self
         pinWindowButton.action = #selector(toggleAlwaysOnTop)
@@ -630,12 +783,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         controlsRow.alignment = .centerY
         controlsRow.spacing = 10
 
-        servicePicker.onChange = { services in
-            let existingOrder = Preferences.shared.translateServiceOrder
-            Preferences.shared.translateServiceList = services
-            Preferences.shared.translateServiceOrder = services + existingOrder.filter { !services.contains($0) }
-            NotificationCenter.default.post(name: .preferencesChanged, object: nil)
-        }
+        configureServicePicker(servicePicker)
 
         configureLanguagePopup(sourceLanguagePopup, includeAuto: true)
         configureLanguagePopup(targetLanguagePopup, includeAuto: false)
@@ -659,6 +807,25 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         header.addArrangedSubview(controlsRow)
         content.addSubview(header)
 
+        let compactHeader = NSStackView()
+        compactHeader.orientation = .horizontal
+        compactHeader.alignment = .centerY
+        compactHeader.spacing = 10
+        compactHeader.translatesAutoresizingMaskIntoConstraints = false
+        compactHeader.isHidden = true
+        compactHeaderContainer = compactHeader
+        configureServicePicker(compactServicePicker)
+        compactHeader.addArrangedSubview(compactServicePicker)
+        compactHeader.addArrangedSubview(NSView())
+        let expandButton = makeIconButton(
+            systemName: "arrow.up.left.and.arrow.down.right",
+            accessibility: "展开完整翻译窗口",
+            action: #selector(expandCompactWindow)
+        )
+        expandButton.toolTip = "展开完整窗口"
+        compactHeader.addArrangedSubview(expandButton)
+        content.addSubview(compactHeader)
+
         let sourceHeaderButtons: [NSView] = [
             makeCopyButton(action: #selector(copySourceButtonClicked)),
             makeIconButton(systemName: "doc.on.clipboard", accessibility: "粘贴", action: #selector(pasteSourceClicked)),
@@ -670,6 +837,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         sourcePanelContainer = sourcePanel
         sourcePanel.translatesAutoresizingMaskIntoConstraints = false
         resultPanel.translatesAutoresizingMaskIntoConstraints = false
+        resultPanelContainer = resultPanel
         content.addSubview(sourcePanel)
         content.addSubview(resultPanel)
 
@@ -678,6 +846,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         footer.alignment = .centerY
         footer.spacing = 10
         footer.translatesAutoresizingMaskIntoConstraints = false
+        footerContainer = footer
         footer.addArrangedSubview(statusLabel)
         footer.addArrangedSubview(NSView())
         let clearInputButton = PillButton("清空", target: self, action: #selector(clearInputButtonClicked))
@@ -695,11 +864,23 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         resultPanelTopToSourceConstraint = resultPanel.topAnchor.constraint(equalTo: sourcePanel.bottomAnchor, constant: 14)
         resultPanelTopToHeaderConstraint = resultPanel.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 18)
         resultPanelTopToHeaderConstraint?.isActive = false
+        fullResultLeadingConstraint = resultPanel.leadingAnchor.constraint(equalTo: sourcePanel.leadingAnchor)
+        fullResultTrailingConstraint = resultPanel.trailingAnchor.constraint(equalTo: sourcePanel.trailingAnchor)
+        fullResultBottomConstraint = resultPanel.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -14)
+        compactResultTopConstraint = resultPanel.topAnchor.constraint(equalTo: compactHeader.bottomAnchor, constant: 10)
+        compactResultLeadingConstraint = resultPanel.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 16)
+        compactResultTrailingConstraint = resultPanel.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -16)
+        compactResultBottomConstraint = resultPanel.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -16)
         NSLayoutConstraint.activate([
             header.topAnchor.constraint(equalTo: guide.topAnchor, constant: 18),
             header.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 24),
             header.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -24),
             header.heightAnchor.constraint(equalToConstant: 92),
+
+            compactHeader.topAnchor.constraint(equalTo: guide.topAnchor, constant: 12),
+            compactHeader.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 16),
+            compactHeader.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -16),
+            compactHeader.heightAnchor.constraint(equalToConstant: 38),
 
             footer.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 24),
             footer.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -24),
@@ -711,9 +892,9 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
             sourcePanel.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -24),
 
             resultPanelTopToSourceConstraint!,
-            resultPanel.leadingAnchor.constraint(equalTo: sourcePanel.leadingAnchor),
-            resultPanel.trailingAnchor.constraint(equalTo: sourcePanel.trailingAnchor),
-            resultPanel.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -14),
+            fullResultLeadingConstraint!,
+            fullResultTrailingConstraint!,
+            fullResultBottomConstraint!,
         ])
         // Make the source panel hug its content vertically (so it does not grow
         // with the window / leave blank space), while the result panel absorbs
@@ -722,6 +903,56 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         sourcePanel.setContentCompressionResistancePriority(.defaultHigh, for: .vertical)
         resultPanel.setContentHuggingPriority(.defaultLow, for: .vertical)
         resultPanel.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+    }
+
+    private func configureServicePicker(_ picker: TranslationServicePickerButton) {
+        picker.onChange = { services in
+            let existingOrder = Preferences.shared.translateServiceOrder
+            Preferences.shared.translateServiceList = services
+            Preferences.shared.translateServiceOrder = services + existingOrder.filter { !services.contains($0) }
+            NotificationCenter.default.post(name: .preferencesChanged, object: nil)
+        }
+    }
+
+    @objc private func expandCompactWindow() {
+        setCompactPresentation(false)
+        applyWindowPlacementForPresentation()
+        window?.makeKeyAndOrderFront(nil)
+    }
+
+    private func setCompactPresentation(_ compact: Bool) {
+        guard let window else { return }
+        isCompactPresentation = compact
+        fullHeaderContainer?.isHidden = compact
+        sourcePanelContainer?.isHidden = compact || Preferences.shared.hideSource
+        footerContainer?.isHidden = compact
+        compactHeaderContainer?.isHidden = !compact
+        resultPanelTitle.isHidden = compact
+        resultCollapseButtons.values.forEach { $0.isHidden = compact }
+
+        resultPanelTopToSourceConstraint?.isActive = !compact && !Preferences.shared.hideSource
+        resultPanelTopToHeaderConstraint?.isActive = !compact && Preferences.shared.hideSource
+        fullResultLeadingConstraint?.isActive = !compact
+        fullResultTrailingConstraint?.isActive = !compact
+        fullResultBottomConstraint?.isActive = !compact
+        compactResultTopConstraint?.isActive = compact
+        compactResultLeadingConstraint?.isActive = compact
+        compactResultTrailingConstraint?.isActive = compact
+        compactResultBottomConstraint?.isActive = compact
+
+        if compact {
+            window.minSize = NSSize(width: 480, height: 280)
+            var frame = window.frame
+            frame.size = Self.compactWindowSize
+            window.setFrame(frame, display: false)
+        } else {
+            window.minSize = NSSize(width: 900, height: 600)
+            var frame = window.frame
+            frame.size = savedWindowFrame()?.size ?? Self.defaultWindowSize
+            window.setFrame(frame, display: false)
+        }
+        window.contentView?.layoutSubtreeIfNeeded()
+        scheduleResultHeightRefresh()
     }
 
     private func configureLanguagePopup(_ popup: NSPopUpButton, includeAuto: Bool) {
@@ -910,6 +1141,77 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         NotificationCenter.default.post(name: .preferencesChanged, object: nil)
     }
 
+    @objc private func downloadAvailableUpdate() {
+        guard let info = availableUpdateInfo, info.isNewer, !isUpdating else { return }
+        guard info.assetURL != nil else {
+            if let releaseURL = info.releaseURL {
+                NSWorkspace.shared.open(releaseURL)
+                status("已打开 \(info.latestVersion) 发布页")
+            } else {
+                status("当前版本没有可下载的更新附件")
+            }
+            return
+        }
+
+        isUpdating = true
+        updateButton.isEnabled = false
+        updateButton.title = "下载中…"
+        status("正在下载 \(info.latestVersion)…")
+        PythiaUpdateInstaller.shared.download(
+            info: info,
+            progress: { [weak self] fraction in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    let percent = Int(fraction * 100)
+                    self.updateButton.title = "下载 \(percent)%"
+                    self.status("正在下载 \(info.latestVersion)… \(percent)%")
+                }
+            }
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .success(let dmgURL):
+                    self.updateButton.title = "安装中…"
+                    self.status("下载完成，正在校验并安装…")
+                    PythiaUpdateInstaller.shared.install(from: dmgURL) { [weak self] installResult in
+                        DispatchQueue.main.async {
+                            guard let self else { return }
+                            switch installResult {
+                            case .success(.installed(let appURL, let rollbackURL)):
+                                self.status("版本 \(info.latestVersion) 安装完成，正在重启…")
+                                self.relaunchUpdatedApp(appURL, rollbackURL: rollbackURL)
+                            case .success(.openedInstaller(let url)):
+                                self.resetUpdateButton()
+                                self.status("已打开 \(url.lastPathComponent)，请完成更新")
+                            case .failure(let error):
+                                self.resetUpdateButton()
+                                self.status("更新失败：\(error.localizedDescription)")
+                            }
+                        }
+                    }
+                case .failure(let error):
+                    self.resetUpdateButton()
+                    self.status("更新失败：\(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private func resetUpdateButton() {
+        isUpdating = false
+        updateButton.isEnabled = true
+        let hasDownload = availableUpdateInfo?.assetURL != nil
+        updateButton.title = hasDownload ? "下载更新" : "查看更新"
+    }
+
+    private func relaunchUpdatedApp(_ appURL: URL, rollbackURL: URL?) {
+        PythiaUpdateInstaller.shared.relaunch(appURL: appURL, rollbackURL: rollbackURL) { [weak self] _ in
+            self?.resetUpdateButton()
+            self?.status("更新已安装，请退出当前 Pythia 后重新打开 /Applications/Pythia.app。")
+        }
+    }
+
     @objc private func languageChanged() {
         Preferences.shared.sourceLanguage = selectedLanguageCode(sourceLanguagePopup)
         Preferences.shared.targetLanguage = selectedLanguageCode(targetLanguagePopup)
@@ -918,6 +1220,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
 
     @objc private func reloadPreferences() {
         servicePicker.reloadOptions(selected: Preferences.shared.translateServiceList)
+        compactServicePicker.reloadOptions(selected: Preferences.shared.translateServiceList)
         selectLanguage(Preferences.shared.sourceLanguage, in: sourceLanguagePopup)
         selectLanguage(Preferences.shared.targetLanguage, in: targetLanguagePopup)
         updatePanelTitles()
@@ -985,9 +1288,9 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private func applyRuntimeTranslationPreferences() {
         let preferences = Preferences.shared
         languageControls.forEach { $0.isHidden = preferences.hideLanguage }
-        sourcePanelContainer?.isHidden = preferences.hideSource
-        resultPanelTopToSourceConstraint?.isActive = !preferences.hideSource
-        resultPanelTopToHeaderConstraint?.isActive = preferences.hideSource
+        sourcePanelContainer?.isHidden = isCompactPresentation || preferences.hideSource
+        resultPanelTopToSourceConstraint?.isActive = !isCompactPresentation && !preferences.hideSource
+        resultPanelTopToHeaderConstraint?.isActive = !isCompactPresentation && preferences.hideSource
         window?.alphaValue = 1.0
         sourceView.applyFontPreferences()
         resultViews.values.forEach { $0.applyFontPreferences() }
@@ -1062,7 +1365,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
             height.isActive = true
             resultHeightConstraints[service] = height
 
-            makeResultSection(key: service, title: displayName, textView: textView)
+            makeResultSection(key: service, title: displayName, textView: textView, showRetranslate: true)
             resultViews[service] = textView
             resultOrder.append(service)
             scheduleResultHeightRefresh()
@@ -1073,7 +1376,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     /// Builds one independent translation-result card. Each service gets its
     /// own MaterialCard, copy action, and disclosure control so multi-service
     /// output does not visually collapse into one shared translation box.
-    private func makeResultSection(key: String, title: String, textView: PythiaTextView) {
+    private func makeResultSection(key: String, title: String, textView: PythiaTextView, showRetranslate: Bool = false) {
         let card = MaterialCardView()
         card.translatesAutoresizingMaskIntoConstraints = false
         card.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -1093,6 +1396,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
 
         let collapseButton = makeIconButton(systemName: "chevron.down", accessibility: "收起 \(title)", action: #selector(toggleResultSection))
         collapseButton.identifier = NSUserInterfaceItemIdentifier(key)
+        collapseButton.isHidden = isCompactPresentation
         resultCollapseButtons[key] = collapseButton
 
         let copyButton = makeCopyButton(action: #selector(copyResultForService))
@@ -1105,6 +1409,15 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         headerRow.addArrangedSubview(collapseButton)
         headerRow.addArrangedSubview(titleLabel)
         headerRow.addArrangedSubview(NSView())
+        if showRetranslate {
+            // Re-translate this service with the current input. Enabled only
+            // after the service has returned a result (or an error).
+            let retranslateButton = makeIconButton(systemName: "arrow.clockwise", accessibility: "重新翻译", action: #selector(retranslateResultForService))
+            retranslateButton.identifier = NSUserInterfaceItemIdentifier(key)
+            retranslateButton.isEnabled = false
+            resultRetranslateButtons[key] = retranslateButton
+            headerRow.addArrangedSubview(retranslateButton)
+        }
         headerRow.addArrangedSubview(copyButton)
 
         content.addArrangedSubview(headerRow)
@@ -1164,7 +1477,9 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private func setResult(_ text: String, for provider: String) {
         guard let textView = resultViews[provider] else { return }
         textView.setPlainText(text)
-        updateResultHeight(for: provider)
+        // Height is reconciled by the coalesced refresh: multiple services
+        // finishing back-to-back then produce a single measure+layout pass
+        // instead of interleaved forced layouts of the live TextKit 2 views.
         scheduleResultHeightRefresh()
     }
 
@@ -1210,6 +1525,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         NSLayoutConstraint.deactivate(Array(resultHeightConstraints.values))
         resultHeightConstraints.removeAll()
         resultCollapseButtons.removeAll()
+        resultRetranslateButtons.removeAll()
         collapsedResultKeys.removeAll()
         resultHeightRefreshWorkItem?.cancel()
         resultHeightRefreshWorkItem = nil

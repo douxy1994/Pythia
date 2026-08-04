@@ -3,6 +3,9 @@ import Foundation
 
 final class HistoryWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     private let tableView = NSTableView()
+    private let infoBanner = PythiaTopInfoBannerView()
+    private var infoBannerDismissWorkItem: DispatchWorkItem?
+    private var infoBannerGeneration = 0
     var onLoadRecord: ((TranslationRecord) -> Void)?
 
     init() {
@@ -40,6 +43,13 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
             root.topAnchor.constraint(equalTo: content.topAnchor),
             root.bottomAnchor.constraint(equalTo: content.bottomAnchor),
         ])
+
+        infoBanner.translatesAutoresizingMaskIntoConstraints = false
+        infoBanner.isHidden = true
+        infoBanner.onDismiss = { [weak self] in
+            self?.dismissInfoBanner()
+        }
+        root.addArrangedSubview(infoBanner)
 
         let title = NSTextField(labelWithString: "历史记录")
         title.font = .systemFont(ofSize: 24, weight: .bold)
@@ -193,9 +203,31 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
     }
 
     private func showAlert(title: String, message: String) {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = message
-        alert.runModal()
+        infoBannerGeneration += 1
+        let generation = infoBannerGeneration
+        infoBannerDismissWorkItem?.cancel()
+        infoBannerDismissWorkItem = nil
+        infoBanner.configure(
+            message: "\(title)：\(message)",
+            kind: .info,
+            primaryTitle: nil,
+            primaryAction: nil,
+            secondaryTitle: nil,
+            secondaryAction: nil
+        )
+        infoBanner.isHidden = false
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.infoBannerGeneration == generation else { return }
+            self.dismissInfoBanner()
+        }
+        infoBannerDismissWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: workItem)
+    }
+
+    private func dismissInfoBanner() {
+        infoBannerGeneration += 1
+        infoBannerDismissWorkItem?.cancel()
+        infoBannerDismissWorkItem = nil
+        infoBanner.isHidden = true
     }
 }

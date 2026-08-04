@@ -88,7 +88,13 @@ final class PythiaTextView: NSScrollView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        applyTextAppearance()
+        // Defer to the next runloop turn: AppKit delivers this inside the
+        // display cycle, and mutating the text storage (the full-text
+        // addAttribute below) while TextKit 2 is enumerating viewport
+        // elements crashes with NSRLEArray objectAtRunIndex:length:.
+        DispatchQueue.main.async { [weak self] in
+            self?.applyTextAppearance()
+        }
     }
 
     override func layout() {
@@ -181,27 +187,26 @@ final class PythiaTextView: NSScrollView {
     }
 
     func fittingHeight(for width: CGFloat) -> CGFloat {
-        guard let container = textView.textContainer, let lm = textView.layoutManager else { return 44 }
-        // NSTextView lays text out inside its horizontal text-container insets.
-        // Measuring against the whole scroll-view width makes a paragraph look
-        // one line shorter than it really is and clips the final line.
+        // Measure with a private, offscreen TextKit 1 stack. Driving the live
+        // text view's layout manager (invalidateLayout/ensureLayout through
+        // the TextKit 1 compatibility shim) forces synchronous TextKit 2
+        // viewport layout and can interleave with the display cycle, which
+        // crashed with NSRLEArray objectAtRunIndex:length:.
         let contentWidth = max(1, width - textView.textContainerInset.width * 2)
-        let originalTracksWidth = container.widthTracksTextView
-        container.widthTracksTextView = false
-        container.containerSize = NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
-        let characterCount = textView.textStorage?.length ?? 0
-        lm.invalidateLayout(
-            forCharacterRange: NSRange(location: 0, length: characterCount),
-            actualCharacterRange: nil
+        let measurementStorage = NSTextStorage(attributedString: textView.attributedString())
+        let measurementLayout = NSLayoutManager()
+        let measurementContainer = NSTextContainer(
+            size: NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
         )
-        lm.ensureLayout(for: container)
+        measurementContainer.lineFragmentPadding = textView.textContainer?.lineFragmentPadding ?? 0
+        measurementLayout.addTextContainer(measurementContainer)
+        measurementStorage.addLayoutManager(measurementLayout)
+        measurementLayout.ensureLayout(for: measurementContainer)
         // usedRect includes complete line fragments (leading and descenders),
         // unlike a glyph bounding box, which can underestimate the last line.
-        let usedHeight = lm.usedRect(for: container).maxY
+        let usedHeight = measurementLayout.usedRect(for: measurementContainer).maxY
         let font = textView.font ?? NSFont.systemFont(ofSize: 15)
-        let trailingLineHeight = textView.string.hasSuffix("\n") ? lm.defaultLineHeight(for: font) : 0
-        container.widthTracksTextView = originalTracksWidth
-        container.containerSize = NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
+        let trailingLineHeight = textView.string.hasSuffix("\n") ? measurementLayout.defaultLineHeight(for: font) : 0
         return max(
             44,
             ceil(usedHeight + trailingLineHeight + textView.textContainerInset.height * 2 + 4)
@@ -456,7 +461,13 @@ final class GlassIconButton: NSButton {
         didSet { updateGlass() }
     }
 
-    init(systemName: String, accessibility: String, target: AnyObject?, action: Selector?) {
+    init(
+        systemName: String,
+        accessibility: String,
+        target: AnyObject?,
+        action: Selector?,
+        width: CGFloat = 34
+    ) {
         super.init(frame: .zero)
         image = NSImage(systemSymbolName: systemName, accessibilityDescription: accessibility)
         toolTip = accessibility
@@ -472,7 +483,7 @@ final class GlassIconButton: NSButton {
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = false
         heightAnchor.constraint(equalToConstant: 28).isActive = true
-        widthAnchor.constraint(equalToConstant: 34).isActive = true
+        widthAnchor.constraint(equalToConstant: width).isActive = true
         updateGlass()
     }
 
@@ -559,30 +570,111 @@ final class LiquidGlassBackgroundView: NSVisualEffectView {
     }
 }
 
+/// A narrow AppKit bridge to the macOS 26/27 Liquid Glass API.
+///
+/// Navigation and transient overlays are the two places in Pythia that need a
+/// glass layer. Keeping the content in `contentView` follows AppKit's
+/// `NSGlassEffectView` contract and leaves the settings pages themselves on a
+/// flat content plane. The fallback preserves the same hierarchy on older
+/// macOS versions without drawing a custom border or opaque card.
+class AdaptiveLiquidGlassView: NSView {
+    let contentView = NSView()
+    private let effectView: NSView
+
+    init(
+        cornerRadius: CGFloat = 0,
+        tintColor: NSColor? = nil,
+        interactive: Bool = false
+    ) {
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView()
+            glass.style = .regular
+            glass.cornerRadius = cornerRadius
+            glass.tintColor = tintColor
+            if #available(macOS 27.0, *) {
+                glass.effectIsInteractive = interactive
+            }
+            effectView = glass
+        } else {
+            let fallback = NSVisualEffectView()
+            fallback.material = .sidebar
+            fallback.blendingMode = .withinWindow
+            fallback.state = .active
+            effectView = fallback
+        }
+
+        super.init(frame: .zero)
+        wantsLayer = false
+        effectView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(effectView)
+        NSLayoutConstraint.activate([
+            effectView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            effectView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            effectView.topAnchor.constraint(equalTo: topAnchor),
+            effectView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+
+        if #available(macOS 26.0, *), let glass = effectView as? NSGlassEffectView {
+            glass.contentView = contentView
+        } else {
+            effectView.addSubview(contentView)
+            NSLayoutConstraint.activate([
+                contentView.leadingAnchor.constraint(equalTo: effectView.leadingAnchor),
+                contentView.trailingAnchor.constraint(equalTo: effectView.trailingAnchor),
+                contentView.topAnchor.constraint(equalTo: effectView.topAnchor),
+                contentView.bottomAnchor.constraint(equalTo: effectView.bottomAnchor),
+            ])
+        }
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+
 final class SettingsSidebarItemView: NSControl {
+    private let symbolView = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
+    private var trackingArea: NSTrackingArea?
+    private var isHovering = false
     let index: Int
     var isActive: Bool = false {
         didSet { updateAppearance() }
     }
 
-    init(title: String, index: Int, target: AnyObject?, action: Selector?) {
+    init(title: String, symbolName: String, index: Int, target: AnyObject?, action: Selector?) {
         self.index = index
         super.init(frame: .zero)
         self.target = target
         self.action = action
         wantsLayer = true
-        layer?.cornerRadius = 9
+        layer?.cornerRadius = 10
         layer?.cornerCurve = .continuous
         translatesAutoresizingMaskIntoConstraints = false
+
+        symbolView.image = NSImage(
+            systemSymbolName: symbolName,
+            accessibilityDescription: nil
+        )
+        symbolView.setAccessibilityElement(false)
+        symbolView.imageScaling = .scaleProportionallyDown
+        symbolView.translatesAutoresizingMaskIntoConstraints = false
 
         titleLabel.stringValue = title
         titleLabel.alignment = .left
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        addSubview(symbolView)
         addSubview(titleLabel)
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: 34),
-            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            heightAnchor.constraint(equalToConstant: 38),
+            symbolView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            symbolView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            symbolView.widthAnchor.constraint(equalToConstant: 18),
+            symbolView.heightAnchor.constraint(equalToConstant: 18),
+            titleLabel.leadingAnchor.constraint(equalTo: symbolView.trailingAnchor, constant: 10),
             titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
@@ -602,9 +694,43 @@ final class SettingsSidebarItemView: NSControl {
         updateAppearance()
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = true
+        updateAppearance()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+        updateAppearance()
+    }
+
     private func updateAppearance() {
-        layer?.backgroundColor = isActive ? PythiaDesign.selectionFillColor(for: effectiveAppearance).cgColor : NSColor.clear.cgColor
-        titleLabel.textColor = isActive ? .white : .labelColor
+        let theme = PythiaDesign.themeColor()
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let selectedFill = theme.withAlphaComponent(dark ? 0.28 : 0.20)
+        let hoverFill = dark
+            ? NSColor.white.withAlphaComponent(0.12)
+            : NSColor.black.withAlphaComponent(0.07)
+        let fill = isActive ? selectedFill : (isHovering ? hoverFill : .clear)
+        layer?.backgroundColor = fill.cgColor
+        let selectedText = dark ? theme.blended(withFraction: 0.72, of: .white) ?? .white : theme
+        titleLabel.textColor = isActive ? selectedText : .labelColor
+        symbolView.contentTintColor = isActive ? selectedText : .secondaryLabelColor
         titleLabel.font = .systemFont(ofSize: 15, weight: isActive ? .semibold : .regular)
     }
 }
@@ -627,6 +753,8 @@ final class ServiceOrderListView: NSView, NSTableViewDataSource, NSTableViewDele
     private var items: [(id: String, title: String)] = []
     /// IDs currently enabled (checked).
     private var enabled: Set<String> = []
+    private var listHeightConstraint: NSLayoutConstraint?
+    private let maximumVisibleRows = 6
 
     private let tableView: NSTableView = {
         let tv = NSTableView()
@@ -666,8 +794,15 @@ final class ServiceOrderListView: NSView, NSTableViewDataSource, NSTableViewDele
         tableView.dataSource = self
         tableView.delegate = self
         tableView.registerForDraggedTypes([.string])
-        // Tall enough to show several rows even before layout settles.
-        heightAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
+        // The list grows with the services actually available. A fixed 180pt
+        // minimum left a large empty block on OCR/TTS pages when only the
+        // built-in service was present; six rows remains the compact maximum
+        // before the native table scroll view takes over.
+        let height = heightForServiceCount(0)
+        let constraint = heightAnchor.constraint(equalToConstant: height)
+        constraint.priority = .required
+        constraint.isActive = true
+        listHeightConstraint = constraint
     }
 
     required init?(coder: NSCoder) {
@@ -715,6 +850,7 @@ final class ServiceOrderListView: NSView, NSTableViewDataSource, NSTableViewDele
         }
         items = ordered
         tableView.reloadData()
+        updateListHeight()
     }
 
     /// Refreshes the known-service set while preserving order/enabled state.
@@ -731,6 +867,7 @@ final class ServiceOrderListView: NSView, NSTableViewDataSource, NSTableViewDele
         items.insert((id: key, title: key), at: 0)
         enabled.insert(key)
         tableView.reloadData()
+        updateListHeight()
         fireChange()
     }
 
@@ -773,7 +910,22 @@ final class ServiceOrderListView: NSView, NSTableViewDataSource, NSTableViewDele
         items.removeAll { $0.id == id }
         enabled.remove(id)
         tableView.reloadData()
+        updateListHeight()
         fireChange()
+    }
+
+    private func heightForServiceCount(_ count: Int) -> CGFloat {
+        let visibleCount = min(max(1, count), maximumVisibleRows)
+        let rowHeight: CGFloat = 30
+        let rowSpacing: CGFloat = 4
+        let topBottomInset: CGFloat = 4
+        return CGFloat(visibleCount) * rowHeight
+            + CGFloat(max(0, visibleCount - 1)) * rowSpacing
+            + topBottomInset
+    }
+
+    private func updateListHeight() {
+        listHeightConstraint?.constant = heightForServiceCount(items.count)
     }
 
     // Drag-to-reorder: validate same-table move.
@@ -964,6 +1116,9 @@ final class TranslationServicePickerButton: NSButton {
     private var options: [(id: String, title: String)] = []
     private var selectedIDs: [String] = []
     private let popover = NSPopover()
+    private var trackingArea: NSTrackingArea?
+    private var isHovering = false
+    private var isPressing = false
 
     init() {
         super.init(frame: .zero)
@@ -973,12 +1128,55 @@ final class TranslationServicePickerButton: NSButton {
         target = self
         action = #selector(openServiceMenu)
         widthAnchor.constraint(greaterThanOrEqualToConstant: 150).isActive = true
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.cornerCurve = .continuous
         popover.behavior = .transient
         reloadOptions(selected: Preferences.shared.translateServiceList)
+        updateAppearance()
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = true
+        updateAppearance()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+        isPressing = false
+        updateAppearance()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        isPressing = true
+        updateAppearance()
+        super.mouseDown(with: event)
+        isPressing = false
+        updateAppearance()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
     }
 
     func reloadOptions(selected: [String]) {
@@ -1042,6 +1240,20 @@ final class TranslationServicePickerButton: NSButton {
         } else {
             title = "服务 \(selectedIDs.count)"
         }
+        updateAppearance()
+    }
+
+    private func updateAppearance() {
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let hoverFill = dark
+            ? NSColor.white.withAlphaComponent(0.13)
+            : NSColor.black.withAlphaComponent(0.07)
+        let pressedFill = dark
+            ? NSColor.white.withAlphaComponent(0.20)
+            : NSColor.black.withAlphaComponent(0.12)
+        layer?.backgroundColor = (isPressing ? pressedFill : (isHovering ? hoverFill : .clear)).cgColor
+        layer?.borderWidth = isHovering || isPressing ? 0.7 : 0
+        layer?.borderColor = PythiaDesign.glassBorderColor(for: effectiveAppearance).cgColor
     }
 }
 
@@ -1152,17 +1364,19 @@ final class PillButton: NSButton {
         self.title = title
         self.target = target
         self.action = action
-        isBordered = false
-        bezelStyle = .inline
-        controlSize = .large
+        // Use the native AppKit button renderer so macOS 27 can provide its
+        // adaptive Liquid Glass treatment. The previous layer-painted fill
+        // created a second, rectangular visual language on top of the system.
+        isBordered = true
+        bezelStyle = .rounded
+        controlSize = .small
         font = .systemFont(ofSize: 13, weight: .semibold)
         setButtonType(.momentaryPushIn)
-        wantsLayer = true
-        layer?.cornerRadius = 13
-        layer?.cornerCurve = .continuous
-        layer?.masksToBounds = false
         contentTintColor = tintColor ?? PythiaDesign.themeColor()
-        heightAnchor.constraint(greaterThanOrEqualToConstant: 28).isActive = true
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.cornerCurve = .continuous
+        heightAnchor.constraint(greaterThanOrEqualToConstant: 26).isActive = true
         widthAnchor.constraint(greaterThanOrEqualToConstant: 52).isActive = true
         updateGlass()
     }
@@ -1211,25 +1425,17 @@ final class PillButton: NSButton {
     }
 
     private func updateGlass() {
-        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let theme = fixedTintColor ?? PythiaDesign.themeColor()
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         contentTintColor = theme
-        attributedTitle = NSAttributedString(
-            string: title,
-            attributes: [
-                .font: font ?? NSFont.systemFont(ofSize: 13, weight: .semibold),
-                .foregroundColor: theme,
-            ]
-        )
-        let restingFill = dark ? NSColor.white.withAlphaComponent(0.075) : NSColor.black.withAlphaComponent(0.045)
-        let hoverFill = dark ? NSColor.white.withAlphaComponent(0.15) : NSColor.black.withAlphaComponent(0.075)
-        let pressFill = theme.withAlphaComponent(dark ? 0.26 : 0.18)
-        layer?.backgroundColor = (isPressing ? pressFill : (isHovering ? hoverFill : restingFill)).cgColor
+        let hoverFill = dark
+            ? NSColor.white.withAlphaComponent(0.13)
+            : NSColor.black.withAlphaComponent(0.07)
+        let pressedFill = dark
+            ? NSColor.white.withAlphaComponent(0.20)
+            : NSColor.black.withAlphaComponent(0.12)
+        layer?.backgroundColor = (isPressing ? pressedFill : (isHovering ? hoverFill : .clear)).cgColor
         layer?.borderWidth = isHovering || isPressing ? 0.7 : 0
         layer?.borderColor = PythiaDesign.glassBorderColor(for: effectiveAppearance).cgColor
-        layer?.shadowOpacity = isHovering ? 0.18 : 0
-        layer?.shadowRadius = isHovering ? 12 : 0
-        layer?.shadowOffset = NSSize(width: 0, height: -3)
-        layer?.shadowColor = PythiaDesign.glassShadowColor(for: effectiveAppearance)
     }
 }

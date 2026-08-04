@@ -27,7 +27,14 @@ Package:
 
 ```sh
 ./script/package_release.sh
-hdiutil verify release/Pythia/Pythia.dmg
+hdiutil verify release/Pythia/Pythia-1.2.0-macos-arm64.dmg
+shasum -a 256 -c release/Pythia/Pythia-1.2.0-macos-arm64.dmg.sha256
+```
+
+Run the macOS UI contracts for the compact/full-window synchronization, custom LLM protocols, and screenshot-permission flow:
+
+```sh
+./script/test_macos_ui_contracts.sh
 ```
 
 Shared core tests:

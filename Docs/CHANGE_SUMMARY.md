@@ -28,4 +28,4 @@
 
 - Add richer conflict log UI and cross-platform sync status views.
 - Complete the remaining user-driven Windows acceptance matrix for IME, representative selection targets, screenshot OCR language packs, tray/hotkey conflicts, mixed-DPI displays, live provider credentials, WebDAV cross-device sync, and startup-after-login.
-- Authenticode-sign the production Windows installer from the Windows certificate store before publishing it.
+- Add Authenticode signing in a later release; Windows 1.2.0 is published unsigned with an explicit SmartScreen warning and SHA-256 sidecar.

@@ -33,6 +33,7 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        settings?.flushPendingAutosave()
         NotificationCenter.default.removeObserver(self)
         webDAVHistorySyncDebounce?.cancel()
         webDAVHistorySyncDebounce = nil
@@ -63,6 +64,26 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
 
     func setStatus(_ text: String) {
         translator.setStatus(text)
+    }
+
+    /// Screen Recording grants take effect only after the capturing app has
+    /// restarted. Relaunch the exact current app bundle so TCC keeps the same
+    /// code-signing identity instead of opening an ad-hoc build elsewhere.
+    func relaunchAfterPermissionChange() {
+        let appPath = Bundle.main.bundleURL.path
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "sleep 1; /usr/bin/open -n \"$1\"", "pythia-relaunch", appPath]
+        do {
+            try process.run()
+            NSApp.terminate(nil)
+        } catch {
+            translator.setStatus("权限已启用，请手动重启 Pythia")
+        }
+    }
+
+    func showAvailableUpdateOnMain(_ info: PythiaUpdateInfo) {
+        translator.showAvailableUpdate(info)
     }
 
     func showHistory() {
@@ -97,7 +118,7 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
                 guard let self else { return }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else {
-                    self.translator.showAndFocus()
+                    self.translator.showAndFocus(compact: Preferences.shared.compactTranslationWindow)
                     let message = SelectionReader.shared.accessibilityTrusted(prompt: false)
                         ? "没有从「\(targetName)」读取到选中的文字。请先在目标应用中选中文字；如果仍失败，可能是目标应用没有向 macOS 辅助功能接口暴露选区。"
                         : "Pythia 当前没有辅助功能权限。请在系统设置的「隐私与安全性」-「辅助功能」中允许 Pythia；使用稳定签名版本后，后续更新不需要重复授权。"
@@ -108,7 +129,10 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
                     )
                     return
                 }
-                self.translator.showAndFocus(with: trimmed)
+                self.translator.showAndFocus(
+                    with: trimmed,
+                    compact: Preferences.shared.compactTranslationWindow
+                )
                 self.translator.translate(trimmed)
             }
         }
@@ -288,22 +312,15 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
     }
 
     private func checkForUpdatesOnStartup() {
-        PythiaUpdateChecker.shared.check { result in
+        PythiaUpdateChecker.shared.check { [weak self] result in
             DispatchQueue.main.async {
+                guard let self else { return }
                 guard case .success(let info) = result, info.isNewer else { return }
-                guard Preferences.shared.lastNotifiedUpdateVersion != info.latestVersion else {
-                    self.translator.setStatus("发现新版本 \(info.latestVersion)")
-                    return
+                if Preferences.shared.lastNotifiedUpdateVersion != info.latestVersion {
+                    Preferences.shared.lastNotifiedUpdateVersion = info.latestVersion
                 }
-                Preferences.shared.lastNotifiedUpdateVersion = info.latestVersion
-                let alert = NSAlert()
-                alert.messageText = "Pythia 有新版本 \(info.latestVersion)"
-                alert.informativeText = "当前版本：\(info.currentVersion)\n发布版本：\(info.releaseName)"
-                alert.addButton(withTitle: "打开发布页")
-                alert.addButton(withTitle: "稍后")
-                if alert.runModal() == .alertFirstButtonReturn, let url = info.releaseURL {
-                    NSWorkspace.shared.open(url)
-                }
+                self.translator.showAvailableUpdate(info)
+                self.translator.setStatus("发现新版本 \(info.latestVersion)")
             }
         }
     }
@@ -355,7 +372,7 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
         hotKeys.onTranslateSelection = { [weak self] in self?.translateSelection() }
         hotKeys.onInputTranslate = { [weak self] in self?.showInputTranslator() }
         hotKeys.onOCR = { [weak self] in
-            self?.translator.showAndFocus()
+            self?.translator.showAndFocus(compact: Preferences.shared.compactTranslationWindow)
             self?.translator.recognizeScreen(translateAfterRecognition: true)
         }
         hotKeys.onOCRRecognize = { [weak self] in
@@ -378,7 +395,7 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
             self?.translator.recognizeScreen(translateAfterRecognition: false)
         }
         httpServer.onOCRTranslate = { [weak self] in
-            self?.translator.showAndFocus()
+            self?.translator.showAndFocus(compact: Preferences.shared.compactTranslationWindow)
             self?.translator.recognizeScreen(translateAfterRecognition: true)
         }
         httpServer.onConfig = { [weak self] in self?.showSettings() }
@@ -444,7 +461,7 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
     }
 
     @objc func ocrMenu() {
-        translator.showAndFocus()
+        translator.showAndFocus(compact: Preferences.shared.compactTranslationWindow)
         translator.recognizeScreen(translateAfterRecognition: true)
     }
 
@@ -474,6 +491,12 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
     @objc func settingsMenu() {
         NSApp.activate(ignoringOtherApps: true)
         showSettings()
+    }
+
+    @objc func aboutMenu() {
+        NSApp.activate(ignoringOtherApps: true)
+        showSettings()
+        settings?.selectAboutTab()
     }
 
     @objc func quit() {
