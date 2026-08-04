@@ -52,5 +52,5 @@ dotnet run --project ..\Pythia.WinUI.Tests\Pythia.WinUI.Tests.csproj -c Release
 ## Installer
 
 ```powershell
-.\tool\build-installer.ps1 -Version 1.2.0
+.\tool\build-installer.ps1 -Version 1.2.1
 ```

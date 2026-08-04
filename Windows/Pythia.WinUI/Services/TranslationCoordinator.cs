@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
@@ -9,6 +10,11 @@ namespace Pythia.Services;
 public sealed class TranslationCoordinator(CredentialStore credentials, PluginService? plugins = null)
 {
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
+    private readonly HttpClient _customLlmHttp = new() { Timeout = Timeout.InfiniteTimeSpan };
+    private const int CustomLlmChunkLimit = 1800;
+    private static readonly TimeSpan CustomLlmRequestTimeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan[] CustomLlmRetryDelays =
+        [TimeSpan.Zero, TimeSpan.FromMilliseconds(750), TimeSpan.FromSeconds(2)];
 
     public async Task<TranslationBatch> TranslateAsync(
         string text,
@@ -135,7 +141,54 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
         if (endpoint is null) throw new InvalidOperationException("自定义 API 基础地址无效。");
         var serviceName = string.IsNullOrWhiteSpace(settings.OpenAICompatibleName)
             ? "AI 翻译" : settings.OpenAICompatibleName.Trim();
-        var prompt = $"Translate the following text from {source} to {target}. Return only the translation.\n\n{text}";
+        var chunks = CustomLlmChunks(text);
+        var translatedChunks = new List<string>(chunks.Count);
+        for (var index = 0; index < chunks.Count; index++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var envelope = WhitespaceEnvelope(chunks[index]);
+            if (envelope.Core.Length == 0)
+            {
+                translatedChunks.Add(chunks[index]);
+                continue;
+            }
+            try
+            {
+                var translated = await TranslateOpenAiChunkAsync(
+                    envelope.Core, source, target, settings, api, apiKey, endpoint, serviceName,
+                    index, chunks.Count, ct);
+                translatedChunks.Add(envelope.Leading + translated.Trim() + envelope.Trailing);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException(
+                    $"{serviceName} 第 {index + 1}/{chunks.Count} 段翻译失败：{SafeError(exception)}", exception);
+            }
+        }
+        return new("openai-compatible", serviceName, string.Concat(translatedChunks), settings.OpenAICompatibleModel);
+    }
+
+    private async Task<string> TranslateOpenAiChunkAsync(
+        string text,
+        string source,
+        string target,
+        PythiaSettings settings,
+        string api,
+        string apiKey,
+        Uri endpoint,
+        string serviceName,
+        int chunkIndex,
+        int chunkCount,
+        CancellationToken ct)
+    {
+        var segmentNote = chunkCount > 1
+            ? $" This is segment {chunkIndex + 1} of {chunkCount}; preserve its paragraph and list formatting."
+            : string.Empty;
+        var prompt = $"Translate the following text from {source} to {target}. Return only the translation.{segmentNote}\n\n{text}";
         var payload = api == "anthropic"
             ? JsonSerializer.Serialize(new
             {
@@ -155,22 +208,182 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
                     new { role = "user", content = prompt },
                 },
             });
-        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+
+        HttpRequestMessage CreateRequest()
         {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json"),
-        };
-        if (api == "anthropic")
-        {
-            request.Headers.TryAddWithoutValidation("x-api-key", apiKey);
-            request.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
+            var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+            };
+            if (api == "anthropic")
+            {
+                request.Headers.TryAddWithoutValidation("x-api-key", apiKey);
+                request.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
+            }
+            else request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            return request;
         }
-        else request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        using var response = await _http.SendAsync(request, ct);
+
+        using var response = await SendCustomLlmWithRetryAsync(CreateRequest, ct);
         EnsureSuccess(response, serviceName);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync(ct));
         var translated = CustomLlmContent(json.RootElement, api)?.Trim();
         if (string.IsNullOrWhiteSpace(translated)) throw new InvalidOperationException("AI 服务未返回文本。");
-        return new("openai-compatible", serviceName, translated, settings.OpenAICompatibleModel);
+        return translated;
+    }
+
+    private async Task<HttpResponseMessage> SendCustomLlmWithRetryAsync(
+        Func<HttpRequestMessage> requestFactory,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastError = null;
+        var delayBeforeAttempt = TimeSpan.Zero;
+        for (var attempt = 0; attempt < CustomLlmRetryDelays.Length; attempt++)
+        {
+            if (delayBeforeAttempt > TimeSpan.Zero)
+                await Task.Delay(delayBeforeAttempt, cancellationToken);
+            delayBeforeAttempt = attempt + 1 < CustomLlmRetryDelays.Length
+                ? CustomLlmRetryDelays[attempt + 1]
+                : TimeSpan.Zero;
+
+            using var timeoutSource = new CancellationTokenSource(CustomLlmRequestTimeout);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
+            using var request = requestFactory();
+            try
+            {
+                // Buffer the response under the linked timeout as well. Using
+                // ResponseHeadersRead here would let a server send headers and then
+                // stall the JSON body indefinitely after the timeout source is disposed.
+                var response = await _customLlmHttp.SendAsync(request, linked.Token);
+                if (!IsRetryableCustomLlmStatus((int)response.StatusCode) ||
+                    attempt == CustomLlmRetryDelays.Length - 1)
+                    return response;
+
+                delayBeforeAttempt = RetryAfterDelay(response) ?? delayBeforeAttempt;
+                response.Dispose();
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (OperationCanceledException exception) when (timeoutSource.IsCancellationRequested)
+            {
+                lastError = new TimeoutException(
+                    $"AI 服务单次请求等待 {CustomLlmRequestTimeout.TotalSeconds:0} 秒后超时。", exception);
+            }
+            catch (HttpRequestException exception)
+            {
+                lastError = exception;
+            }
+
+            if (attempt == CustomLlmRetryDelays.Length - 1 && lastError is not null)
+                throw lastError;
+        }
+        throw lastError ?? new HttpRequestException("AI 服务请求失败。");
+    }
+
+    public static bool IsRetryableCustomLlmStatus(int statusCode) =>
+        statusCode is 408 or 409 or 425 or 429 or >= 500 and <= 599;
+
+    private static TimeSpan? RetryAfterDelay(HttpResponseMessage response)
+    {
+        var retryAfter = response.Headers.RetryAfter;
+        if (retryAfter?.Delta is { } delta)
+            return TimeSpan.FromSeconds(Math.Clamp(delta.TotalSeconds, 0.75, 60));
+        if (retryAfter?.Date is { } date)
+            return TimeSpan.FromSeconds(Math.Clamp((date - DateTimeOffset.UtcNow).TotalSeconds, 0.75, 60));
+        return null;
+    }
+
+    public static IReadOnlyList<string> CustomLlmChunks(string text, int maxCharacters = CustomLlmChunkLimit)
+    {
+        if (maxCharacters < 64) throw new ArgumentOutOfRangeException(nameof(maxCharacters));
+        if (text.Length <= maxCharacters) return [text];
+
+        var chunks = new List<string>();
+        var cursor = 0;
+        while (cursor < text.Length)
+        {
+            var hardEnd = Math.Min(text.Length, cursor + maxCharacters);
+            if (hardEnd == text.Length)
+            {
+                chunks.Add(text[cursor..]);
+                break;
+            }
+
+            var minimumBoundary = cursor + (int)(maxCharacters * 0.55);
+            var preferredEnd = -1;
+            for (var index = minimumBoundary; index <= hardEnd; index++)
+            {
+                if (IsPreferredChunkBoundary(text, index) && IsSafeChunkBoundary(text, index))
+                    preferredEnd = index;
+            }
+            var end = preferredEnd > cursor ? preferredEnd : SafeChunkEnd(text, cursor, hardEnd);
+            if (end <= cursor) end = hardEnd;
+            chunks.Add(text[cursor..end]);
+            cursor = end;
+        }
+        return chunks;
+    }
+
+    private static bool IsPreferredChunkBoundary(string text, int index)
+    {
+        if (index <= 0 || index > text.Length) return false;
+        var previous = text[index - 1];
+        if (previous is '\n' or '\r' or '。' or '！' or '？' or '!' or '?' or '；' or ';' or '：' or ':') return true;
+        if (char.IsWhiteSpace(previous) && index >= 2 && text[index - 2] is '.' or ',' or '，') return true;
+        return false;
+    }
+
+    private static int SafeChunkEnd(string text, int cursor, int proposedEnd)
+    {
+        var end = proposedEnd;
+        while (end > cursor && !IsSafeChunkBoundary(text, end)) end--;
+        if (end > cursor) return end;
+        end = proposedEnd;
+        while (end < text.Length && !IsSafeChunkBoundary(text, end)) end++;
+        return end;
+    }
+
+    private static bool IsSafeChunkBoundary(string text, int index)
+    {
+        if (index <= 0 || index >= text.Length) return true;
+        if (char.IsHighSurrogate(text[index - 1]) && char.IsLowSurrogate(text[index])) return false;
+        return !WouldSplitNumber(text, index);
+    }
+
+    private static bool WouldSplitNumber(string text, int index)
+    {
+        char At(int offset) => index + offset >= 0 && index + offset < text.Length ? text[index + offset] : '\0';
+        var before = At(-1);
+        var after = At(0);
+        var beforeBefore = At(-2);
+        var afterAfter = At(1);
+        var threeBefore = At(-3);
+        var twoAfter = At(2);
+        static bool Digit(char value) => char.IsDigit(value);
+        static bool Separator(char value) => ".,，．:/：／-－'’ \u00A0\u202F".Contains(value);
+        static bool Sign(char value) => "+-−＋－".Contains(value);
+
+        if (Digit(before) && Digit(after)) return true;
+        if (Digit(before) && Separator(after) && Digit(afterAfter)) return true;
+        if (Separator(before) && Digit(beforeBefore) && Digit(after)) return true;
+        if (".,，．".Contains(before) && Digit(after)) return true;
+        if (Sign(before) && Digit(after)) return true;
+        if (Digit(before) && after is 'e' or 'E' &&
+            (Digit(afterAfter) || (afterAfter is '+' or '-' && Digit(twoAfter)))) return true;
+        if (before is 'e' or 'E' && Digit(beforeBefore) &&
+            (Digit(after) || (after is '+' or '-' && Digit(afterAfter)))) return true;
+        return before is '+' or '-' && beforeBefore is 'e' or 'E' && Digit(threeBefore) && Digit(after);
+    }
+
+    private static (string Leading, string Core, string Trailing) WhitespaceEnvelope(string chunk)
+    {
+        var start = 0;
+        while (start < chunk.Length && char.IsWhiteSpace(chunk[start])) start++;
+        var end = chunk.Length;
+        while (end > start && char.IsWhiteSpace(chunk[end - 1])) end--;
+        return (chunk[..start], chunk[start..end], chunk[end..]);
     }
 
     public static Uri? CustomLlmEndpoint(string baseUrl, string api)

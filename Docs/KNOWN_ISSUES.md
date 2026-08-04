@@ -16,7 +16,7 @@
 
 ## macOS
 
-- Pythia 1.2.0 is currently distributed for Apple silicon only. The compact translation window and Anthropic-compatible custom LLM interface are not yet present in the Windows Preview client.
+- macOS remains at 1.2.0 until the 1.2.1 long-document custom-LLM strategy is ported and its arm64 asset is added to the shared Release. Windows 1.2.1 already includes the compact window, OpenAI/Anthropic-compatible custom LLM interfaces, semantic long-text chunking, and bounded transient retries.
 - The macOS app is AppKit-based. The objective mentions SwiftUI, but the current real implementation uses AppKit windows and controls with Liquid Glass-inspired material views.
 - API keys and WebDAV passwords are intentionally stored in `~/Library/Application Support/Pythia/credentials.json` with `0600` permissions. This removes all runtime Keychain prompts, but it is local access control rather than encrypted-at-rest storage; anyone who fully compromises the macOS user account can read the file.
 - Some legacy plugin compatibility depends on local user plugin files and is best effort.

@@ -259,6 +259,22 @@ using var openAiResponse = JsonDocument.Parse("""{"choices":[{"message":{"conten
 Check(TranslationCoordinator.CustomLlmContent(anthropicResponse.RootElement, "anthropic") == "你好" &&
       TranslationCoordinator.CustomLlmContent(openAiResponse.RootElement, "openai") == "你好",
     "custom LLM response extraction supports Anthropic Messages and OpenAI Chat Completions");
+var longLlmText = new string('x', 1797) + "6.02e-23" + new string('y', 120);
+var longLlmChunks = TranslationCoordinator.CustomLlmChunks(longLlmText);
+Check(longLlmChunks.Count == 2 && string.Concat(longLlmChunks) == longLlmText &&
+      longLlmChunks[1].StartsWith("6.02e-23", StringComparison.Ordinal),
+    "custom LLM long-text chunks preserve scientific notation and exact input");
+var surrogateLlmText = new string('x', 1799) + "😀" + new string('y', 50);
+var surrogateLlmChunks = TranslationCoordinator.CustomLlmChunks(surrogateLlmText);
+Check(string.Concat(surrogateLlmChunks) == surrogateLlmText &&
+      surrogateLlmChunks.All(chunk => chunk.Length == 0 || !char.IsHighSurrogate(chunk[^1])),
+    "custom LLM long-text chunks do not split Unicode surrogate pairs");
+Check(TranslationCoordinator.IsRetryableCustomLlmStatus(408) &&
+      TranslationCoordinator.IsRetryableCustomLlmStatus(429) &&
+      TranslationCoordinator.IsRetryableCustomLlmStatus(503) &&
+      !TranslationCoordinator.IsRetryableCustomLlmStatus(400) &&
+      !TranslationCoordinator.IsRetryableCustomLlmStatus(401),
+    "custom LLM retry policy only retries transient upstream responses");
 Check(PluginService.ClassifyConnectionFailure("AUTHENTICATION_FAILED", "HTTP 401") == PluginConnectionStatus.InvalidCredential,
     "plugin invalid credential classification");
 Check(PluginService.ClassifyConnectionFailure("MODEL_NOT_FOUND", "model unavailable") == PluginConnectionStatus.ModelUnavailable,
@@ -281,11 +297,20 @@ Check(IconSemantics.Actions["plugin.toggle"].Resource == "checkmark",
     "plugin enable state uses an SVG checkmark semantic");
 var expectedHomeIcons = new Dictionary<string, string>
 {
-    ["home.services"] = "sort", ["home.pin"] = "pin", ["home.swapLanguages"] = "swap",
-    ["home.translate"] = "send", ["home.copySource"] = "copy", ["home.paste"] = "paste",
-    ["home.removeLineBreaks"] = "text-align-left", ["home.clear"] = "delete",
-    ["home.selection"] = "text-select", ["home.screenshot"] = "crop", ["home.ocrImage"] = "image",
-    ["home.copyAll"] = "copy", ["home.favorite"] = "star", ["home.speak"] = "speaker",
+    ["home.services"] = "sort",
+    ["home.pin"] = "pin",
+    ["home.swapLanguages"] = "swap",
+    ["home.translate"] = "send",
+    ["home.copySource"] = "copy",
+    ["home.paste"] = "paste",
+    ["home.removeLineBreaks"] = "text-align-left",
+    ["home.clear"] = "delete",
+    ["home.selection"] = "text-select",
+    ["home.screenshot"] = "crop",
+    ["home.ocrImage"] = "image",
+    ["home.copyAll"] = "copy",
+    ["home.favorite"] = "star",
+    ["home.speak"] = "speaker",
 };
 Check(expectedHomeIcons.All(expected => IconSemantics.Actions.TryGetValue(expected.Key, out var actual) &&
         actual.Resource == expected.Value),
@@ -299,11 +324,19 @@ Check(timestampStableFavorite.UpdatedAt == syncTime,
     "history deserialization-safe favorite setter preserves timestamps");
 var localSyncRecord = new HistoryRecord
 {
-    Id = "same", SourceText = "old", TranslatedText = "旧", UpdatedAt = syncTime, CreatedAt = syncTime,
+    Id = "same",
+    SourceText = "old",
+    TranslatedText = "旧",
+    UpdatedAt = syncTime,
+    CreatedAt = syncTime,
 };
 var remoteSyncRecord = new HistoryRecord
 {
-    Id = "same", SourceText = "new", TranslatedText = "新", UpdatedAt = syncTime.AddMinutes(1), CreatedAt = syncTime,
+    Id = "same",
+    SourceText = "new",
+    TranslatedText = "新",
+    UpdatedAt = syncTime.AddMinutes(1),
+    CreatedAt = syncTime,
 };
 var newestMerge = HistorySyncService.Merge([localSyncRecord], [remoteSyncRecord]);
 Check(newestMerge.Records.Single().SourceText == "new" && newestMerge.Records.Single().SyncStatus == "synced",
@@ -342,7 +375,7 @@ Check(portableRestore.Settings.OpenAICompatibleAPI == "anthropic" &&
       portableRestore.Settings.CompactTranslationWindow,
     "portable backup preserves non-secret compact-window and custom-API settings");
 Check(AppServices.GetSyncInterval(new PythiaSettings
-      { WebdavHistorySyncIntervalValue = 2, WebdavHistorySyncIntervalUnit = "week" }) == TimeSpan.FromDays(14),
+{ WebdavHistorySyncIntervalValue = 2, WebdavHistorySyncIntervalUnit = "week" }) == TimeSpan.FromDays(14),
     "WebDAV week schedule");
 Check(WebDavService.NormalizeRootUrl("https://example.invalid/dav").AbsoluteUri ==
       "https://example.invalid/dav/Pythia/", "WebDAV root normalization");
@@ -603,7 +636,7 @@ try
     }
     catch (Exception exception)
     {
-    Check(exception.Message == "Http Request Error；Http Status: 403", "plugin error response sanitization");
+        Check(exception.Message == "Http Request Error；Http Status: 403", "plugin error response sanitization");
     }
 
     var legacyRoot = Path.Combine(pluginTestRoot, "legacy-potext");

@@ -7,9 +7,9 @@
 
   本地优先的桌面翻译工具：多服务结果卡片、截图 OCR、全局快捷键、可同步的历史记录和真正的插件系统。
 
-  [![版本](https://img.shields.io/badge/版本-1.2.0-80B847)](#下载)
+  [![版本](https://img.shields.io/badge/版本-1.2.1-80B847)](#下载)
   [![macOS](https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white)](#macos)
-  [![Windows](https://img.shields.io/badge/Windows_x64-1.2.0-0078D4?logo=windows11&logoColor=white)](#windows)
+  [![Windows](https://img.shields.io/badge/Windows_x64-1.2.1-0078D4?logo=windows11&logoColor=white)](#windows)
   [![Swift](https://img.shields.io/badge/Swift-AppKit-F05138?logo=swift&logoColor=white)](#macos-构建)
   [![WinUI](https://img.shields.io/badge/C%23-WinUI_3-512BD4?logo=dotnet&logoColor=white)](#windows-开发)
   [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-2ea44f.svg)](./LICENSE)
@@ -54,6 +54,7 @@ flowchart LR
 
 - 划词与截图 OCR 翻译可默认打开简约窗口，只显示译文、重试和复制；翻译服务支持多选并与完整窗口实时同步，右上角可一键展开。
 - Google 开箱即用；自定义大模型 API 支持 OpenAI Chat Completions 与 Anthropic Messages 接口，也可使用 DeepL、百度、有道、LibreTranslate。
+- Windows 自定义大模型翻译会按语义边界拆分长文档，并对网络超时、限流和服务端临时错误进行有限重试；用户取消仍会立即停止。
 - **设置 → 服务 → 验证**：按你刚输入的值发起一次真实翻译，Key 能不能用立刻知道。
 - 中英混排按主导文字决定方向；智能目标语言跟随自动检测。
 - 结果卡片支持单卡复制、重新翻译、朗读和自动复制规则。
@@ -91,7 +92,7 @@ flowchart LR
     <td width="50%" align="center">
       <img src="./Docs/images/platform-windows.svg" width="100%" alt="Pythia Windows 版">
       <h3 id="windows">Windows</h3>
-      <p><strong>原生 WinUI 3 · 当前版本 1.2.0</strong></p>
+      <p><strong>原生 WinUI 3 · 当前版本 1.2.1</strong></p>
       <p>C# 14 · .NET 10 · x64 · Windows 10/11</p>
       <p>简约翻译、多服务卡片、Windows OCR、快捷键、历史同步、插件与 Inno Setup 打包。</p>
     </td>
@@ -110,12 +111,12 @@ flowchart LR
 
 ### Windows
 
-[下载 Pythia 1.2.0 Windows x64 版](https://github.com/douxy1994/Pythia/releases/download/v1.2.0/Pythia-1.2.0-windows-x64.exe)
+[下载 Pythia 1.2.1 Windows x64 版](https://github.com/douxy1994/Pythia/releases/download/v1.2.1/Pythia-1.2.1-windows-x64.exe)
 
 - 支持 64 位 Windows 10 和 Windows 11。
-- 安装程序与 SHA-256 校验文件和 macOS 资产合并发布在同一个 [v1.2.0 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.0)。
+- 安装程序与 SHA-256 校验文件发布在 [v1.2.1 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.1)；macOS 端同步后会把 1.2.1 arm64 资产追加到同一 Release。
 - 安装包只包含 Pythia 及其隔离运行时，不捆绑任何第三方插件或 `.pythia` 包。
-- Windows 1.2.0 安装包暂未进行 Authenticode 签名，可能触发 Microsoft Defender SmartScreen；安装前请核对 SHA-256。
+- Windows 1.2.1 安装包暂未进行 Authenticode 签名，可能触发 Microsoft Defender SmartScreen；安装前请核对 SHA-256。
 
 ## 可下载插件
 
@@ -174,7 +175,7 @@ Set-Location Windows\Pythia.WinUI
 node ..\..\script\validate_pythia_plugins.mjs
 dotnet build .\Pythia.WinUI.csproj -c Release -p:Platform=x64
 dotnet run --project ..\Pythia.WinUI.Tests\Pythia.WinUI.Tests.csproj -c Release
-.\tool\build-installer.ps1 -Version 1.2.0
+.\tool\build-installer.ps1 -Version 1.2.1
 ```
 
 ## 数据与隐私
@@ -187,7 +188,7 @@ dotnet run --project ..\Pythia.WinUI.Tests\Pythia.WinUI.Tests.csproj -c Release
 - 可移植备份不包含 API Key、WebDAV 凭据、快捷键、启动状态与窗口状态。
 - Release 包不含第三方插件，发布前经过私密材料扫描。
 - 仓库与 Release 资产绝不包含私钥、API Key、密码、用户历史或本机配置。
-- Windows 1.2.0 以未做 Authenticode 签名的形式发布；签名留待后续版本，证书文件始终不得进入 Git。
+- Windows 1.2.1 以未做 Authenticode 签名的形式发布；签名留待后续版本，证书文件始终不得进入 Git。
 
 ## 仓库结构
 
@@ -211,6 +212,7 @@ WINDOWS_CODEX_HANDOFF.md 完整 Windows 交接文档
 
 ## 文档
 
+- [Pythia 1.2.1 发布说明](Docs/RELEASE_NOTES_1.2.1.md)
 - [Pythia 1.2.0 发布说明](Docs/RELEASE_NOTES_1.2.0.md)
 - [架构设计](Docs/ARCHITECTURE.md)
 - [功能矩阵](Docs/FEATURE_MATRIX.md)

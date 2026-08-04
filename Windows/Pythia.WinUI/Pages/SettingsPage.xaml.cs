@@ -113,9 +113,9 @@ public sealed partial class SettingsPage : Page
             UpdateCard.Visibility = Visibility.Collapsed;
             UpdateButton.Visibility = Visibility.Collapsed;
             LatestNotesText.Text =
-                "1.2.0 · 新增以译文为核心的简约窗口，并与主窗口同步多选翻译服务。\n" +
-                "新增 OpenAI Chat Completions 与 Anthropic Messages 自定义大模型接口。\n" +
-                "优化划词、OCR 与并发翻译的资源占用，降低高 DPI、多屏环境下的卡死风险。";
+                "1.2.1 · 修复自定义大模型 API 翻译长文档时被固定超时取消的问题。\n" +
+                "长文档按语义边界分段翻译，并避免切断数字、日期和 Unicode 字符。\n" +
+                "对超时、限流及临时服务错误进行有限重试，用户主动取消仍会立即停止。";
             return;
         }
 

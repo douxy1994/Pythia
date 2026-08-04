@@ -44,7 +44,7 @@ This checklist tracks visible actions and whether they map to real behavior.
 
 ## Windows WinUI 3 Actions
 
-- Home translation: native C# implementation for Google, Baidu, Youdao, OpenAI-compatible, DeepL, LibreTranslate, and installed `.pythia` plugins. Enter submits, Shift+Enter inserts a line break, IME composition and repeated-key submission are suppressed, and a single-flight gate prevents duplicate batches.
+- Home translation: native C# implementation for Google, Baidu, Youdao, OpenAI-compatible, DeepL, LibreTranslate, and installed `.pythia` plugins. Custom LLM long documents use ordered 1,800-character semantic chunks, a five-minute per-attempt timeout, and bounded retries only for timeout/network/408/409/425/429/5xx failures while preserving immediate user cancellation. Enter submits, Shift+Enter inserts a line break, IME composition and repeated-key submission are suppressed, and a single-flight gate prevents duplicate batches.
 - Home tools: copy source, paste, merge line breaks, clear, selection translation, full-virtual-screen OCR/translation, image-file OCR, copy all, favorite, speech, pin, language swap, result expand/collapse, per-result copy, and plugin retry are connected to real handlers.
 - Smart language routing: source `auto` routes pure Chinese to English, pure English to Simplified Chinese, and mixed Chinese/English according to the selected target, matching macOS.
 - Service selection and ordering: the same dialog owns enabled state and persisted order. Native `ListView` drag-reorder and Ctrl+Up/Ctrl+Down keyboard reordering are supported; translation dispatch and result order follow the saved order.
