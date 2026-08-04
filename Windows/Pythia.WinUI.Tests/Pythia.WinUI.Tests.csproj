@@ -11,6 +11,5 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Pythia.WinUI\Pythia.WinUI.csproj" />
-    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
   </ItemGroup>
 </Project>

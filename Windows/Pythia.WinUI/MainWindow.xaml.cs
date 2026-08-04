@@ -13,10 +13,16 @@ public sealed partial class MainWindow : Window
     private bool _initiallyPositioned;
     private readonly WindowsShellService? _shell;
     private CancellationTokenSource? _placementSaveDelay;
+    private CancellationTokenSource? _blurHideDelay;
+    private bool _selectionCaptureInProgress;
+    private bool _compactPresentation;
+    private RectInt32? _fullWindowBounds;
+    private readonly IconSource? _fullTitleIconSource;
 
     public MainWindow()
     {
         InitializeComponent();
+        _fullTitleIconSource = AppTitleBar.IconSource;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         AppWindow.Title = "Pythia";
@@ -31,6 +37,7 @@ public sealed partial class MainWindow : Window
         try
         {
             _shell = new WindowsShellService(this);
+            _shell.IsSelectionActionPoint = IsSelectionActionPoint;
             _shell.HotkeyInvoked += Shell_HotkeyInvoked;
             _shell.ShowRequested += (_, _) => ShowWindow();
             _shell.TrayActionInvoked += Shell_TrayActionInvoked;
@@ -42,18 +49,38 @@ public sealed partial class MainWindow : Window
         }
         Closed += (_, _) =>
         {
+            _placementSaveDelay?.Cancel();
+            _placementSaveDelay?.Dispose();
+            _blurHideDelay?.Cancel();
+            _blurHideDelay?.Dispose();
             SelectionCaptureService.Shutdown();
             _shell?.Dispose();
         };
         Activated += async (_, args) =>
         {
+            _blurHideDelay?.Cancel();
             WindowsIntegrationService.ApplyTheme(App.Services.Settings.ThemeMode);
             PositionInitialWindow();
             if (args.WindowActivationState == WindowActivationState.Deactivated &&
-                App.Services.Settings.HideOnBlur && AppWindow.IsVisible)
+                App.Services.Settings.HideOnBlur && AppWindow.IsVisible &&
+                !_selectionCaptureInProgress)
             {
-                await Task.Delay(120);
-                if (App.Services.Settings.HideOnBlur) AppWindow.Hide();
+                var delay = new CancellationTokenSource();
+                _blurHideDelay = delay;
+                try
+                {
+                    await Task.Delay(120, delay.Token);
+                    if (App.Services.Settings.HideOnBlur && AppWindow.IsVisible) AppWindow.Hide();
+                }
+                catch (OperationCanceledException) { }
+                finally
+                {
+                    if (ReferenceEquals(_blurHideDelay, delay))
+                    {
+                        _blurHideDelay = null;
+                        delay.Dispose();
+                    }
+                }
             }
         };
         AppWindow.Changed += AppWindow_Changed;
@@ -76,8 +103,15 @@ public sealed partial class MainWindow : Window
                 break;
             case PythiaTrayAction.SyncHistory:
                 ShowWindow();
-                try { await App.Services.SyncHistoryAsync(); }
-                catch { }
+                try
+                {
+                    await App.Services.SyncHistoryAsync();
+                }
+                catch (Exception exception)
+                {
+                    App.Services.Status.Report($"同步失败：{exception.Message}");
+                    NotifyBackground("Pythia 历史同步", exception.Message, NotificationKind.Error);
+                }
                 break;
         }
     }
@@ -123,7 +157,8 @@ public sealed partial class MainWindow : Window
                 App.Services.Status.Report("屏幕中未识别到文字");
                 return;
             }
-            await ShowHomeTextAsync(text, translate);
+            await ShowHomeTextAsync(text, translate,
+                translate && App.Services.Settings.CompactTranslationWindow);
         }
         catch (OperationCanceledException)
         {
@@ -158,56 +193,112 @@ public sealed partial class MainWindow : Window
 
     public async Task TranslateSelectionAsync()
     {
-        var captureRequest = SelectionCaptureService.PrepareCapture();
-        App.Services.Status.Report("正在读取选中文本…", true);
-        if (AppWindow.IsVisible)
+        if (_selectionCaptureInProgress) return;
+        _selectionCaptureInProgress = true;
+        try
         {
-            AppWindow.Hide();
-            await Task.Delay(180);
+            var captureRequest = await SelectionCaptureService.PrepareCaptureAsync();
+            App.Services.Status.Report("正在读取选中文本…", true);
+            // UIA selections are captured before any focus transition. Keep Pythia visible in
+            // that path so clicking the selection button never produces a needless flash.
+            // Clipboard-only applications still require returning focus before Ctrl+C.
+            if (!captureRequest.HasAutomationText && AppWindow.IsVisible)
+            {
+                AppWindow.Hide();
+                await Task.Delay(120);
+            }
+            SelectionCaptureResult selection;
+            try { selection = await SelectionCaptureService.CaptureAsync(captureRequest); }
+            catch (Exception exception)
+            {
+                ShowWindow();
+                App.Services.Status.Report($"划词翻译失败：{exception.Message}");
+                return;
+            }
+            if (!selection.IsSuccess)
+            {
+                ShowWindow();
+                App.Services.Status.Report(selection.Message);
+                return;
+            }
+            await ShowHomeTextAsync(selection.Text!, true, App.Services.Settings.CompactTranslationWindow);
         }
-        SelectionCaptureResult selection;
-        try { selection = await SelectionCaptureService.CaptureAsync(captureRequest); }
-        catch (Exception exception)
+        finally
         {
-            ShowWindow();
-            App.Services.Status.Report($"划词翻译失败：{exception.Message}");
-            return;
+            _selectionCaptureInProgress = false;
         }
-        if (!selection.IsSuccess)
-        {
-            ShowWindow();
-            App.Services.Status.Report(selection.Message);
-            return;
-        }
-        await ShowHomeTextAsync(selection.Text!, true);
     }
 
-    public async Task ShowHomeTextAsync(string text, bool translate)
+    public async Task ShowHomeTextAsync(string text, bool translate, bool compact = false)
     {
         ShowWindow();
         var translateItem = NavView.MenuItems.OfType<NavigationViewItem>().First(item => (string)item.Tag == "translate");
         NavView.SelectedItem = translateItem;
         if (NavFrame.Content is not HomePage) NavFrame.Navigate(typeof(HomePage));
         await Task.Yield();
+        SetCompactPresentation(compact);
         if (NavFrame.Content is HomePage home) await home.LoadTextAsync(text, translate);
+    }
+
+    public void SetCompactPresentation(bool compact)
+    {
+        if (_compactPresentation == compact)
+        {
+            if (NavFrame.Content is HomePage current) current.SetCompactMode(compact);
+            return;
+        }
+        _compactPresentation = compact;
+        AppTitleBar.Title = compact ? string.Empty : "Pythia";
+        AppTitleBar.IconSource = compact ? null : _fullTitleIconSource;
+        AppTitleBar.IsPaneToggleButtonVisible = !compact;
+        TitleBarRow.Height = new GridLength(compact ? 32 : 48);
+        AppWindow.TitleBar.PreferredHeightOption = compact
+            ? TitleBarHeightOption.Standard
+            : TitleBarHeightOption.Tall;
+        NavView.PaneDisplayMode = compact
+            ? NavigationViewPaneDisplayMode.LeftMinimal
+            : NavigationViewPaneDisplayMode.LeftCompact;
+        NavView.IsPaneOpen = false;
+        foreach (var item in NavView.MenuItems.OfType<NavigationViewItem>())
+            item.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        foreach (var item in NavView.FooterMenuItems.OfType<NavigationViewItem>())
+            item.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        if (NavFrame.Content is HomePage home) home.SetCompactMode(compact);
+
+        if (compact)
+        {
+            _fullWindowBounds = new RectInt32(AppWindow.Position.X, AppWindow.Position.Y,
+                AppWindow.Size.Width, AppWindow.Size.Height);
+            var display = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
+            var width = Math.Min(680, display.WorkArea.Width);
+            var height = Math.Min(430, display.WorkArea.Height);
+            AppWindow.MoveAndResize(new RectInt32(
+                display.WorkArea.X + (display.WorkArea.Width - width) / 2,
+                display.WorkArea.Y + (display.WorkArea.Height - height) / 2,
+                width, height));
+        }
+        else if (_fullWindowBounds is { } bounds)
+        {
+            AppWindow.MoveAndResize(bounds);
+            _fullWindowBounds = null;
+        }
     }
 
     public void ShowAndActivate()
     {
-        AppWindow.Show();
-        Activate();
+        if (!AppWindow.IsVisible) AppWindow.Show();
+        if (_shell is not null) _shell.BringWindowToFront();
+        else Activate();
     }
 
     private void ShowWindow() => ShowAndActivate();
 
+    private bool IsSelectionActionPoint(int clientX, int clientY) =>
+        NavFrame.Content is Pages.HomePage home && home.IsSelectionActionPoint(clientX, clientY);
+
     public async Task ShowSettingsAsync(string section = "general")
     {
-        if (section.Equals("plugins", StringComparison.OrdinalIgnoreCase))
-        {
-            ShowAndActivate();
-            SelectNavigationItem("plugins");
-            return;
-        }
+        SetCompactPresentation(false);
         ShowAndActivate();
         await Task.Yield();
         NavView.SelectedItem = NavView.SettingsItem;
@@ -281,14 +372,26 @@ public sealed partial class MainWindow : Window
         App.Services.Settings.WindowY = sender.Position.Y;
         App.Services.Settings.WindowWidth = sender.Size.Width;
         App.Services.Settings.WindowHeight = sender.Size.Height;
-        _placementSaveDelay?.Cancel();
-        _placementSaveDelay = new CancellationTokenSource();
+        var delay = new CancellationTokenSource();
+        var previous = Interlocked.Exchange(ref _placementSaveDelay, delay);
+        previous?.Cancel();
+        previous?.Dispose();
         try
         {
-            await Task.Delay(500, _placementSaveDelay.Token);
+            await Task.Delay(500, delay.Token);
             await App.Services.Store.SaveSettingsAsync(App.Services.Settings);
         }
         catch (OperationCanceledException) { }
+        catch (Exception exception)
+        {
+            App.Services.Status.Report($"窗口状态保存失败：{exception.Message}");
+        }
+        finally
+        {
+            if (ReferenceEquals(_placementSaveDelay, delay))
+                _placementSaveDelay = null;
+            delay.Dispose();
+        }
     }
 
     private void TitleBar_PaneToggleRequested(TitleBar sender, object args) =>
@@ -300,7 +403,7 @@ public sealed partial class MainWindow : Window
         {
             "translate" => typeof(HomePage),
             "history" => typeof(HistoryPage),
-            "plugins" => typeof(PluginsPage),
+            "settings" => typeof(SettingsPage),
             _ => null,
         };
         if (page is not null && NavFrame.CurrentSourcePageType != page)

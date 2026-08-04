@@ -22,7 +22,12 @@ public static class WindowsIntegrationService
     {
         using var key = Registry.CurrentUser.CreateSubKey(RunKey);
         if (enabled)
-            key.SetValue("Pythia", $"\"{Environment.ProcessPath}\" --startup", RegistryValueKind.String);
+        {
+            var processPath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(processPath))
+                throw new InvalidOperationException("无法确定 Pythia 当前程序路径，未写入开机启动项。");
+            key.SetValue("Pythia", $"\"{processPath}\" --startup", RegistryValueKind.String);
+        }
         else
             key.DeleteValue("Pythia", false);
     }

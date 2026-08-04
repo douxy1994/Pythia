@@ -29,6 +29,7 @@ public sealed class WindowsShellService : IDisposable
     private const uint WmLButtonUp = 0x0202;
     private const uint WmRButtonUp = 0x0205;
     private const uint WmContextMenu = 0x007B;
+    private const uint WmMouseActivate = 0x0021;
     private const uint NinSelect = 0x0400;
     private const uint NimAdd = 0;
     private const uint NimModify = 1;
@@ -77,6 +78,7 @@ public sealed class WindowsShellService : IDisposable
     public event EventHandler<PythiaHotkeyAction>? HotkeyInvoked;
     public event EventHandler? ShowRequested;
     public event EventHandler<PythiaTrayAction>? TrayActionInvoked;
+    public Func<int, int, bool>? IsSelectionActionPoint { get; set; }
 
     public void ExitApplication()
     {
@@ -111,6 +113,13 @@ public sealed class WindowsShellService : IDisposable
     /// to avoid firing a balloon for an event the user is already looking at.
     /// </summary>
     public bool IsWindowForeground() => GetForegroundWindow() == _hwnd;
+
+    public void BringWindowToFront()
+    {
+        if (!IsWindowVisible(_hwnd)) ShowWindow(_hwnd, 5);
+        BringWindowToTop(_hwnd);
+        SetForegroundWindow(_hwnd);
+    }
 
     public bool TryRegisterHotkeys(PythiaSettings settings, out string? error)
     {
@@ -168,6 +177,12 @@ public sealed class WindowsShellService : IDisposable
 
     private IntPtr WindowProc(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam, nuint id, IntPtr data)
     {
+        if (message == WmMouseActivate && GetForegroundWindow() != _hwnd &&
+            GetCursorPos(out var cursor) && ScreenToClient(_hwnd, ref cursor) &&
+            IsSelectionActionPoint?.Invoke(cursor.X, cursor.Y) == true)
+        {
+            SelectionCaptureService.BeginCaptureBeforePythiaActivation();
+        }
         if (message == WmHotkey)
         {
             var action = (PythiaHotkeyAction)wParam.ToInt32();
@@ -330,6 +345,10 @@ public sealed class WindowsShellService : IDisposable
     [DllImport("user32.dll")] private static extern uint TrackPopupMenuEx(IntPtr menu, uint flags, int x, int y, IntPtr hwnd, IntPtr parameters);
     [DllImport("user32.dll")] private static extern bool DestroyMenu(IntPtr menu);
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
+    [DllImport("user32.dll")] private static extern bool ScreenToClient(IntPtr hwnd, ref Point point);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern bool BringWindowToTop(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hwnd, int command);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
 }

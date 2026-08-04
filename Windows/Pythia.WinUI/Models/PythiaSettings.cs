@@ -13,7 +13,8 @@ public sealed class PythiaSettings
     public bool BaiduEnabled { get; set; }
     public bool YoudaoEnabled { get; set; }
     public bool OpenAICompatibleEnabled { get; set; }
-    public string OpenAICompatibleName { get; set; } = "OpenAI 兼容";
+    public string OpenAICompatibleName { get; set; } = "大模型翻译";
+    public string OpenAICompatibleApi { get; set; } = "openai";
     public string OpenAICompatibleBaseUrl { get; set; } = "https://api.openai.com/v1";
     public string OpenAICompatibleModel { get; set; } = "gpt-4o-mini";
     public bool DeepLEnabled { get; set; }
@@ -37,6 +38,7 @@ public sealed class PythiaSettings
     public string ScreenshotTranslateHotkey { get; set; } = "Ctrl+Alt+Shift+D";
     public string ScreenshotOcrHotkey { get; set; } = "Ctrl+Alt+Shift+R";
     public bool ScreenshotOcrAutoTranslate { get; set; } = true;
+    public bool CompactTranslationWindow { get; set; }
     public string WebdavUrl { get; set; } = string.Empty;
     public string WebdavUsername { get; set; } = string.Empty;
     public bool WebdavHistoryAutoSync { get; set; }

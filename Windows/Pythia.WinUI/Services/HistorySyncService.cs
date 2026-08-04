@@ -98,9 +98,11 @@ public sealed class PortableBackupSettings
     public bool BaiduEnabled { get; set; }
     public bool YoudaoEnabled { get; set; }
     public bool OpenAICompatibleEnabled { get; set; }
-    public string OpenAICompatibleName { get; set; } = "OpenAI 兼容";
+    public string OpenAICompatibleName { get; set; } = "大模型翻译";
     public string OpenAICompatibleBaseUrl { get; set; } = "https://api.openai.com/v1";
     public string OpenAICompatibleModel { get; set; } = "gpt-4o-mini";
+    public string OpenAICompatibleAPI { get; set; } = "openai";
+    public bool CompactTranslationWindow { get; set; }
     public bool DeepLEnabled { get; set; }
     public string DeepLBaseUrl { get; set; } = "https://api-free.deepl.com/v2";
     public bool LibreTranslateEnabled { get; set; }
@@ -151,6 +153,8 @@ public static class PortableBackupService
                 OpenAICompatibleName = settings.OpenAICompatibleName,
                 OpenAICompatibleBaseUrl = settings.OpenAICompatibleBaseUrl,
                 OpenAICompatibleModel = settings.OpenAICompatibleModel,
+                OpenAICompatibleAPI = settings.OpenAICompatibleApi,
+                CompactTranslationWindow = settings.CompactTranslationWindow,
                 DeepLEnabled = settings.DeepLEnabled,
                 DeepLBaseUrl = settings.DeepLBaseUrl,
                 LibreTranslateEnabled = settings.LibreTranslateEnabled,
@@ -210,6 +214,9 @@ public static class PortableBackupService
         target.OpenAICompatibleName = source.OpenAICompatibleName;
         target.OpenAICompatibleBaseUrl = source.OpenAICompatibleBaseUrl;
         target.OpenAICompatibleModel = source.OpenAICompatibleModel;
+        target.OpenAICompatibleApi = source.OpenAICompatibleAPI is "openai" or "anthropic"
+            ? source.OpenAICompatibleAPI : "openai";
+        target.CompactTranslationWindow = source.CompactTranslationWindow;
         target.DeepLEnabled = source.DeepLEnabled;
         target.DeepLBaseUrl = source.DeepLBaseUrl;
         target.LibreTranslateEnabled = source.LibreTranslateEnabled;

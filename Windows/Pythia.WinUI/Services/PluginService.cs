@@ -26,6 +26,10 @@ public sealed class PluginService
     private readonly LocalStore store;
     private readonly CredentialStore credentials;
     private readonly string? _nodeExecutableOverride;
+    private string? _stateLoadError;
+    private string? _legacyMigrationError;
+
+    public IReadOnlyList<string> LastLoadErrors { get; private set; } = [];
 
     public PluginService(LocalStore store, CredentialStore credentials, string? nodeExecutableOverride = null)
     {
@@ -40,6 +44,8 @@ public sealed class PluginService
     public async Task InitializeAsync()
     {
         Directory.CreateDirectory(store.PluginsDirectory);
+        Directory.CreateDirectory(store.LegacyPluginsDirectory);
+        Directory.CreateDirectory(store.LegacyPluginBackupsDirectory);
         Directory.CreateDirectory(store.RuntimeDirectory);
         var bundledRunner = Path.Combine(AppContext.BaseDirectory, "Assets", "pythia-plugin-runner.cjs");
         if (!File.Exists(bundledRunner))
@@ -55,12 +61,19 @@ public sealed class PluginService
         Directory.CreateDirectory(store.PluginsDirectory);
         var state = ReadState();
         var result = new List<PluginInfo>();
+        var errors = new List<string>();
+        if (!string.IsNullOrWhiteSpace(_stateLoadError)) errors.Add(_stateLoadError);
+        if (!string.IsNullOrWhiteSpace(_legacyMigrationError)) errors.Add(_legacyMigrationError);
         foreach (var directory in Directory.EnumerateDirectories(store.PluginsDirectory, "*.pythia"))
         {
             try { result.Add(ReadPlugin(directory, state)); }
-            catch { }
+            catch (Exception exception)
+            {
+                errors.Add($"{Path.GetFileName(directory)}：{Limit(exception.Message)}");
+            }
         }
-        return result.OrderBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
+        LastLoadErrors = errors;
+        return result.OrderBy(item => item.DisplayName, StringComparer.CurrentCultureIgnoreCase).ToArray();
     }
 
     public string DisplayName(string serviceId)
@@ -68,7 +81,7 @@ public sealed class PluginService
         var id = serviceId.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase)
             ? serviceId["plugin:".Length..]
             : serviceId;
-        return LoadInstalled().FirstOrDefault(item => item.Id.Equals(id, StringComparison.OrdinalIgnoreCase))?.Name
+        return LoadInstalled().FirstOrDefault(item => item.Id.Equals(id, StringComparison.OrdinalIgnoreCase))?.DisplayName
             ?? ServiceCatalog.DisplayName(serviceId);
     }
 
@@ -82,8 +95,10 @@ public sealed class PluginService
 
     public PluginInfo Install(string archivePath)
     {
+        if (File.Exists(archivePath) && archivePath.EndsWith(".potext", StringComparison.OrdinalIgnoreCase))
+            return InstallPotext(archivePath);
         if (!archivePath.EndsWith(".pythia", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("请选择 .pythia 插件包。");
+            throw new InvalidOperationException("请选择 .pythia 或 .potext 插件包。");
         if (!File.Exists(archivePath) && !Directory.Exists(archivePath))
             throw new FileNotFoundException("插件包不存在。", archivePath);
         if (File.Exists(archivePath) && new FileInfo(archivePath).Length > MaxArchiveBytes)
@@ -151,6 +166,173 @@ public sealed class PluginService
         finally
         {
             if (Directory.Exists(staging)) Directory.Delete(staging, true);
+        }
+    }
+
+    private PluginInfo InstallPotext(string archivePath)
+    {
+        if (!File.Exists(archivePath))
+            throw new FileNotFoundException("插件包不存在。", archivePath);
+        if (new FileInfo(archivePath).Length > MaxArchiveBytes)
+            throw new InvalidDataException("插件包超过 64 MiB 限制。");
+
+        var extraction = Path.Combine(store.LegacyPluginsDirectory, ".install-" + Guid.NewGuid().ToString("N"));
+        var converted = Path.Combine(store.PluginsDirectory, ".convert-" + Guid.NewGuid().ToString("N") + ".pythia");
+        Directory.CreateDirectory(extraction);
+        try
+        {
+            using var archive = ZipFile.OpenRead(archivePath);
+            if (archive.Entries.Count > MaxArchiveEntries)
+                throw new InvalidDataException("插件包文件数量超过限制。");
+            long expandedBytes = 0;
+            foreach (var archiveEntry in archive.Entries)
+            {
+                expandedBytes += archiveEntry.Length;
+                if (expandedBytes > MaxArchiveBytes)
+                    throw new InvalidDataException("插件解压后超过 64 MiB 限制。");
+                if (((archiveEntry.ExternalAttributes >> 16) & 0xF000) == 0xA000)
+                    throw new InvalidDataException("插件包不能包含符号链接。");
+                ValidatePackageRelativePath(archiveEntry.FullName);
+                var destination = Path.GetFullPath(Path.Combine(extraction, archiveEntry.FullName));
+                var extractionRoot = Path.GetFullPath(extraction) + Path.DirectorySeparatorChar;
+                if (!destination.StartsWith(extractionRoot, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("插件包包含不安全路径。");
+                if (archiveEntry.Name.Length == 0)
+                {
+                    Directory.CreateDirectory(destination);
+                    continue;
+                }
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                archiveEntry.ExtractToFile(destination, true);
+            }
+
+            var infoFiles = Directory.EnumerateFiles(extraction, "info.json", SearchOption.AllDirectories).ToArray();
+            if (infoFiles.Length != 1)
+                throw new InvalidDataException(".potext 插件必须且只能包含一个 info.json。");
+            var root = Path.GetDirectoryName(infoFiles[0])!;
+            var mainPath = Path.Combine(root, "main.js");
+            if (!File.Exists(mainPath))
+                throw new InvalidDataException(".potext 插件缺少 main.js。");
+            var conversion = PotextPluginConverter.Convert(
+                File.ReadAllBytes(infoFiles[0]),
+                File.ReadAllText(mainPath, Encoding.UTF8),
+                Path.GetFileNameWithoutExtension(archivePath));
+
+            CopyPluginDirectory(root, converted);
+            WriteConvertedPlugin(converted, conversion, File.ReadAllText(mainPath, Encoding.UTF8), Path.GetFileName(archivePath));
+            var target = Path.Combine(store.PluginsDirectory, conversion.Manifest.Id + ".pythia");
+            ReplacePluginDirectory(converted, target);
+            EnsureState(conversion.Manifest.Id);
+            MigrateLegacyPotConfigurations(conversion.Manifest.Id);
+            PreserveLegacyBackup(archivePath);
+            return LoadInstalled().First(item => item.Id.Equals(conversion.Manifest.Id, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(extraction)) Directory.Delete(extraction, true);
+            if (Directory.Exists(converted)) Directory.Delete(converted, true);
+        }
+    }
+
+    public PluginInfo Reconvert(PluginInfo plugin)
+    {
+        var target = Path.GetFullPath(plugin.DirectoryPath);
+        var root = Path.GetFullPath(store.PluginsDirectory) + Path.DirectorySeparatorChar;
+        if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("插件路径不在 Pythia 数据目录中。");
+        var infoPath = Path.Combine(target, "info.json");
+        var legacyMainPath = Path.Combine(target, "legacy-main.js");
+        if (!File.Exists(infoPath) || !File.Exists(legacyMainPath))
+            throw new InvalidOperationException("该插件没有保留可重新转换的原始 .potext 内容。");
+
+        var conversion = PotextPluginConverter.Convert(
+            File.ReadAllBytes(infoPath),
+            File.ReadAllText(legacyMainPath, Encoding.UTF8),
+            plugin.Id);
+        if (!conversion.Manifest.Id.Equals(plugin.Id, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("重新转换改变了插件服务标识，已中止以保护现有配置。");
+
+        var staging = Path.Combine(store.PluginsDirectory, ".reconvert-" + Guid.NewGuid().ToString("N") + ".pythia");
+        try
+        {
+            CopyPluginDirectory(target, staging);
+            WriteConvertedPlugin(staging, conversion, File.ReadAllText(legacyMainPath, Encoding.UTF8),
+                Path.GetFileName(plugin.DirectoryPath));
+            ReplacePluginDirectory(staging, target);
+            EnsureState(plugin.Id);
+            return LoadInstalled().First(item => item.Id.Equals(plugin.Id, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(staging)) Directory.Delete(staging, true);
+        }
+    }
+
+    public void RenameDisplay(PluginInfo plugin, string displayName)
+    {
+        var trimmed = displayName.Trim();
+        if (trimmed.Length is 0 or > 120 || trimmed.Any(char.IsControl))
+            throw new ArgumentException("插件显示名称必须为 1 至 120 个可显示字符。", nameof(displayName));
+        lock (_stateLock)
+        {
+            var state = ReadStateUnlocked();
+            var item = GetState(state, plugin.Id);
+            item.DisplayName = trimmed;
+            state[plugin.Id] = item;
+            WriteStateUnlocked(state);
+        }
+        plugin.DisplayName = trimmed;
+    }
+
+    private void WriteConvertedPlugin(
+        string directory,
+        PotextConversionResult conversion,
+        string legacyMain,
+        string sourceName)
+    {
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "manifest.json"),
+            JsonSerializer.Serialize(conversion.Manifest, JsonOptions), new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(directory, "main.js"), conversion.MainJavaScript, new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(directory, "legacy-main.js"), legacyMain, new UTF8Encoding(false));
+        var report = new
+        {
+            schemaVersion = 1,
+            sourceFormat = "potext",
+            sourcePlugin = sourceName,
+            convertedAt = DateTimeOffset.UtcNow,
+            status = "converted",
+            warnings = conversion.Warnings,
+        };
+        File.WriteAllText(Path.Combine(directory, "conversion.json"),
+            JsonSerializer.Serialize(report, JsonOptions), new UTF8Encoding(false));
+    }
+
+    private void PreserveLegacyBackup(string archivePath)
+    {
+        Directory.CreateDirectory(store.LegacyPluginBackupsDirectory);
+        var name = Path.GetFileName(archivePath);
+        var destination = Path.Combine(store.LegacyPluginBackupsDirectory, name);
+        if (File.Exists(destination))
+            destination = Path.Combine(store.LegacyPluginBackupsDirectory,
+                Path.GetFileNameWithoutExtension(name) + "-" + Guid.NewGuid().ToString("N") + ".potext");
+        File.Copy(archivePath, destination, false);
+    }
+
+    private static void ReplacePluginDirectory(string source, string target)
+    {
+        var backup = target + ".replace-" + Guid.NewGuid().ToString("N");
+        if (Directory.Exists(target)) Directory.Move(target, backup);
+        try
+        {
+            Directory.Move(source, target);
+            if (Directory.Exists(backup)) Directory.Delete(backup, true);
+        }
+        catch
+        {
+            if (Directory.Exists(target)) Directory.Delete(target, true);
+            if (Directory.Exists(backup)) Directory.Move(backup, target);
+            throw;
         }
     }
 
@@ -466,6 +648,7 @@ public sealed class PluginService
 
     public void MigrateLegacyPotConfigurations(string? onlyPluginId = null)
     {
+        _legacyMigrationError = null;
         var legacyPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "com.pot-app.desktop", "config.json");
@@ -498,7 +681,11 @@ public sealed class PluginService
                     candidates[id] = values;
             }
         }
-        catch { return; }
+        catch (Exception exception)
+        {
+            _legacyMigrationError = $"旧版插件配置无法读取，已跳过迁移：{Limit(exception.Message)}";
+            return;
+        }
 
         foreach (var plugin in LoadInstalled())
         {
@@ -618,12 +805,14 @@ public sealed class PluginService
             field.Type.Equals("secret", StringComparison.OrdinalIgnoreCase)
                 ? !string.IsNullOrWhiteSpace(credentials.Read(SecretKey(id, field.Key)))
                 : itemState.Configuration.ContainsKey(field.Key) || !string.IsNullOrWhiteSpace(field.DefaultValue));
-        return new PluginInfo(
+        var result = new PluginInfo(
             id, name, version,
             description,
             author,
             directory, entry, iconPath, fields,
             itemState.Enabled, configured, itemState.LastError);
+        if (!string.IsNullOrWhiteSpace(itemState.DisplayName)) result.DisplayName = itemState.DisplayName;
+        return result;
     }
 
     private void EnsureState(string id)
@@ -657,12 +846,30 @@ public sealed class PluginService
     {
         try
         {
-            if (!File.Exists(StatePath)) return new(StringComparer.OrdinalIgnoreCase);
+            if (!File.Exists(StatePath))
+            {
+                _stateLoadError = null;
+                return new(StringComparer.OrdinalIgnoreCase);
+            }
             var state = JsonSerializer.Deserialize<Dictionary<string, PluginStateItem>>(File.ReadAllText(StatePath), JsonOptions)
                 ?? new Dictionary<string, PluginStateItem>();
+            _stateLoadError = null;
             return new Dictionary<string, PluginStateItem>(state, StringComparer.OrdinalIgnoreCase);
         }
-        catch { return new(StringComparer.OrdinalIgnoreCase); }
+        catch (Exception exception)
+        {
+            _stateLoadError = $"插件状态文件无法读取，已使用空状态：{Limit(exception.Message)}";
+            try
+            {
+                if (File.Exists(StatePath))
+                {
+                    var backup = $"{StatePath}.corrupt-{DateTime.UtcNow:yyyyMMddHHmmssfff}";
+                    File.Copy(StatePath, backup, false);
+                }
+            }
+            catch { }
+            return new(StringComparer.OrdinalIgnoreCase);
+        }
     }
 
     private void WriteStateUnlocked(Dictionary<string, PluginStateItem> state)
@@ -852,6 +1059,7 @@ public sealed class PluginService
     private sealed class PluginStateItem
     {
         public bool Enabled { get; set; } = true;
+        public string DisplayName { get; set; } = string.Empty;
         public Dictionary<string, string> Configuration { get; set; } = new(StringComparer.Ordinal);
         public string LastError { get; set; } = string.Empty;
     }

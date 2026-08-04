@@ -23,32 +23,38 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
             throw new ArgumentException("请输入需要翻译的文本。", nameof(text));
 
         var pair = ResolveLanguages(normalizedText, sourceLanguage, targetLanguage);
+        using var concurrencyGate = new SemaphoreSlim(4);
         var tasks = serviceIds.Distinct(StringComparer.OrdinalIgnoreCase).Select(async id =>
         {
+            await concurrencyGate.WaitAsync(cancellationToken);
             try
             {
-                return id switch
+                try
                 {
-                    "google" => await TranslateGoogleAsync(normalizedText, pair.Source, pair.Target, cancellationToken),
-                    "baidu" => await TranslateBaiduAsync(normalizedText, pair.Source, pair.Target, cancellationToken),
-                    "youdao" => await TranslateYoudaoAsync(normalizedText, pair.Source, pair.Target, cancellationToken),
-                    "openai-compatible" => await TranslateOpenAiAsync(normalizedText, pair.Source, pair.Target, settings, cancellationToken),
-                    "deepl" => await TranslateDeepLAsync(normalizedText, pair.Source, pair.Target, settings, cancellationToken),
-                    "libretranslate" => await TranslateLibreAsync(normalizedText, pair.Source, pair.Target, settings, cancellationToken),
-                    _ when id.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase) && plugins is not null =>
-                        new TranslationResult(id, plugins.DisplayName(id),
-                            await plugins.TranslateAsync(id, normalizedText, pair.Source, pair.Target, cancellationToken),
-                            IconPath: plugins.IconPath(id)),
-                    _ => new TranslationResult(id, ServiceCatalog.DisplayName(id), string.Empty, Error: "当前版本不支持此翻译服务。"),
-                };
+                    return id switch
+                    {
+                        "google" => await TranslateGoogleAsync(normalizedText, pair.Source, pair.Target, cancellationToken),
+                        "baidu" => await TranslateBaiduAsync(normalizedText, pair.Source, pair.Target, cancellationToken),
+                        "youdao" => await TranslateYoudaoAsync(normalizedText, pair.Source, pair.Target, cancellationToken),
+                        "openai-compatible" => await TranslateOpenAiAsync(normalizedText, pair.Source, pair.Target, settings, cancellationToken),
+                        "deepl" => await TranslateDeepLAsync(normalizedText, pair.Source, pair.Target, settings, cancellationToken),
+                        "libretranslate" => await TranslateLibreAsync(normalizedText, pair.Source, pair.Target, settings, cancellationToken),
+                        _ when id.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase) && plugins is not null =>
+                            new TranslationResult(id, plugins.DisplayName(id),
+                                await plugins.TranslateAsync(id, normalizedText, pair.Source, pair.Target, cancellationToken),
+                                IconPath: plugins.IconPath(id)),
+                        _ => new TranslationResult(id, ServiceCatalog.DisplayName(id), string.Empty, Error: "当前版本不支持此翻译服务。"),
+                    };
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception exception)
+                {
+                    return new TranslationResult(id, plugins?.DisplayName(id) ?? ServiceCatalog.DisplayName(id), string.Empty,
+                        Error: SafeError(exception),
+                        IconPath: id.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase) ? plugins?.IconPath(id) : null);
+                }
             }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception exception)
-            {
-                return new TranslationResult(id, plugins?.DisplayName(id) ?? ServiceCatalog.DisplayName(id), string.Empty,
-                    Error: SafeError(exception),
-                    IconPath: id.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase) ? plugins?.IconPath(id) : null);
-            }
+            finally { concurrencyGate.Release(); }
         });
 
         var results = await Task.WhenAll(tasks);
@@ -123,32 +129,84 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
         string text, string source, string target, PythiaSettings settings, CancellationToken ct)
     {
         var apiKey = RequiredSecret("provider.openai-compatible.apiKey", "请先在设置中填写 AI 服务 API Key。");
-        var baseUrl = settings.OpenAICompatibleBaseUrl.Trim().TrimEnd('/');
-        if (baseUrl.Length == 0) throw new InvalidOperationException("请先填写 AI 服务地址。");
+        var api = settings.OpenAICompatibleApi.Equals("anthropic", StringComparison.OrdinalIgnoreCase)
+            ? "anthropic" : "openai";
+        var endpoint = CustomLlmEndpoint(settings.OpenAICompatibleBaseUrl, api);
+        if (endpoint is null) throw new InvalidOperationException("自定义 API 基础地址无效。");
         var serviceName = string.IsNullOrWhiteSpace(settings.OpenAICompatibleName)
             ? "AI 翻译" : settings.OpenAICompatibleName.Trim();
-        var payload = JsonSerializer.Serialize(new
-        {
-            model = settings.OpenAICompatibleModel,
-            temperature = 0.2,
-            messages = new object[]
+        var prompt = $"Translate the following text from {source} to {target}. Return only the translation.\n\n{text}";
+        var payload = api == "anthropic"
+            ? JsonSerializer.Serialize(new
             {
-                new { role = "system", content = "You are a professional translator. Return only the translation without explanations or quotation marks." },
-                new { role = "user", content = $"Translate the following text from {source} to {target}:\n\n{text}" },
-            },
-        });
-        using var request = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/chat/completions")
+                model = settings.OpenAICompatibleModel,
+                system = "You are a concise translation engine.",
+                messages = new object[] { new { role = "user", content = prompt } },
+                max_tokens = 4096,
+                temperature = 0.2,
+            })
+            : JsonSerializer.Serialize(new
+            {
+                model = settings.OpenAICompatibleModel,
+                temperature = 0.2,
+                messages = new object[]
+                {
+                    new { role = "system", content = "You are a concise translation engine." },
+                    new { role = "user", content = prompt },
+                },
+            });
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json"),
         };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        if (api == "anthropic")
+        {
+            request.Headers.TryAddWithoutValidation("x-api-key", apiKey);
+            request.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
+        }
+        else request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         using var response = await _http.SendAsync(request, ct);
         EnsureSuccess(response, serviceName);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync(ct));
-        var translated = json.RootElement.GetProperty("choices")[0].GetProperty("message")
-            .GetProperty("content").GetString()?.Trim();
+        var translated = CustomLlmContent(json.RootElement, api)?.Trim();
         if (string.IsNullOrWhiteSpace(translated)) throw new InvalidOperationException("AI 服务未返回文本。");
         return new("openai-compatible", serviceName, translated, settings.OpenAICompatibleModel);
+    }
+
+    public static Uri? CustomLlmEndpoint(string baseUrl, string api)
+    {
+        if (!Uri.TryCreate(baseUrl.Trim(), UriKind.Absolute, out var parsed) ||
+            parsed.Scheme is not ("http" or "https")) return null;
+        var suffix = api == "anthropic" ? "messages" : "chat/completions";
+        var builder = new UriBuilder(parsed) { Query = string.Empty, Fragment = string.Empty };
+        var path = builder.Path.TrimEnd('/');
+        if (!path.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            path = path.Length == 0 || path == "/" ? $"/v1/{suffix}" : $"{path}/{suffix}";
+        builder.Path = path;
+        return builder.Uri;
+    }
+
+    public static string? CustomLlmContent(JsonElement json, string api)
+    {
+        if (api == "anthropic")
+        {
+            if (!json.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array) return null;
+            return string.Concat(content.EnumerateArray()
+                .Where(block => block.TryGetProperty("type", out var type) && type.GetString() == "text")
+                .Select(block => block.TryGetProperty("text", out var text) ? text.GetString() : null));
+        }
+        if (!json.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0) return null;
+        var message = choices[0].GetProperty("message");
+        if (!message.TryGetProperty("content", out var value)) return null;
+        if (value.ValueKind == JsonValueKind.String) return value.GetString();
+        if (value.ValueKind != JsonValueKind.Array) return null;
+        return string.Concat(value.EnumerateArray().Select(block =>
+        {
+            if (!block.TryGetProperty("text", out var text)) return null;
+            if (text.ValueKind == JsonValueKind.String) return text.GetString();
+            return text.ValueKind == JsonValueKind.Object && text.TryGetProperty("value", out var nested)
+                ? nested.GetString() : null;
+        }));
     }
 
     private async Task<TranslationResult> TranslateDeepLAsync(
@@ -223,21 +281,47 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
         target = string.IsNullOrWhiteSpace(target) ? "zh-CN" : target;
         if (source.Equals("auto", StringComparison.OrdinalIgnoreCase))
         {
-            var hasChinese = false;
-            var hasEnglish = false;
+            var chineseCount = 0;
+            var englishCount = 0;
+            var insideEnglishWord = false;
             foreach (var rune in text.EnumerateRunes())
             {
                 var value = rune.Value;
                 if (value is >= 0x4E00 and <= 0x9FFF or >= 0x3400 and <= 0x4DBF or >= 0x20000 and <= 0x2A6DF)
-                    hasChinese = true;
+                {
+                    chineseCount++;
+                    insideEnglishWord = false;
+                }
                 else if (value is >= 'A' and <= 'Z' or >= 'a' and <= 'z')
-                    hasEnglish = true;
+                {
+                    if (!insideEnglishWord) englishCount++;
+                    insideEnglishWord = true;
+                }
+                else insideEnglishWord = false;
             }
-            if (hasChinese && !hasEnglish) target = "en";
-            else if (hasEnglish && !hasChinese) target = "zh-CN";
-            else if (hasChinese && hasEnglish)
+
+            if (chineseCount > 0 && englishCount == 0) target = "en";
+            else if (englishCount > 0 && chineseCount == 0) target = "zh-CN";
+            else if (chineseCount > 0 && englishCount > 0)
             {
-                if (target.StartsWith("en", StringComparison.OrdinalIgnoreCase)) source = "zh-CN";
+                // Product names and abbreviations should not make a mostly-Chinese
+                // paragraph look English (or vice versa). Count each Han character and
+                // each contiguous Latin word/acronym as one unit, then switch direction
+                // only when one side owns at least 65% of those meaningful units;
+                // balanced bilingual text keeps the user's selected target, matching
+                // the macOS mixed-content fallback.
+                var total = chineseCount + englishCount;
+                if (chineseCount * 100 >= total * 65)
+                {
+                    source = "zh-CN";
+                    target = "en";
+                }
+                else if (englishCount * 100 >= total * 65)
+                {
+                    source = "en";
+                    target = "zh-CN";
+                }
+                else if (target.StartsWith("en", StringComparison.OrdinalIgnoreCase)) source = "zh-CN";
                 else if (target.StartsWith("zh", StringComparison.OrdinalIgnoreCase)) source = "en";
             }
         }

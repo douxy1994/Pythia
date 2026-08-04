@@ -110,37 +110,110 @@ Check(HomeInteractionPolicy.ResolveEnter(true, false, true, false) == HomeInputA
 Check(HomeInteractionPolicy.ResolveEnter(true, false, false, true) == HomeInputAction.None, "repeated Enter is ignored");
 var homePageXamlPath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Pages", "HomePage.xaml"));
 var homePageXaml = homePageXamlPath is null ? string.Empty : File.ReadAllText(homePageXamlPath);
+var homePageSourcePath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Pages", "HomePage.xaml.cs"));
+var homePageSource = homePageSourcePath is null ? string.Empty : File.ReadAllText(homePageSourcePath);
 Check(homePageXaml.Contains("PreviewKeyDown=\"SourceTextBox_PreviewKeyDown\"", StringComparison.Ordinal) &&
       !homePageXaml.Contains("KeyDown=\"SourceTextBox_KeyDown\"", StringComparison.Ordinal),
     "real HomePage TextBox intercepts Enter before multiline handling");
-Check(homePageXaml.Contains("PlaceholderText=\"输入或粘贴需要翻译的内容… Enter 翻译，Shift + Enter 换行\"", StringComparison.Ordinal) &&
-      !homePageXaml.Contains("Text=\"Enter 翻译 · Shift + Enter 换行\"", StringComparison.Ordinal),
-    "Enter guidance lives in the source placeholder instead of the footer");
+Check(homePageXaml.Contains("PlaceholderText=\"输入或粘贴原文… Enter 翻译 · Shift + Enter 换行\"", StringComparison.Ordinal) &&
+      !homePageXaml.Contains("Text=\"Enter 翻译 · Shift + Enter 换行\"", StringComparison.Ordinal) &&
+      !homePageXaml.Contains("PythiaPageTitleStyle", StringComparison.Ordinal) &&
+      homePageXaml.Contains("Icon=\"text-select\"", StringComparison.Ordinal) &&
+      homePageXaml.Contains("Icon=\"expand\"", StringComparison.Ordinal) &&
+      homePageXaml.Contains("Icon=\"crop\"", StringComparison.Ordinal) &&
+      homePageXaml.Contains("PythiaResultIconButtonStyle", StringComparison.Ordinal) &&
+      homePageXaml.Contains("x:Name=\"AppVersionText\"", StringComparison.Ordinal),
+    "home uses in-field guidance, a title-free compact toolbar, SVG actions, and a bottom version label");
+Check(homePageXaml.Contains("Style=\"{StaticResource PythiaHomeSectionTitleStyle}\" Text=\"原文\"", StringComparison.Ordinal) &&
+      homePageXaml.Contains("Margin=\"18,0,0,0\" Style=\"{StaticResource PythiaHomeSectionTitleStyle}\" Text=\"译文\"", StringComparison.Ordinal),
+    "source and translation labels share the aligned blue title style");
 Check(homePageXaml.Contains("x:Name=\"PinIcon\"", StringComparison.Ordinal),
     "pin action exposes a stateful icon");
 var settingsPageXamlPath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Pages", "SettingsPage.xaml"));
 var settingsPageXaml = settingsPageXamlPath is null ? string.Empty : File.ReadAllText(settingsPageXamlPath);
-Check(!settingsPageXaml.Contains("Tag=\"plugins\"", StringComparison.Ordinal) &&
+var llmCardIndex = settingsPageXaml.IndexOf("Header=\"大模型翻译服务\"", StringComparison.Ordinal);
+var googleCardIndex = settingsPageXaml.IndexOf("Header=\"Google 翻译\"", StringComparison.Ordinal);
+Check(settingsPageXaml.Contains("Tag=\"plugins\"", StringComparison.Ordinal) &&
+      settingsPageXaml.Contains("PluginSettingsPanel", StringComparison.Ordinal) &&
       settingsPageXaml.Contains("Tag=\"about\"", StringComparison.Ordinal) &&
+      settingsPageXaml.Contains("InstallUpdate_Click", StringComparison.Ordinal) &&
+      settingsPageXaml.Contains("OpenGitHub_Click", StringComparison.Ordinal) &&
+      settingsPageXaml.Contains("GitHubMark.svg", StringComparison.Ordinal) &&
+      settingsPageXaml.Contains("GPL-3.0", StringComparison.Ordinal) &&
+      !settingsPageXaml.Contains("保存全部设置", StringComparison.Ordinal) &&
       settingsPageXaml.Contains("TextWrapping=\"Wrap\"", StringComparison.Ordinal),
-    "Settings removes duplicate plugins, retains About, and wraps hint text");
+    "Settings owns plugin/About pages, auto-saves, and exposes GitHub/update/license actions");
+Check(llmCardIndex >= 0 && googleCardIndex > llmCardIndex &&
+      settingsPageXaml.Contains("x:Name=\"OpenAiApiBox\"", StringComparison.Ordinal) &&
+      settingsPageXaml.Contains("Header=\"划词翻译或截图 OCR 翻译时默认打开简约窗口\"", StringComparison.Ordinal),
+    "large-model service is first and compact translation has a default setting");
+Check(homePageXaml.Contains("x:Name=\"CompactHeader\"", StringComparison.Ordinal) &&
+      homePageXaml.Contains("x:Name=\"CompactServiceButtonLabel\"", StringComparison.Ordinal) &&
+      homePageXaml.Contains("x:Name=\"ResultsPanel\"", StringComparison.Ordinal) &&
+      homePageXaml.Contains("Click=\"CopyResult_Click\"", StringComparison.Ordinal),
+    "compact translation keeps synchronized service selection and result copy actions");
 var mainWindowXamlPath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "MainWindow.xaml"));
 var mainWindowXaml = mainWindowXamlPath is null ? string.Empty : File.ReadAllText(mainWindowXamlPath);
-Check(mainWindowXaml.Contains("Tag=\"plugins\"", StringComparison.Ordinal) &&
+Check(!mainWindowXaml.Contains("Tag=\"plugins\"", StringComparison.Ordinal) &&
       !mainWindowXaml.Contains("Tag=\"about\"", StringComparison.Ordinal) &&
-      mainWindowXaml.Contains("Subtitle=\"AI 效率助手\"", StringComparison.Ordinal),
-    "main sidebar retains Plugins, moves About into Settings, and uses the neutral product subtitle");
+      mainWindowXaml.Contains("Title=\"Pythia\"", StringComparison.Ordinal) &&
+      mainWindowXaml.Contains("IsPaneOpen=\"False\"", StringComparison.Ordinal) &&
+      mainWindowXaml.Contains("PaneDisplayMode=\"LeftCompact\"", StringComparison.Ordinal) &&
+      !mainWindowXaml.Contains("Subtitle=", StringComparison.Ordinal),
+    "main sidebar defaults collapsed, excludes Plugins, keeps About in Settings, and uses the Pythia-only title");
 var selectionServicePath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Services", "SelectionCaptureService.cs"));
 var selectionServiceSource = selectionServicePath is null ? string.Empty : File.ReadAllText(selectionServicePath);
 var mainWindowSourcePath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "MainWindow.xaml.cs"));
 var mainWindowSource = mainWindowSourcePath is null ? string.Empty : File.ReadAllText(mainWindowSourcePath);
+Check(mainWindowXaml.Contains("x:Name=\"TitleBarRow\"", StringComparison.Ordinal) &&
+      mainWindowSource.Contains("TitleBarHeightOption.Standard", StringComparison.Ordinal) &&
+      mainWindowSource.Contains("NavigationViewPaneDisplayMode.LeftMinimal", StringComparison.Ordinal) &&
+      homePageSource.Contains("new Thickness(8, 6, 8, 8)", StringComparison.Ordinal),
+    "compact presentation removes the navigation gutter and prioritizes result space");
 var selectionMethodStart = mainWindowSource.IndexOf("public async Task TranslateSelectionAsync", StringComparison.Ordinal);
 var selectionMethodSource = selectionMethodStart >= 0 ? mainWindowSource[selectionMethodStart..] : string.Empty;
 Check(selectionServiceSource.Contains("WaitForModifierReleaseAsync", StringComparison.Ordinal) &&
       selectionServiceSource.Contains("GetAsyncKeyState", StringComparison.Ordinal) &&
-      selectionMethodSource.IndexOf("PrepareCapture()", StringComparison.Ordinal) >= 0 &&
-      selectionMethodSource.IndexOf("PrepareCapture()", StringComparison.Ordinal) < selectionMethodSource.IndexOf("AppWindow.Hide()", StringComparison.Ordinal),
-    "selection capture freezes the external target before hiding and waits for hotkey release");
+      selectionServiceSource.Contains("Task.Delay(attempt", StringComparison.Ordinal) &&
+      selectionServiceSource.Contains("Size = 32", StringComparison.Ordinal) &&
+      selectionServiceSource.Contains("GetGUIThreadInfo", StringComparison.Ordinal) &&
+      selectionServiceSource.Contains("SetFocus(focusedWindow)", StringComparison.Ordinal) &&
+      selectionServiceSource.Contains("ReadSelectionFromWindow(target)", StringComparison.Ordinal) &&
+      selectionServiceSource.Contains("ReadSelectionBoundedAsync", StringComparison.Ordinal) &&
+      selectionServiceSource.Contains("WaitAsync(TimeSpan.FromMilliseconds", StringComparison.Ordinal) &&
+      !selectionServiceSource.Contains("TreeScope.Subtree", StringComparison.Ordinal) &&
+      selectionServiceSource.Contains("HasAutomationText", StringComparison.Ordinal) &&
+      selectionServiceSource.Contains("BeginCaptureBeforePythiaActivation", StringComparison.Ordinal) &&
+      selectionServiceSource.Contains("CopySelectionWhileSourceIsForeground", StringComparison.Ordinal) &&
+      mainWindowSource.Contains("IsSelectionActionPoint", StringComparison.Ordinal) &&
+      selectionMethodSource.IndexOf("PrepareCaptureAsync()", StringComparison.Ordinal) >= 0 &&
+      selectionMethodSource.IndexOf("PrepareCaptureAsync()", StringComparison.Ordinal) < selectionMethodSource.IndexOf("AppWindow.Hide()", StringComparison.Ordinal) &&
+      selectionMethodSource.Contains("!captureRequest.HasAutomationText", StringComparison.Ordinal),
+    "selection capture snapshots before mouse activation without blocking WndProc or scanning a full UIA subtree, and keeps the native x64 clipboard fallback");
+var pluginPanelPath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Pages", "PluginSettingsPanel.xaml"));
+var pluginPanelXaml = pluginPanelPath is null ? string.Empty : File.ReadAllText(pluginPanelPath);
+Check(pluginPanelXaml.Contains("Expanding=\"PluginExpander_Expanding\"", StringComparison.Ordinal) &&
+      pluginPanelXaml.Contains("CanReorderItems=\"True\"", StringComparison.Ordinal) &&
+      pluginPanelXaml.Contains("FlowDirection=\"RightToLeft\"", StringComparison.Ordinal) &&
+      pluginPanelXaml.Contains("HorizontalAlignment=\"Stretch\"", StringComparison.Ordinal) &&
+      pluginPanelXaml.Contains("Click=\"OpenGuide_Click\"", StringComparison.Ordinal) &&
+      pluginPanelXaml.Contains("Click=\"OpenExistingPlugins_Click\"", StringComparison.Ordinal) &&
+      pluginPanelXaml.Contains("x:Name=\"PluginEnabledSwitch\"", StringComparison.Ordinal) &&
+      !pluginPanelXaml.Contains("x:Name=\"TogglePluginButton\"", StringComparison.Ordinal) &&
+      pluginPanelXaml.Contains("x:Name=\"PluginStatusHost\"", StringComparison.Ordinal) &&
+      pluginPanelXaml.Contains("CountdownRing", StringComparison.Ordinal),
+    "plugin settings use aligned left-chevron rows, unified enable switch, guide and existing-plugin actions, and timed status feedback");
+var pluginPanelSourcePath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Pages", "PluginSettingsPanel.xaml.cs"));
+var pluginPanelSource = pluginPanelSourcePath is null ? string.Empty : File.ReadAllText(pluginPanelSourcePath);
+var testConnectionStart = pluginPanelSource.IndexOf("private async void TestConnection_Click", StringComparison.Ordinal);
+var testConnectionSource = testConnectionStart >= 0 ? pluginPanelSource[testConnectionStart..] : string.Empty;
+Check(testConnectionSource.IndexOf("finally", StringComparison.Ordinal) >= 0 &&
+      !testConnectionSource[..Math.Min(testConnectionSource.Length, 1200)].Contains("Reload(plugin.Id)", StringComparison.Ordinal),
+    "plugin connectivity test keeps the expanded configuration panel open");
+var homeAlignment = homePageXaml.Contains("PythiaAccentButtonStyle", StringComparison.Ordinal) &&
+                    homePageXaml.Contains("x:Name=\"SwapLanguagesGlyph\"", StringComparison.Ordinal) &&
+                    !homePageXaml.Contains("Margin=\"0,20,0,0\" Style=\"{StaticResource AccentButtonStyle}\"", StringComparison.Ordinal);
+Check(homeAlignment, "home action buttons share the aligned control style");
 var startupSettingsRequest = StartupRequest.Parse(["Pythia.exe", "--settings", "plugins"]);
 var startupTextRequest = StartupRequest.Parse(["Pythia.exe", "--text=hello"]);
 var winUiStartupRequest = StartupRequest.Parse(["--settings", "plugins"]);
@@ -168,9 +241,24 @@ Check(TranslationCoordinator.ResolveLanguages("今天天气很好", "auto", "zh-
     "pure Chinese auto-routes to English");
 Check(TranslationCoordinator.ResolveLanguages("The weather is good", "auto", "en") == ("auto", "zh-CN"),
     "pure English auto-routes to Chinese");
-Check(TranslationCoordinator.ResolveLanguages("今天 weather 很好", "auto", "en") == ("zh-CN", "en") &&
-      TranslationCoordinator.ResolveLanguages("今天 weather 很好", "auto", "zh-CN") == ("en", "zh-CN"),
-    "mixed Chinese and English respects selected target");
+Check(TranslationCoordinator.ResolveLanguages("今天 weather forecast", "auto", "en") == ("zh-CN", "en") &&
+      TranslationCoordinator.ResolveLanguages("今天 weather forecast", "auto", "zh-CN") == ("en", "zh-CN"),
+    "balanced Chinese and English respects selected target");
+Check(TranslationCoordinator.ResolveLanguages(
+          "这是一段以中文为主的说明，其中包含 API、HTTP 和 WinUI 等英文缩写。", "auto", "zh-CN") == ("zh-CN", "en"),
+    "Chinese-dominant text with English acronyms auto-routes to English");
+Check(TranslationCoordinator.ResolveLanguages(
+          "This paragraph is predominantly English but includes 少量中文 terms and API names.", "auto", "en") == ("en", "zh-CN"),
+    "English-dominant text with a little Chinese auto-routes to Chinese");
+Check(TranslationCoordinator.CustomLlmEndpoint("https://api.openai.com/v1", "openai")?.AbsoluteUri ==
+      "https://api.openai.com/v1/chat/completions", "OpenAI custom endpoint normalization");
+Check(TranslationCoordinator.CustomLlmEndpoint("https://api.anthropic.com/v1/messages", "anthropic")?.AbsoluteUri ==
+      "https://api.anthropic.com/v1/messages", "Anthropic custom endpoint normalization");
+using var anthropicResponse = JsonDocument.Parse("""{"content":[{"type":"text","text":"你好"}]}""");
+using var openAiResponse = JsonDocument.Parse("""{"choices":[{"message":{"content":"你好"}}]}""");
+Check(TranslationCoordinator.CustomLlmContent(anthropicResponse.RootElement, "anthropic") == "你好" &&
+      TranslationCoordinator.CustomLlmContent(openAiResponse.RootElement, "openai") == "你好",
+    "custom LLM response extraction supports Anthropic Messages and OpenAI Chat Completions");
 Check(PluginService.ClassifyConnectionFailure("AUTHENTICATION_FAILED", "HTTP 401") == PluginConnectionStatus.InvalidCredential,
     "plugin invalid credential classification");
 Check(PluginService.ClassifyConnectionFailure("MODEL_NOT_FOUND", "model unavailable") == PluginConnectionStatus.ModelUnavailable,
@@ -186,30 +274,22 @@ Check(PluginService.ClassifyConnectionFailure("INVALID_RESPONSE", "invalid JSON"
 Check(PluginService.ClassifyConnectionFailure("PROCESS_EXITED", "crashed", true) == PluginConnectionStatus.ProcessAbnormalExit,
     "plugin process classification");
 Check(IconSemantics.Actions.Count >= 25 && IconSemantics.Actions.Values.All(item =>
-        item.Symbol != Microsoft.UI.Xaml.Controls.Symbol.Placeholder && !string.IsNullOrWhiteSpace(item.AccessibleName)),
-    "semantic icon mapping");
-Check(IconSemantics.Actions["plugin.toggle"].Symbol == Microsoft.UI.Xaml.Controls.Symbol.Stop,
-    "plugin disable action uses a stop icon instead of language switch");
-var expectedHomeIcons = new Dictionary<string, Microsoft.UI.Xaml.Controls.Symbol>
+        !string.IsNullOrWhiteSpace(item.Resource) && !string.IsNullOrWhiteSpace(item.AccessibleName) &&
+        FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Assets", "FluentIcons", $"{item.Resource}.svg")) is not null),
+    "semantic icon mapping resolves to packaged Fluent SVG resources");
+Check(IconSemantics.Actions["plugin.toggle"].Resource == "checkmark",
+    "plugin enable state uses an SVG checkmark semantic");
+var expectedHomeIcons = new Dictionary<string, string>
 {
-    ["home.services"] = Microsoft.UI.Xaml.Controls.Symbol.Sort,
-    ["home.pin"] = Microsoft.UI.Xaml.Controls.Symbol.Pin,
-    ["home.swapLanguages"] = Microsoft.UI.Xaml.Controls.Symbol.Switch,
-    ["home.translate"] = Microsoft.UI.Xaml.Controls.Symbol.Send,
-    ["home.copySource"] = Microsoft.UI.Xaml.Controls.Symbol.Copy,
-    ["home.paste"] = Microsoft.UI.Xaml.Controls.Symbol.Paste,
-    ["home.removeLineBreaks"] = Microsoft.UI.Xaml.Controls.Symbol.AlignLeft,
-    ["home.clear"] = Microsoft.UI.Xaml.Controls.Symbol.Delete,
-    ["home.selection"] = Microsoft.UI.Xaml.Controls.Symbol.TouchPointer,
-    ["home.screenshot"] = Microsoft.UI.Xaml.Controls.Symbol.Camera,
-    ["home.ocrImage"] = Microsoft.UI.Xaml.Controls.Symbol.Pictures,
-    ["home.copyAll"] = Microsoft.UI.Xaml.Controls.Symbol.Copy,
-    ["home.favorite"] = Microsoft.UI.Xaml.Controls.Symbol.OutlineStar,
-    ["home.speak"] = Microsoft.UI.Xaml.Controls.Symbol.Volume,
+    ["home.services"] = "sort", ["home.pin"] = "pin", ["home.swapLanguages"] = "swap",
+    ["home.translate"] = "send", ["home.copySource"] = "copy", ["home.paste"] = "paste",
+    ["home.removeLineBreaks"] = "text-align-left", ["home.clear"] = "delete",
+    ["home.selection"] = "text-select", ["home.screenshot"] = "crop", ["home.ocrImage"] = "image",
+    ["home.copyAll"] = "copy", ["home.favorite"] = "star", ["home.speak"] = "speaker",
 };
 Check(expectedHomeIcons.All(expected => IconSemantics.Actions.TryGetValue(expected.Key, out var actual) &&
-        actual.Symbol == expected.Value),
-    "home actions keep exact semantic icons");
+        actual.Resource == expected.Value),
+    "home actions keep exact SVG resource semantics");
 Check(SpeechService.NormalizeText("  hello  ") == "hello" && SpeechService.NormalizeText("   ").Length == 0,
     "speech input normalization");
 var syncTime = DateTimeOffset.Parse("2026-07-18T00:00:00Z");
@@ -245,6 +325,8 @@ var portableSettings = new PythiaSettings
     TargetLanguage = "zh-CN",
     EnabledTranslateServices = ["google"],
     TranslateServiceOrder = ["google"],
+    OpenAICompatibleApi = "anthropic",
+    CompactTranslationWindow = true,
     WebdavUrl = "https://private.example.invalid/dav",
     WebdavUsername = "private-user",
 };
@@ -256,6 +338,9 @@ Check(!portableJson.Contains("private.example", StringComparison.Ordinal) &&
 var portableRestore = PortableBackupService.Restore(portableJson, []);
 Check(portableRestore.ImportedCount == 1 && portableRestore.Records.Single().SyncStatus == "pendingUpload",
     "portable backup restores mergeable pending history");
+Check(portableRestore.Settings.OpenAICompatibleAPI == "anthropic" &&
+      portableRestore.Settings.CompactTranslationWindow,
+    "portable backup preserves non-secret compact-window and custom-API settings");
 Check(AppServices.GetSyncInterval(new PythiaSettings
       { WebdavHistorySyncIntervalValue = 2, WebdavHistorySyncIntervalUnit = "week" }) == TimeSpan.FromDays(14),
     "WebDAV week schedule");
@@ -268,6 +353,8 @@ Check(!WindowsShellService.TryParseHotkey("P", out _, out _),
 Check(UpdateService.TryParseVersion("v1.2.3", out var updateVersion) && updateVersion == new Version(1, 2, 3) &&
       UpdateService.TryParseVersion("2.0.0-beta.1", out var previewVersion) && previewVersion == new Version(2, 0, 0),
     "update version parser");
+Check(UpdateService.ExpectedInstallerName(new Version(1, 2, 3)) == "Pythia-1.2.3-windows-x64.exe",
+    "updater selects the exact Pythia Windows x64 asset");
 Check(ScreenRegionSelector.NormalizeSelection(new System.Drawing.Point(120, 90), new System.Drawing.Point(20, 10)) ==
       new System.Drawing.Rectangle(20, 10, 100, 80), "screenshot reverse drag geometry");
 
@@ -423,6 +510,10 @@ try
 
     var installed = pluginService.Install(archive);
     Check(installed.ServiceId == "plugin:test.echo.runtime" && installed.Enabled, "plugin install and service registration");
+    pluginService.RenameDisplay(installed, "Renamed Echo");
+    var renamed = pluginService.LoadInstalled().First(item => item.Id == installed.Id);
+    Check(renamed.DisplayName == "Renamed Echo" && pluginService.DisplayName(installed.ServiceId) == "Renamed Echo",
+        "plugin display name persists without changing service ID");
     var pluginOutput = await pluginService.TranslateAsync(installed.ServiceId, "hello", "en", "zh-CN");
     Check(pluginOutput == "hello—你好，世界", "plugin runtime preserves exact UTF-8 output");
     var connection = await pluginService.TestConnectionAsync(installed, maximumDuration: TimeSpan.FromSeconds(3));
@@ -512,8 +603,34 @@ try
     }
     catch (Exception exception)
     {
-        Check(exception.Message == "Http Request Error；Http Status: 403", "plugin error response sanitization");
+    Check(exception.Message == "Http Request Error；Http Status: 403", "plugin error response sanitization");
     }
+
+    var legacyRoot = Path.Combine(pluginTestRoot, "legacy-potext");
+    Directory.CreateDirectory(legacyRoot);
+    await File.WriteAllTextAsync(Path.Combine(legacyRoot, "info.json"), """
+    {
+      "plugin_type": "translate",
+      "id": "test.legacy.potext",
+      "display": "Legacy Potext",
+      "version": "1.0.0",
+      "description": "Legacy conversion test",
+      "needs": [{ "key": "endpoint", "display": "Endpoint", "type": "input" }]
+    }
+    """);
+    await File.WriteAllTextAsync(Path.Combine(legacyRoot, "main.js"),
+        "const translate = async (text) => text + '-converted';");
+    var legacyArchive = Path.Combine(pluginTestRoot, "legacy.potext");
+    ZipFile.CreateFromDirectory(legacyRoot, legacyArchive);
+    var converted = pluginService.Install(legacyArchive);
+    Check(converted.Id == "test.legacy.potext" && converted.CanReconvert,
+        "potext installs through the native settings path and retains conversion source");
+    Check(await pluginService.TranslateAsync(converted.ServiceId, "legacy", "en", "zh-CN") == "legacy-converted",
+        "converted potext plugin uses the shared runner contract");
+    var reconverted = pluginService.Reconvert(converted);
+    Check(reconverted.CanReconvert &&
+          await pluginService.TranslateAsync(reconverted.ServiceId, "again", "en", "zh-CN") == "again-converted",
+        "potext reconversion preserves runtime behavior");
 }
 catch (Exception exception)
 {

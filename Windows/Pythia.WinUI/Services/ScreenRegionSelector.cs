@@ -1,5 +1,4 @@
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
 namespace Pythia.Services;
@@ -15,7 +14,6 @@ public static class ScreenRegionSelector
     private sealed class SelectionForm : Form
     {
         private readonly Rectangle _virtualScreen;
-        private readonly Bitmap _desktop;
         private Point _start;
         private Point _current;
         private bool _selecting;
@@ -25,10 +23,6 @@ public static class ScreenRegionSelector
             _virtualScreen = SystemInformation.VirtualScreen;
             if (_virtualScreen.Width <= 0 || _virtualScreen.Height <= 0)
                 throw new InvalidOperationException("无法读取虚拟桌面范围。");
-            _desktop = new Bitmap(_virtualScreen.Width, _virtualScreen.Height);
-            using (var graphics = Graphics.FromImage(_desktop))
-                graphics.CopyFromScreen(_virtualScreen.Location, Point.Empty, _virtualScreen.Size, CopyPixelOperation.SourceCopy);
-
             AutoScaleMode = AutoScaleMode.None;
             Bounds = _virtualScreen;
             FormBorderStyle = FormBorderStyle.None;
@@ -39,6 +33,7 @@ public static class ScreenRegionSelector
             KeyPreview = true;
             Cursor = Cursors.Cross;
             BackColor = Color.Black;
+            Opacity = 0.34;
         }
 
         public Rectangle? SelectedRegion { get; private set; }
@@ -53,15 +48,11 @@ public static class ScreenRegionSelector
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            e.Graphics.DrawImageUnscaled(_desktop, 0, 0);
-            using var shade = new SolidBrush(Color.FromArgb(105, 0, 0, 0));
-            e.Graphics.FillRectangle(shade, ClientRectangle);
+            e.Graphics.Clear(Color.Black);
             var selection = NormalizeSelection(_start, _current);
             if (!_selecting && selection.Width == 0) return;
             if (selection.Width > 0 && selection.Height > 0)
             {
-                e.Graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
-                e.Graphics.DrawImage(_desktop, selection, selection, GraphicsUnit.Pixel);
                 using var border = new Pen(Color.FromArgb(255, 58, 160, 255), 2);
                 e.Graphics.DrawRectangle(border, selection.X, selection.Y,
                     Math.Max(0, selection.Width - 1), Math.Max(0, selection.Height - 1));
@@ -144,12 +135,6 @@ public static class ScreenRegionSelector
                 return;
             }
             base.OnKeyDown(e);
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing) _desktop.Dispose();
-            base.Dispose(disposing);
         }
 
     }

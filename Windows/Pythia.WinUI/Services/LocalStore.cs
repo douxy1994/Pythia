@@ -27,6 +27,8 @@ public sealed class LocalStore
     public string HistoryBackupPath => Path.Combine(DataDirectory, "Backups", "history-before-sync.json");
     public string DeviceIdPath => Path.Combine(DataDirectory, "device-id.txt");
     public string PluginsDirectory => Path.Combine(DataDirectory, "Plugins");
+    public string LegacyPluginsDirectory => Path.Combine(DataDirectory, "Legacy");
+    public string LegacyPluginBackupsDirectory => Path.Combine(DataDirectory, "Legacy Backups");
     public string RuntimeDirectory => Path.Combine(DataDirectory, "Runtime");
 
     public async Task<PythiaSettings> LoadSettingsAsync()

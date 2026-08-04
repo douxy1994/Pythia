@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Pythia.Controls;
 using Pythia.Models;
 using Pythia.Services;
 using Windows.ApplicationModel.DataTransfer;
@@ -17,6 +18,7 @@ public sealed partial class HomePage : Page
     private readonly HomeSubmissionGate _submissionGate = new();
     private CancellationTokenSource? _translationCancellation;
     private bool _isTextCompositionActive;
+    private bool _isCompactMode;
     private TranslationBatch? _lastBatch;
 
     public HomePage()
@@ -25,17 +27,51 @@ public sealed partial class HomePage : Page
         Results = [];
         _selectedServices = Services.Settings.ActiveServices.ToList();
         InitializeComponent();
+        AppVersionText.Text = $"v{UpdateService.CurrentVersion.ToString(3)}";
         SourceLanguageBox.ItemsSource = LanguageOption.SourceLanguages;
         TargetLanguageBox.ItemsSource = LanguageOption.TargetLanguages;
         SourceLanguageBox.SelectedItem = LanguageOption.FindSource(Services.Settings.SourceLanguage);
         TargetLanguageBox.SelectedItem = LanguageOption.FindTarget(Services.Settings.TargetLanguage);
         UpdateServiceLabel();
         UpdatePinButtonVisual();
-        Results.CollectionChanged += (_, _) => EmptyResultsText.Visibility = Results.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        Results.CollectionChanged += (_, _) =>
+        {
+            foreach (var result in Results)
+            {
+                result.ShowCollapse = !_isCompactMode;
+                if (_isCompactMode) result.IsExpanded = true;
+            }
+            EmptyResultsText.Visibility = Results.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        };
+        Unloaded += (_, _) =>
+        {
+            _translationCancellation?.Cancel();
+            _translationCancellation?.Dispose();
+            _translationCancellation = null;
+        };
     }
 
     public AppServices Services { get; }
     public ObservableCollection<TranslationResult> Results { get; }
+
+    public void SetCompactMode(bool compact)
+    {
+        _isCompactMode = compact;
+        FullToolbar.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        SourcePanel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        FullFooter.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        CompactHeader.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
+        ResultsTitle.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        Grid.SetRow(ResultsPanel, compact ? 1 : 2);
+        Grid.SetRowSpan(ResultsPanel, compact ? 3 : 1);
+        WorkspaceRoot.Padding = compact ? new Thickness(8, 6, 8, 8) : new Thickness(32, 24, 32, 12);
+        WorkspaceRoot.RowSpacing = compact ? 8 : 12;
+        foreach (var result in Results)
+        {
+            result.ShowCollapse = !compact;
+            if (compact) result.IsExpanded = true;
+        }
+    }
 
     public async Task LoadTextAsync(string text, bool translate)
     {
@@ -94,6 +130,8 @@ public sealed partial class HomePage : Page
         catch (Exception exception) { Services.Status.Report(exception.Message); }
         finally
         {
+            _translationCancellation?.Dispose();
+            _translationCancellation = null;
             TranslateButton.IsEnabled = true;
             _submissionGate.Exit();
         }
@@ -114,7 +152,9 @@ public sealed partial class HomePage : Page
         {
             MinWidth = 430,
             MaxHeight = 520,
-            SelectionMode = ListViewSelectionMode.Single,
+            // SelectionMode.None: a selection competes with drag for pointer ownership on
+            // WinUI 3 desktop; None lets the press start a reorder drag on the whole row.
+            SelectionMode = ListViewSelectionMode.None,
             CanDragItems = true,
             CanReorderItems = true,
             AllowDrop = true,
@@ -126,7 +166,7 @@ public sealed partial class HomePage : Page
             var row = new Grid { ColumnSpacing = 10, Padding = new Thickness(4, 2, 4, 2) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            var handle = new SymbolIcon { Symbol = Symbol.Bullets, VerticalAlignment = VerticalAlignment.Center };
+            var handle = new SvgIcon { Icon = "reorder", VerticalAlignment = VerticalAlignment.Center };
             AutomationProperties.SetName(handle, $"拖动调整 {available[id]} 的顺序");
             row.Children.Add(handle);
             var check = new CheckBox
@@ -137,7 +177,16 @@ public sealed partial class HomePage : Page
             };
             Grid.SetColumn(check, 1);
             row.Children.Add(check);
-            var item = new ListViewItem { Content = row, Tag = id, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+            var item = new ListViewItem
+            {
+                Content = row,
+                Tag = id,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                // Disable focus engagement so a press on the row starts a drag instead of
+                // entering engage-focus, which otherwise blocks drag-start on desktop when
+                // the row contains a focusable CheckBox.
+                IsFocusEngagementEnabled = false,
+            };
             check.Checked += async (_, _) => { enabled.Add(id); await PersistServiceStateAsync(list, enabled); };
             check.Unchecked += async (_, _) => { enabled.Remove(id); await PersistServiceStateAsync(list, enabled); };
             return item;
@@ -149,13 +198,18 @@ public sealed partial class HomePage : Page
         {
             var control = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control)
                 .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-            if (!control || list.SelectedIndex < 0 || keyEvent.Key is not (VirtualKey.Up or VirtualKey.Down)) return;
-            var target = list.SelectedIndex + (keyEvent.Key == VirtualKey.Up ? -1 : 1);
-            if (target < 0 || target >= list.Items.Count) return;
-            var selected = list.SelectedItem;
-            list.Items.RemoveAt(list.SelectedIndex);
-            list.Items.Insert(target, selected);
-            list.SelectedIndex = target;
+            if (!control || keyEvent.Key is not (VirtualKey.Up or VirtualKey.Down)) return;
+            // SelectionMode.None: there is no SelectedIndex, so use the currently focused
+            // ListViewItem container as the keyboard reorder anchor.
+            var focused = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) as ListViewItem;
+            if (focused?.Tag is not string id) return;
+            var index = list.Items.IndexOf(focused);
+            if (index < 0) return;
+            var target = Math.Clamp(index + (keyEvent.Key == VirtualKey.Up ? -1 : 1), 0, list.Items.Count - 1);
+            if (target == index) return;
+            list.Items.RemoveAt(index);
+            list.Items.Insert(target, focused);
+            focused.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
             keyEvent.Handled = true;
             await PersistServiceStateAsync(list, enabled);
         };
@@ -194,13 +248,21 @@ public sealed partial class HomePage : Page
         finally { _serviceSaveGate.Release(); }
     }
 
-    private void UpdateServiceLabel() => ServiceButtonLabel.Text = _selectedServices.Count switch
+    private void UpdateServiceLabel()
     {
+        var label = _selectedServices.Count switch
+        {
         0 => "选择服务",
         1 => Services.TranslationServices.FirstOrDefault(item => item.Id == _selectedServices[0]).Name
             ?? ServiceCatalog.DisplayName(_selectedServices[0]),
         _ => $"{_selectedServices.Count} 个翻译服务",
-    };
+        };
+        ServiceButtonLabel.Text = label;
+        CompactServiceButtonLabel.Text = $"服务 {_selectedServices.Count}";
+    }
+
+    private void ExpandCompact_Click(object sender, RoutedEventArgs e) =>
+        (App.MainAppWindow as MainWindow)?.SetCompactPresentation(false);
 
     private async void Language_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -305,7 +367,8 @@ public sealed partial class HomePage : Page
         foreach (var result in Results.Where(item => item.IsSuccess))
         {
             var record = Services.History.FirstOrDefault(item =>
-                item.SourceText == _lastBatch.SourceText && item.TranslatedText == result.Text && item.Service == result.ServiceId);
+                item.SourceText == _lastBatch.SourceText && item.TranslatedText == result.Text &&
+                (item.Service == result.ServiceId || item.Service == result.ServiceName));
             if (record is null)
             {
                 record = new HistoryRecord
@@ -314,7 +377,7 @@ public sealed partial class HomePage : Page
                     TranslatedText = result.Text,
                     SourceLanguage = _lastBatch.SourceLanguage,
                     TargetLanguage = _lastBatch.TargetLanguage,
-                    Service = result.ServiceId,
+                    Service = result.ServiceName,
                     Model = result.Model,
                     DeviceId = Services.DeviceId,
                     IsFavorite = true,
@@ -365,7 +428,7 @@ public sealed partial class HomePage : Page
     private void UpdatePinButtonVisual()
     {
         var pinned = Services.Settings.AlwaysOnTop;
-        PinIcon.Symbol = pinned ? Symbol.UnPin : Symbol.Pin;
+        PinIcon.Icon = pinned ? "pin-off" : "pin";
         PinButton.Style = (Style)Application.Current.Resources[
             pinned ? "AccentButtonStyle" : "PythiaToolbarButtonStyle"];
         var label = pinned ? "取消窗口置顶（当前已置顶）" : "窗口置顶（当前未置顶）";
@@ -375,7 +438,7 @@ public sealed partial class HomePage : Page
 
     private async void RetryResult_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as Button)?.Tag is not TranslationResult result || !result.IsPlugin) return;
+        if ((sender as Button)?.Tag is not TranslationResult result) return;
         var index = Results.IndexOf(result);
         if (index < 0 || string.IsNullOrWhiteSpace(SourceTextBox.Text)) return;
         Services.Status.Report($"正在重试 {result.ServiceName}…", true);
@@ -422,6 +485,18 @@ public sealed partial class HomePage : Page
 
     private void SourceTextBox_TextCompositionEnded(UIElement sender, TextCompositionEndedEventArgs args) =>
         _isTextCompositionActive = false;
+
+    internal bool IsSelectionActionPoint(int clientX, int clientY)
+    {
+        if (SelectionTranslateButton.XamlRoot is null) return false;
+        var origin = SelectionTranslateButton.TransformToVisual(null)
+            .TransformPoint(new Windows.Foundation.Point());
+        var scale = SelectionTranslateButton.XamlRoot.RasterizationScale;
+        var x = clientX / scale;
+        var y = clientY / scale;
+        return x >= origin.X && x <= origin.X + SelectionTranslateButton.ActualWidth &&
+               y >= origin.Y && y <= origin.Y + SelectionTranslateButton.ActualHeight;
+    }
 
     private async void SourceTextBox_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {

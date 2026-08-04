@@ -107,9 +107,24 @@ public static class OcrService
     private static SoftwareBitmap CaptureScreen(int left, int top, int width, int height)
     {
         if (width <= 0 || height <= 0) throw new InvalidOperationException("无法获取屏幕尺寸。");
+        const long maxCapturePixels = 20_000_000;
+        if (width > 16_384 || height > 16_384 || (long)width * height > maxCapturePixels)
+            throw new InvalidOperationException("截图区域过大。为避免占满显存和内存，请缩小到约 2000 万像素以内后重试。");
         var screen = GetDC(IntPtr.Zero);
+        if (screen == IntPtr.Zero) throw new InvalidOperationException("无法访问屏幕画面。");
         var memory = CreateCompatibleDC(screen);
+        if (memory == IntPtr.Zero)
+        {
+            ReleaseDC(IntPtr.Zero, screen);
+            throw new InvalidOperationException("无法创建截图缓冲区。");
+        }
         var bitmap = CreateCompatibleBitmap(screen, width, height);
+        if (bitmap == IntPtr.Zero)
+        {
+            DeleteDC(memory);
+            ReleaseDC(IntPtr.Zero, screen);
+            throw new InvalidOperationException("截图缓冲区不足，请缩小选区后重试。");
+        }
         var previous = SelectObject(memory, bitmap);
         try
         {

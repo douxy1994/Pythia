@@ -41,7 +41,7 @@
 
 | # | 项目 | 现状 | 目标依据 |
 |---|---|---|---|
-| P2-1 | `AboutPage.xaml` 为游离文件 | 独立 `AboutPage.xaml(.cs)` 存在但实际未用作导航页，「关于」以 `SettingsPage` 内联 `AboutSection` 呈现（测试已断言此约定）。 | 目标 IV.6「关于页面显示版本信息」已由内联区满足 | 删除游离 `AboutPage` 文件或在文档中明确其弃用，避免混淆。 |
+| ~~P2-1~~ | ~~`AboutPage.xaml` 为游离文件~~ | **已关闭。** 已删除未使用的 `AboutPage.xaml(.cs)`，关于与更新只保留在 `SettingsPage` 内联区。 | 目标 IV.6「关于页面显示版本信息」 | ✅ 无重复页面实现 |
 | P2-2 | 高 DPI / 键盘 Tab 顺序 / Tooltip / 辅助功能标签 | 代码具备 `PerMonitorV2`、`IconSemantics`（38 项）、`AutomationProperties`，但 100/125/150/200% 全 DPI 与多显示器组合仍需人工实机核对。 | 目标 V「DPI 不截断/模糊/错位」「Tab 焦点顺序」 | 阶段四实机验收中逐项核对，发现的具体错位再针对性修复。 |
 
 ---

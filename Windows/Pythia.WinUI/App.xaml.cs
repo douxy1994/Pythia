@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
 using Pythia.Services;
+using System.Text.RegularExpressions;
 
 namespace Pythia;
 
@@ -10,6 +11,14 @@ public partial class App : Application
 
     public static AppServices Services { get; } = new();
     public static Window? MainAppWindow { get; private set; }
+    public static PythiaUpdateInfo? PendingUpdate { get; private set; }
+    public static event EventHandler? UpdateAvailable;
+
+    public static void SetPendingUpdate(PythiaUpdateInfo? update)
+    {
+        PendingUpdate = update;
+        UpdateAvailable?.Invoke(null, EventArgs.Empty);
+    }
 
     public App()
     {
@@ -71,15 +80,18 @@ public partial class App : Application
         try
         {
             var update = await UpdateService.CheckAsync();
+            SetPendingUpdate(update);
             if (update is not null)
             {
-                Services.Status.Report($"发现新版本 {update.Tag}，可在“设置 → 关于与更新”中安装");
-                (MainAppWindow as MainWindow)?.NotifyBackground("Pythia", $"发现新版本 {update.Tag}，可在设置中安装");
+                Services.Status.Report($"发现新版本 {update.Tag}，可在“设置 → 关于”中安装");
+                (MainAppWindow as MainWindow)?.NotifyBackground("Pythia", $"发现新版本 {update.Tag}，请在“设置 → 关于”中点击更新");
             }
         }
         catch
         {
-            // Startup update checks are best effort and never block the application.
+            // Startup update checks are best effort and never block the application, but
+            // leave a non-sensitive status trail instead of becoming a silent failure.
+            Services.Status.Report("启动更新检查失败，请稍后在设置中手动检查。");
         }
     }
 
@@ -87,8 +99,12 @@ public partial class App : Application
     {
         try
         {
+            var safeMessage = Regex.Replace(
+                exception.Message.Replace("\r", " ").Replace("\n", " "),
+                @"(?i)(bearer|api[-_ ]?key|access[-_ ]?token|secret|password)\s*[:=]\s*[^\s;,]+",
+                "$1=[REDACTED]");
             File.AppendAllText(Path.Combine(Path.GetTempPath(), "Pythia-native.log"),
-                $"[{DateTimeOffset.Now:O}] {exception}\r\n\r\n");
+                $"[{DateTimeOffset.Now:O}] {exception.GetType().FullName}: {safeMessage}\r\n");
         }
         catch { }
     }

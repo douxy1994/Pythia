@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Pythia.Models;
 using Pythia.Services;
+using System.Diagnostics;
 using Windows.System;
 using Windows.UI.Core;
 using Windows.Storage.Pickers;
@@ -14,12 +15,15 @@ namespace Pythia.Pages;
 public sealed partial class SettingsPage : Page
 {
     private readonly Dictionary<string, FrameworkElement> _sections = [];
+    private CancellationTokenSource? _autoSaveDelay;
+    private bool _loadingValues;
 
     public SettingsPage()
     {
         InitializeComponent();
         _sections.Add("general", GeneralSection);
         _sections.Add("services", ServicesSection);
+        _sections.Add("plugins", PluginsSection);
         _sections.Add("ocr", OcrSection);
         _sections.Add("shortcuts", ShortcutsSection);
         _sections.Add("sync", SyncSection);
@@ -27,13 +31,34 @@ public sealed partial class SettingsPage : Page
         _sections.Add("about", AboutSection);
         LoadValues();
         ShowSection("general");
+        HookAutoSave();
+        Loaded += (_, _) =>
+        {
+            App.UpdateAvailable -= App_UpdateAvailable;
+            App.UpdateAvailable += App_UpdateAvailable;
+            RefreshUpdateState();
+        };
+        Unloaded += (_, _) =>
+        {
+            App.UpdateAvailable -= App_UpdateAvailable;
+            _autoSaveDelay?.Cancel();
+            _ = SaveSettingsCoreAsync(false);
+        };
     }
 
     private void LoadValues()
     {
+        _loadingValues = true;
+        try { LoadValuesCore(); }
+        finally { _loadingValues = false; }
+    }
+
+    private void LoadValuesCore()
+    {
         var settings = App.Services.Settings;
         ThemeBox.SelectedItem = ThemeBox.Items.OfType<ComboBoxItem>().First(item => (string)item.Tag == settings.ThemeMode);
         SaveHistorySwitch.IsOn = settings.SaveHistory;
+        CompactTranslationWindowSwitch.IsOn = settings.CompactTranslationWindow;
         LaunchAtStartupSwitch.IsOn = settings.LaunchAtStartup;
         GoogleSwitch.IsOn = settings.GoogleEnabled || settings.EnabledTranslateServices.Contains("google");
         BaiduSwitch.IsOn = settings.BaiduEnabled || settings.EnabledTranslateServices.Contains("baidu");
@@ -42,6 +67,8 @@ public sealed partial class SettingsPage : Page
         DeepLSwitch.IsOn = settings.DeepLEnabled || settings.EnabledTranslateServices.Contains("deepl");
         LibreSwitch.IsOn = settings.LibreTranslateEnabled || settings.EnabledTranslateServices.Contains("libretranslate");
         OpenAiNameBox.Text = settings.OpenAICompatibleName;
+        OpenAiApiBox.SelectedItem = OpenAiApiBox.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(item => (string)item.Tag == settings.OpenAICompatibleApi) ?? OpenAiApiBox.Items[0];
         OpenAiUrlBox.Text = settings.OpenAICompatibleBaseUrl;
         OpenAiModelBox.Text = settings.OpenAICompatibleModel;
         DeepLUrlBox.Text = settings.DeepLBaseUrl;
@@ -58,11 +85,13 @@ public sealed partial class SettingsPage : Page
         SyncUnitBox.SelectedItem = SyncUnitBox.Items.OfType<ComboBoxItem>().FirstOrDefault(item => (string)item.Tag == settings.WebdavHistorySyncIntervalUnit) ?? SyncUnitBox.Items[1];
         WebDavStatusText.Text = settings.WebdavLastSyncStatus;
         UpdateStatusText.Text = $"当前版本 {UpdateService.CurrentVersion.ToString(3)}";
+        VersionText.Text = UpdateService.CurrentVersion.ToString(3);
         AlwaysOnTopSwitch.IsOn = settings.AlwaysOnTop;
         CloseToTraySwitch.IsOn = settings.CloseToTray;
         HideOnBlurSwitch.IsOn = settings.HideOnBlur;
         NotificationsSwitch.IsOn = settings.NotificationsEnabled;
         CheckUpdateOnStartupSwitch.IsOn = settings.CheckForUpdatesOnStartup;
+        RefreshUpdateState();
         MarkExistingCredential(BaiduAppIdBox, "provider.baidu.appId");
         MarkExistingCredential(BaiduSecretBox, "provider.baidu.secret");
         MarkExistingCredential(YoudaoAppKeyBox, "provider.youdao.appKey");
@@ -71,6 +100,91 @@ public sealed partial class SettingsPage : Page
         MarkExistingCredential(DeepLKeyBox, "provider.deepl.apiKey");
         MarkExistingCredential(LibreKeyBox, "provider.libretranslate.apiKey");
         MarkExistingCredential(WebDavPasswordBox, "webdav.password");
+    }
+
+    private void App_UpdateAvailable(object? sender, EventArgs e) =>
+        DispatcherQueue.TryEnqueue(RefreshUpdateState);
+
+    private void RefreshUpdateState()
+    {
+        var update = App.PendingUpdate;
+        if (update is null)
+        {
+            UpdateCard.Visibility = Visibility.Collapsed;
+            UpdateButton.Visibility = Visibility.Collapsed;
+            LatestNotesText.Text =
+                "1.2.0 · 新增以译文为核心的简约窗口，并与主窗口同步多选翻译服务。\n" +
+                "新增 OpenAI Chat Completions 与 Anthropic Messages 自定义大模型接口。\n" +
+                "优化划词、OCR 与并发翻译的资源占用，降低高 DPI、多屏环境下的卡死风险。";
+            return;
+        }
+
+        UpdateCard.Visibility = Visibility.Visible;
+        UpdateButton.Visibility = Visibility.Visible;
+        UpdateVersionText.Text = $"{update.Tag} 可用";
+        UpdateNotesText.Text = string.IsNullOrWhiteSpace(update.Notes)
+            ? "该版本未提供更新说明。"
+            : update.Notes;
+        LatestNotesText.Text = $"最新版本：{update.Tag}";
+        UpdateStatusText.Text = $"发现新版本 {update.Tag}，下载并校验后将自动重启安装。";
+    }
+
+    private void HookAutoSave()
+    {
+        foreach (var toggle in new[]
+                 {
+                     SaveHistorySwitch, CompactTranslationWindowSwitch, LaunchAtStartupSwitch, GoogleSwitch, BaiduSwitch,
+                     YoudaoSwitch, OpenAiSwitch, DeepLSwitch, LibreSwitch, OcrAutoTranslateSwitch,
+                     WebDavAutoSyncSwitch, AlwaysOnTopSwitch, CloseToTraySwitch, HideOnBlurSwitch,
+                     NotificationsSwitch, CheckUpdateOnStartupSwitch,
+                 })
+            toggle.Toggled += (_, _) => ScheduleAutoSave();
+
+        ThemeBox.SelectionChanged += (_, _) => ScheduleAutoSave();
+        OpenAiApiBox.SelectionChanged += (_, _) => ScheduleAutoSave();
+        SyncUnitBox.SelectionChanged += (_, _) => ScheduleAutoSave();
+        SyncIntervalBox.ValueChanged += (_, _) => ScheduleAutoSave();
+        foreach (var textBox in new[]
+                 {
+                     BaiduAppIdBox, YoudaoAppKeyBox, OpenAiNameBox, OpenAiUrlBox, OpenAiModelBox,
+                     DeepLUrlBox, LibreUrlBox, ShowWindowHotkeyBox, SelectionHotkeyBox,
+                     ScreenshotTranslateHotkeyBox, ScreenshotOcrHotkeyBox, WebDavUrlBox, WebDavUserBox,
+                 })
+            textBox.TextChanged += (_, _) => ScheduleAutoSave();
+        foreach (var passwordBox in new[]
+                 { BaiduSecretBox, YoudaoSecretBox, OpenAiKeyBox, DeepLKeyBox, LibreKeyBox, WebDavPasswordBox })
+            passwordBox.PasswordChanged += (_, _) => ScheduleAutoSave();
+    }
+
+    private void ScheduleAutoSave()
+    {
+        if (_loadingValues) return;
+        _autoSaveDelay?.Cancel();
+        var delay = new CancellationTokenSource();
+        _autoSaveDelay = delay;
+        _ = AutoSaveAfterDelayAsync(delay);
+    }
+
+    private async Task AutoSaveAfterDelayAsync(CancellationTokenSource delay)
+    {
+        try
+        {
+            await Task.Delay(450, delay.Token);
+            await SaveSettingsCoreAsync(false);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception exception)
+        {
+            SaveStatusText.Text = $"自动保存失败：{exception.Message}";
+        }
+        finally
+        {
+            if (ReferenceEquals(_autoSaveDelay, delay))
+            {
+                _autoSaveDelay = null;
+                delay.Dispose();
+            }
+        }
     }
 
     private static void MarkExistingCredential(Control control, string key)
@@ -106,8 +220,9 @@ public sealed partial class SettingsPage : Page
         ShowSection((string)item.Tag);
     }
 
-    private async void Save_Click(object sender, RoutedEventArgs e)
+    private async Task SaveSettingsCoreAsync(bool showStatus)
     {
+        _autoSaveDelay?.Cancel();
         var settings = App.Services.Settings;
         var previousHotkeys = (
             settings.ShowWindowHotkey,
@@ -130,6 +245,7 @@ public sealed partial class SettingsPage : Page
             hotkeysApplied = true;
             settings.ThemeMode = (string)((ComboBoxItem)ThemeBox.SelectedItem).Tag;
             settings.SaveHistory = SaveHistorySwitch.IsOn;
+            settings.CompactTranslationWindow = CompactTranslationWindowSwitch.IsOn;
             settings.LaunchAtStartup = LaunchAtStartupSwitch.IsOn;
             settings.GoogleEnabled = GoogleSwitch.IsOn;
             settings.BaiduEnabled = BaiduSwitch.IsOn;
@@ -145,6 +261,7 @@ public sealed partial class SettingsPage : Page
             settings.EnabledTranslateServices = HomeInteractionPolicy
                 .MergeBuiltInEnabled(settings.EnabledTranslateServices, enabledBuiltIns).ToList();
             settings.OpenAICompatibleName = OpenAiNameBox.Text.Trim();
+            settings.OpenAICompatibleApi = (OpenAiApiBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "openai";
             settings.OpenAICompatibleBaseUrl = OpenAiUrlBox.Text.Trim();
             settings.OpenAICompatibleModel = OpenAiModelBox.Text.Trim();
             settings.DeepLBaseUrl = DeepLUrlBox.Text.Trim();
@@ -176,7 +293,7 @@ public sealed partial class SettingsPage : Page
             WindowsIntegrationService.SetLaunchAtStartup(settings.LaunchAtStartup);
             if (App.MainAppWindow?.AppWindow.Presenter is OverlappedPresenter presenter)
                 presenter.IsAlwaysOnTop = settings.AlwaysOnTop;
-            SaveStatusText.Text = $"已保存 · {DateTime.Now:HH:mm:ss}";
+            if (showStatus) SaveStatusText.Text = $"已保存 · {DateTime.Now:HH:mm:ss}";
         }
         catch (Exception exception)
         {
@@ -185,7 +302,7 @@ public sealed partial class SettingsPage : Page
                 RestorePreviousHotkeys(settings, previousHotkeys);
                 if (App.MainAppWindow is MainWindow window) window.TryApplyHotkeys(settings, out _);
             }
-            SaveStatusText.Text = $"保存失败：{exception.Message}";
+            SaveStatusText.Text = showStatus ? $"保存失败：{exception.Message}" : $"自动保存失败：{exception.Message}";
         }
     }
 
@@ -228,7 +345,7 @@ public sealed partial class SettingsPage : Page
         parts.Add(key);
         box.Text = string.Join('+', parts);
         box.SelectAll();
-        SaveStatusText.Text = "快捷键已录入，保存后生效。";
+            SaveStatusText.Text = "快捷键已录入，将自动保存并生效。";
     }
 
     private static bool IsKeyDown(VirtualKey key) =>
@@ -379,31 +496,32 @@ public sealed partial class SettingsPage : Page
 
     private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
     {
+        CheckUpdateButton.IsEnabled = false;
         UpdateStatusText.Text = "正在检查 GitHub Release…";
         try
         {
             var update = await UpdateService.CheckAsync();
+            App.SetPendingUpdate(update);
             if (update is null)
             {
                 UpdateStatusText.Text = $"当前已是最新版本 {UpdateService.CurrentVersion.ToString(3)}";
                 return;
             }
-            UpdateStatusText.Text = $"发现新版本 {update.Tag}";
-            var notes = string.IsNullOrWhiteSpace(update.Notes) ? "该版本未提供更新说明。" : update.Notes;
-            var dialog = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = $"发现 Pythia {update.Tag}",
-                Content = new ScrollViewer
-                {
-                    MaxHeight = 320,
-                    Content = new TextBlock { Text = notes, TextWrapping = TextWrapping.Wrap },
-                },
-                PrimaryButtonText = "下载并安装",
-                CloseButtonText = "稍后",
-                DefaultButton = ContentDialogButton.Close,
-            };
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            RefreshUpdateState();
+        }
+        catch (Exception exception)
+        {
+            UpdateStatusText.Text = $"更新检查失败：{exception.Message}";
+        }
+        finally { CheckUpdateButton.IsEnabled = true; }
+    }
+
+    private async void InstallUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (App.PendingUpdate is not { } update) return;
+        UpdateButton.IsEnabled = false;
+        try
+        {
             var progress = new Progress<double>(value =>
                 UpdateStatusText.Text = $"正在下载 {update.Tag}：{value:P0}");
             var installer = await UpdateService.DownloadInstallerAsync(update, progress);
@@ -413,7 +531,20 @@ public sealed partial class SettingsPage : Page
         }
         catch (Exception exception)
         {
-            UpdateStatusText.Text = $"更新检查失败：{exception.Message}";
+            UpdateStatusText.Text = $"更新安装失败：{exception.Message}";
+            UpdateButton.IsEnabled = true;
+        }
+    }
+
+    private void OpenGitHub_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(UpdateService.RepositoryUrl) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            UpdateStatusText.Text = $"无法打开 GitHub：{exception.Message}";
         }
     }
 }

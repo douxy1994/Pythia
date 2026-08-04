@@ -4,22 +4,27 @@
 
 Pythia 是一款面向 macOS 和 Windows 的现代桌面翻译软件。macOS 端使用原生 Swift/AppKit，Windows 端使用 C# 14、.NET 10、WinUI 3 和 Windows App SDK。两个平台共用历史记录、WebDAV、语言路由、备份和 `.pythia` 插件契约。
 
-当前版本：**1.0.0**
+当前版本：**1.2.0**
 
 ## 下载
 
 ### macOS
 
-[下载 Pythia 1.0.0 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.0.0/Pythia-1.0.0-macos-arm64.dmg)
+[下载 Pythia 1.2.0 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.2.0/Pythia-1.2.0-macos-arm64.dmg)
 
-- 需要 macOS 26 或更高版本。
+- 需要 macOS 14 或更高版本。
 - 仅支持 Apple silicon（`arm64`）。
 - 当前构建使用项目稳定的本地代码签名身份，尚未使用 Apple Developer ID 进行公证。
-- DMG 和 SHA-256 校验文件同时发布在 [v1.0.0 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.0.0)。
+- DMG 和 SHA-256 校验文件同时发布在 [v1.2.0 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.0)。
 
 ### Windows
 
-Windows x64 源码、原生宿主、安装包流水线和自动测试已经在仓库中。当前 Release 暂不提供正式 Windows 安装程序，Windows 端后续开发请直接阅读 [WINDOWS_CODEX_HANDOFF.md](WINDOWS_CODEX_HANDOFF.md)。
+[下载 Pythia 1.2.0 Windows x64 版](https://github.com/douxy1994/Pythia/releases/download/v1.2.0/Pythia-1.2.0-windows-x64.exe)
+
+- 支持 64 位 Windows 10 和 Windows 11。
+- 安装程序与 SHA-256 校验文件和 macOS 资产合并发布在同一个 [v1.2.0 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.0)。
+- 安装包只包含 Pythia 应用及其隔离运行时，不捆绑任何第三方插件或 `.pythia` 包。
+- Windows 1.2.0 安装包暂未进行 Authenticode 签名，可能触发 Microsoft Defender SmartScreen 提示；安装前请核对 SHA-256 校验值。
 
 ## 主要功能
 
@@ -123,10 +128,10 @@ Set-Location Windows\Pythia.WinUI
 node ..\..\script\validate_pythia_plugins.mjs
 dotnet build .\Pythia.WinUI.csproj -c Release -r win-x64
 dotnet run --project ..\Pythia.WinUI.Tests\Pythia.WinUI.Tests.csproj -c Release
-.\tool\build-installer.ps1 -Version 1.0.0
+.\tool\build-installer.ps1 -Version 1.2.0
 ```
 
-本机 Windows 11 原生客户端已完成 x64 编译、插件沙箱测试、公开插件校验、安装包与 SHA-256 生成、静默安装和启动验证。正式发布前仍需使用生产 Authenticode 证书签名，并完成真实输入法、多屏和跨设备 WebDAV 人工场景。
+Windows 原生客户端已完成 x64 编译、插件沙箱测试、公开插件校验、安装包与 SHA-256 生成、静默安装和启动验证。发布打包流程会拒绝发布树中的第三方插件包；Authenticode 签名将在后续版本补充。
 
 ## 插件契约验证
 

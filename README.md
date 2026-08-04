@@ -4,22 +4,27 @@
 
 Pythia is a modern desktop translation application for macOS and Windows. The macOS client is a native Swift/AppKit application. The Windows client uses C# 14, .NET 10, WinUI 3, and Windows App SDK. Both clients share the same history, WebDAV, language-routing, backup, and `.pythia` plugin contracts.
 
-Current version: **1.0.0**
+Current version: **1.2.0**
 
 ## Download
 
 ### macOS
 
-[Download Pythia 1.0.0 for macOS Apple silicon](https://github.com/douxy1994/Pythia/releases/download/v1.0.0/Pythia-1.0.0-macos-arm64.dmg)
+[Download Pythia 1.2.0 for macOS Apple silicon](https://github.com/douxy1994/Pythia/releases/download/v1.2.0/Pythia-1.2.0-macos-arm64.dmg)
 
-- Requires macOS 26 or later.
+- Requires macOS 14 or later.
 - Apple silicon (`arm64`) only.
 - The current build uses the project's stable local code-signing identity and is not Apple Developer ID notarized.
-- The DMG and its SHA-256 checksum are published together on the [v1.0.0 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.0.0).
+- The DMG and its SHA-256 checksum are published together on the [v1.2.0 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.2.0).
 
 ### Windows
 
-The Windows x64 source, native host, installer pipeline, and automated tests are present. A formal Windows installer is not included in the current release yet. Windows development continues from the instructions in [WINDOWS_CODEX_HANDOFF.md](WINDOWS_CODEX_HANDOFF.md).
+[Download Pythia 1.2.0 for Windows x64](https://github.com/douxy1994/Pythia/releases/download/v1.2.0/Pythia-1.2.0-windows-x64.exe)
+
+- Requires 64-bit Windows 10 or Windows 11.
+- The installer and its SHA-256 checksum are published alongside the macOS assets on the [v1.2.0 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.2.0).
+- The installer contains the Pythia application and its isolated runtime only. No third-party plugin or `.pythia` package is bundled.
+- The Windows 1.2.0 installer is not Authenticode-signed yet and might trigger a Microsoft Defender SmartScreen warning. Verify its SHA-256 checksum before installation.
 
 ## What Pythia Does
 
@@ -47,7 +52,7 @@ Pythia does not bundle third-party plugins in the application or installer. The 
 | SiliconFlow | [`.pythia`](Plugins/siliconflow-1.0.0.pythia) | SiliconFlow API Key |
 | Xiaomi MiMo | [`.pythia`](Plugins/xiaomi-mimo-1.0.0.pythia) | Xiaomi MiMo API Key |
 
-Install a package from **Plugins > Install Plugin** in the Windows navigation pane, then configure credentials from its plugin card. The packages contain no user credentials, API keys, WebDAV settings, history, or local machine paths.
+Install a package from **Settings > Plugins > Install Plugin** in the Windows client, then configure credentials from its plugin card. The packages contain no user credentials, API keys, WebDAV settings, history, or local machine paths.
 
 See the [plugin catalog and checksums](Plugins/README.md) for package details.
 
@@ -123,10 +128,10 @@ Set-Location Windows\Pythia.WinUI
 node ..\..\script\validate_pythia_plugins.mjs
 dotnet build .\Pythia.WinUI.csproj -c Release -r win-x64
 dotnet run --project ..\Pythia.WinUI.Tests\Pythia.WinUI.Tests.csproj -c Release
-.\tool\build-installer.ps1 -Version 1.0.0
+.\tool\build-installer.ps1 -Version 1.2.0
 ```
 
-The native Windows 11 client now passes x64 compilation, plugin sandbox tests, public-plugin validation, installer and SHA-256 creation, silent installation, and launch verification. Production still requires Authenticode signing and user-driven IME, multi-display, and cross-device WebDAV scenarios.
+The native Windows client passes x64 compilation, plugin sandbox tests, public-plugin validation, installer and SHA-256 creation, silent installation, and launch verification. Release packaging rejects third-party plugin packages from the publish tree. Authenticode signing remains planned for a later release.
 
 ## Plugin Contract Verification
 
@@ -171,7 +176,7 @@ WINDOWS_CODEX_HANDOFF.md Complete Windows continuation document
 ## Documentation
 
 - [Windows Codex handoff](WINDOWS_CODEX_HANDOFF.md)
-- [Pythia 1.0.0 release notes](Docs/RELEASE_NOTES_1.0.0.md)
+- [Pythia 1.2.0 release notes](Docs/RELEASE_NOTES_1.2.0.md)
 - [Pythia plugin development guide](Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md)
 - [Public plugin catalog](Plugins/README.md)
 - [Architecture](Docs/ARCHITECTURE.md)

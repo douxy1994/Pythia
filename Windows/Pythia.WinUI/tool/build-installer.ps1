@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "1.0.0",
+    [string]$Version = "1.2.0",
     [string]$Configuration = "Release"
 )
 
@@ -96,7 +96,7 @@ dotnet publish $project `
     --output $publish `
     -p:Platform=x64 `
     -p:WindowsAppSDKSelfContained=true `
-    -p:PublishReadyToRun=true `
+    -p:PublishReadyToRun=false `
     -p:PublishTrimmed=false
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
 
@@ -105,6 +105,15 @@ New-Item -ItemType Directory -Path $publishRuntime -Force | Out-Null
 Copy-Item -LiteralPath $preparedNode -Destination (Join-Path $publishRuntime "node.exe") -Force
 if (-not (Test-Path -LiteralPath (Join-Path $publishRuntime "node.exe"))) {
     throw "Published application is missing Runtime\node.exe."
+}
+
+# Plugins are distributed separately. Never ship third-party plugin packages or an
+# installed-plugin directory inside the application installer.
+$bundledPlugins = Get-ChildItem -LiteralPath $publish -Recurse -File -ErrorAction Stop |
+    Where-Object { $_.Extension -in '.pythia', '.potext' -or $_.FullName -match '[\\/]Plugins?[\\/]' }
+if ($bundledPlugins) {
+    $names = ($bundledPlugins | ForEach-Object FullName) -join [Environment]::NewLine
+    throw "Publish tree contains bundled plugins, which are forbidden in release installers:$([Environment]::NewLine)$names"
 }
 
 # Sign the main executable before ISCC packages it, so the bundled Pythia.exe is signed too.

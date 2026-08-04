@@ -1,6 +1,6 @@
 # Pythia Windows 图标语义映射
 
-Windows 客户端使用 WinUI `SymbolIcon` 和插件包自己的图标。图标必须与动作一致，并由文字、Tooltip 或 `AutomationProperties.Name` 提供可访问名称。
+Windows 客户端使用随安装包发布的 Microsoft Fluent System Icons SVG 资源和插件包自己的图标，不依赖目标电脑上的图标字体。图标必须与动作一致，并由文字、Tooltip 或 `AutomationProperties.Name` 提供可访问名称。
 
 | 区域 | 动作 | Fluent Symbol | 可访问名称 |
 | --- | --- | --- | --- |
@@ -9,7 +9,7 @@ Windows 客户端使用 WinUI `SymbolIcon` 和插件包自己的图标。图标�
 | 首页 | 交换语言 | `Switch` | 交换源语言和目标语言 |
 | 首页 | 开始翻译 | `Send` | 开始翻译 |
 | 首页 | 复制 / 粘贴 / 合并为单行 / 清空 | `Copy` / `Paste` / `AlignLeft` / `Delete` | 描述实际文本动作 |
-| 首页 | 划词 / 截图翻译 / 图片 OCR | `TouchPointer` / `Camera` / `Pictures` | 划词翻译 / 截图翻译 / 图片文字识别 |
+| 首页 | 划词 / 截图翻译 / 图片 OCR | `text-select` / `crop` / `image` | 划词翻译 / 截图翻译 / 图片文字识别 |
 | 首页 | 置顶 / 复制全部 / 收藏 / 朗读 | `Pin` / `Copy` / `OutlineStar` / `Volume` | 描述对应首页动作 |
 | 结果卡 | 插件重试 / 复制 | `Refresh` / `Copy` | 重试插件翻译 / 复制翻译结果 |
 | 插件 | 安装 / 配置 / 测试 / 启停 / 卸载 | `Add` / `Setting` / `Play` / `Switch` / `Delete` | 描述对应插件动作 |

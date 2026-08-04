@@ -3,13 +3,13 @@ namespace Pythia.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
-using Microsoft.UI.Xaml.Controls;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
 public sealed class TranslationResult : INotifyPropertyChanged
 {
     private bool _isExpanded = true;
+    private bool _showCollapse = true;
     public TranslationResult(string ServiceId, string ServiceName, string Text, string? Model = null, string? Error = null, string? IconPath = null)
     {
         this.ServiceId = ServiceId;
@@ -29,7 +29,19 @@ public sealed class TranslationResult : INotifyPropertyChanged
     public bool IsSuccess => Error is null;
     public string DisplayText => Error ?? Text;
     public bool IsPlugin => ServiceId.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase);
-    public Visibility RetryVisibility => IsPlugin ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility RetryVisibility => Visibility.Visible;
+    public Visibility CollapseVisibility => _showCollapse ? Visibility.Visible : Visibility.Collapsed;
+    public bool ShowCollapse
+    {
+        get => _showCollapse;
+        set
+        {
+            if (_showCollapse == value) return;
+            _showCollapse = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CollapseVisibility));
+        }
+    }
     public Visibility PluginIconVisibility => IsPlugin && !string.IsNullOrWhiteSpace(IconPath) ? Visibility.Visible : Visibility.Collapsed;
     public Visibility PluginFallbackVisibility => IsPlugin && string.IsNullOrWhiteSpace(IconPath) ? Visibility.Visible : Visibility.Collapsed;
     public Visibility BuiltInIconVisibility => IsPlugin ? Visibility.Collapsed : Visibility.Visible;
@@ -53,11 +65,11 @@ public sealed class TranslationResult : INotifyPropertyChanged
             _isExpanded = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(BodyVisibility));
-            OnPropertyChanged(nameof(ExpandSymbol));
+            OnPropertyChanged(nameof(ExpandIcon));
         }
     }
     public Visibility BodyVisibility => IsExpanded ? Visibility.Visible : Visibility.Collapsed;
-    public Symbol ExpandSymbol => IsExpanded ? Symbol.Remove : Symbol.Add;
+    public string ExpandIcon => IsExpanded ? "chevron-up" : "chevron-down";
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
@@ -77,7 +89,7 @@ public static class ServiceCatalog
         ("google", "Google 翻译"),
         ("baidu", "百度翻译"),
         ("youdao", "有道翻译"),
-        ("openai-compatible", "AI 翻译"),
+        ("openai-compatible", "大模型翻译"),
         ("deepl", "DeepL"),
         ("libretranslate", "LibreTranslate"),
     ];

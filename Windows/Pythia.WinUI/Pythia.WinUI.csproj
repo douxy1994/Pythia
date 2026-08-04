@@ -5,9 +5,9 @@
     <TargetPlatformMinVersion>10.0.22621.0</TargetPlatformMinVersion>
     <RootNamespace>Pythia</RootNamespace>
     <AssemblyName>Pythia</AssemblyName>
-    <Version>1.0.0</Version>
-    <FileVersion>1.0.0.0</FileVersion>
-    <InformationalVersion>1.0.0-native</InformationalVersion>
+    <Version>1.2.0</Version>
+    <FileVersion>1.2.0.0</FileVersion>
+    <InformationalVersion>1.2.0</InformationalVersion>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64</Platforms>
@@ -20,11 +20,16 @@
     <SelfContained>true</SelfContained>
     <PublishSingleFile>false</PublishSingleFile>
     <PublishTrimmed>false</PublishTrimmed>
-    <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <SatelliteResourceLanguages>en;zh-Hans</SatelliteResourceLanguages>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>14.0</LangVersion>
     <EnableMsixTooling>false</EnableMsixTooling>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>None</DebugType>
+    <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,8 +41,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2270" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />
-    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
   </ItemGroup>
   <Target Name="CopyWinUIResourcesToPublish" AfterTargets="Publish">
     <ItemGroup>
@@ -46,5 +51,17 @@
     </ItemGroup>
     <Copy SourceFiles="@(_PythiaWinUIResource)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(_PythiaWinUIPage)" DestinationFolder="$(PublishDir)Pages\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyPluginRuntimeAfterBuild" AfterTargets="Build">
+    <PropertyGroup>
+      <_PythiaPluginRuntimeSource>$(MSBuildThisFileDirectory)..\Pythia.Windows\build\plugin_runtime\node.exe</_PythiaPluginRuntimeSource>
+    </PropertyGroup>
+    <Copy SourceFiles="$(_PythiaPluginRuntimeSource)" DestinationFolder="$(TargetDir)Runtime" SkipUnchangedFiles="true" Condition="Exists('$(_PythiaPluginRuntimeSource)')" />
+  </Target>
+  <Target Name="CopyPluginRuntimeAfterPublish" AfterTargets="Publish">
+    <PropertyGroup>
+      <_PythiaPluginRuntimeSource>$(MSBuildThisFileDirectory)..\Pythia.Windows\build\plugin_runtime\node.exe</_PythiaPluginRuntimeSource>
+    </PropertyGroup>
+    <Copy SourceFiles="$(_PythiaPluginRuntimeSource)" DestinationFolder="$(PublishDir)Runtime" SkipUnchangedFiles="true" Condition="Exists('$(_PythiaPluginRuntimeSource)')" />
   </Target>
 </Project>

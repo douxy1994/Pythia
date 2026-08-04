@@ -52,7 +52,7 @@ public sealed class AppServices
 
     public IReadOnlyList<(string Id, string Name)> TranslationServices =>
         ServiceCatalog.All
-            .Concat(Plugins.LoadInstalled().Where(item => item.Enabled).Select(item => (item.ServiceId, item.Name)))
+            .Concat(Plugins.LoadInstalled().Where(item => item.Enabled).Select(item => (item.ServiceId, item.DisplayName)))
             .ToArray();
 
     public IReadOnlyList<HistoryRecord> AllHistoryForSync =>
@@ -77,7 +77,9 @@ public sealed class AppServices
                 TranslatedText = result.Text,
                 SourceLanguage = batch.SourceLanguage,
                 TargetLanguage = batch.TargetLanguage,
-                Service = result.ServiceId,
+                // Dispatch keeps the stable provider key in TranslationResult; the
+                // cross-platform history contract stores the user-facing service name.
+                Service = result.ServiceName,
                 Model = result.Model,
                 DeviceId = DeviceId,
                 SyncStatus = Settings.WebdavHistoryAutoSync ? "pendingUpload" : "local",
@@ -185,7 +187,9 @@ public sealed class AppServices
         var restored = PortableBackupService.Restore(json, AllHistoryForSync);
         await Store.BackupHistoryBeforeSyncAsync();
         PortableBackupService.ApplySettings(restored.Settings, Settings);
-        var available = TranslationServices.Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var available = ServiceCatalog.All.Select(item => item.Id)
+            .Concat(Plugins.LoadInstalled().Select(item => item.ServiceId))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         Settings.EnabledTranslateServices = Settings.EnabledTranslateServices.Where(available.Contains).ToList();
         Settings.TranslateServiceOrder = Settings.TranslateServiceOrder
             .Where(id => available.Contains(id) || !id.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase))
@@ -211,8 +215,9 @@ public sealed class AppServices
 
     private void RestartAutoSyncLoop()
     {
-        _autoSyncLoop?.Cancel();
-        _autoSyncLoop = null;
+        var previous = Interlocked.Exchange(ref _autoSyncLoop, null);
+        previous?.Cancel();
+        previous?.Dispose();
         if (!Settings.WebdavHistoryAutoSync || string.IsNullOrWhiteSpace(Settings.WebdavUrl)) return;
         var cancellation = new CancellationTokenSource();
         _autoSyncLoop = cancellation;
@@ -229,14 +234,19 @@ public sealed class AppServices
                 await SyncHistoryAsync(notify: true, cancellationToken);
             }
             catch (OperationCanceledException) { return; }
-            catch { }
+            catch (Exception exception)
+            {
+                Status.Report($"WebDAV 自动同步失败：{exception.Message}");
+            }
         }
     }
 
     private void RequestHistoryAutoSync()
     {
         if (!Settings.WebdavHistoryAutoSync || string.IsNullOrWhiteSpace(Settings.WebdavUrl)) return;
-        _historySyncDebounce?.Cancel();
+        var previous = Interlocked.Exchange(ref _historySyncDebounce, null);
+        previous?.Cancel();
+        previous?.Dispose();
         var cancellation = new CancellationTokenSource();
         _historySyncDebounce = cancellation;
         _ = DebouncedHistorySyncAsync(cancellation.Token);
@@ -250,7 +260,10 @@ public sealed class AppServices
             await SyncHistoryAsync(notify: true, cancellationToken);
         }
         catch (OperationCanceledException) { }
-        catch { }
+        catch (Exception exception)
+        {
+            Status.Report($"WebDAV 自动同步失败：{exception.Message}");
+        }
     }
 
     public static TimeSpan GetSyncInterval(PythiaSettings settings)

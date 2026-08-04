@@ -13,7 +13,7 @@
 ## Implemented parity work
 
 - The real multiline input now intercepts Enter through `PreviewKeyDown` before WinUI consumes it as a line break; Shift+Enter, IME composition, repeat suppression, and single-flight duplicate prevention remain explicit. Shortcut guidance is shown in the input placeholder instead of a separate footer.
-- Plugins now have one canonical main-sidebar page with install/remove, manifest-driven configuration, enable/disable, provider icons, and connectivity testing. About and updates live only in Settings.
+- Plugins now have one canonical Settings > Plugins page with install/remove, manifest-driven configuration, enable/disable, provider icons, display-name editing, service ordering, .potext reconversion, and connectivity testing. About and updates live only in Settings.
 - Selection capture freezes the external target before hiding Pythia, waits for hotkey modifiers to be released, filters shell windows, restores clipboard contents, and unhooks its foreground listener on shutdown.
 - Plugin process stdout/stderr is decoded as strict UTF-8; deterministic smoke coverage asserts exact Chinese output.
 - Native drag reorder plus keyboard reorder; enabled services and order share one persisted model.

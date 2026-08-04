@@ -22,6 +22,8 @@
         "openAICompatibleName": { "type": "string" },
         "openAICompatibleBaseUrl": { "type": "string" },
         "openAICompatibleModel": { "type": "string" },
+        "openAICompatibleAPI": { "enum": ["openai", "anthropic"] },
+        "compactTranslationWindow": { "type": "boolean" },
         "deepLEnabled": { "type": "boolean" },
         "deepLBaseUrl": { "type": "string" },
         "libreTranslateEnabled": { "type": "boolean" },

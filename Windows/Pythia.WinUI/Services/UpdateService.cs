@@ -20,6 +20,7 @@ public static class UpdateService
 {
     private const long MaximumInstallerBytes = 512L * 1024 * 1024;
     private const string LatestReleaseApi = "https://api.github.com/repos/douxy1994/Pythia/releases/latest";
+    public const string RepositoryUrl = "https://github.com/douxy1994/Pythia";
 
     public static Version CurrentVersion =>
         Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0);
@@ -36,6 +37,7 @@ public static class UpdateService
         if (!TryParseVersion(tag, out var version) || version <= CurrentVersion) return null;
         var releaseUrl = root.GetProperty("html_url").GetString() ?? string.Empty;
         var notes = root.TryGetProperty("body", out var body) ? body.GetString() ?? string.Empty : string.Empty;
+        var expectedInstallerName = ExpectedInstallerName(version);
         string? installerName = null;
         string? installerUrl = null;
         string? checksumUrl = null;
@@ -43,7 +45,7 @@ public static class UpdateService
         {
             var name = asset.GetProperty("name").GetString() ?? string.Empty;
             var url = asset.GetProperty("browser_download_url").GetString() ?? string.Empty;
-            if (name.EndsWith("-windows-x64.exe", StringComparison.OrdinalIgnoreCase))
+            if (name.Equals(expectedInstallerName, StringComparison.OrdinalIgnoreCase))
             {
                 installerName = name;
                 installerUrl = url;
@@ -68,6 +70,9 @@ public static class UpdateService
             notes.Length <= 2_000 ? notes : notes[..2_000] + "…");
     }
 
+    public static string ExpectedInstallerName(Version version) =>
+        $"Pythia-{version.ToString(3)}-windows-x64.exe";
+
     public static async Task<string> DownloadInstallerAsync(
         PythiaUpdateInfo update,
         IProgress<double>? progress = null,
@@ -88,40 +93,52 @@ public static class UpdateService
             return destination;
 
         var temporary = destination + ".download";
-        using var response = await client.GetAsync(update.InstallerUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        response.EnsureSuccessStatusCode();
-        var length = response.Content.Headers.ContentLength;
-        if (length is > MaximumInstallerBytes)
-            throw new InvalidDataException("更新安装包超过 512 MiB 安全限制。");
-        await using (var input = await response.Content.ReadAsStreamAsync(cancellationToken))
-        await using (var output = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
+        var completed = false;
+        try
         {
-            var buffer = new byte[128 * 1024];
-            long total = 0;
-            while (true)
+            using var response = await client.GetAsync(update.InstallerUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            var length = response.Content.Headers.ContentLength;
+            if (length is > MaximumInstallerBytes)
+                throw new InvalidDataException("更新安装包超过 512 MiB 安全限制。");
+            await using (var input = await response.Content.ReadAsStreamAsync(cancellationToken))
+            await using (var output = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
             {
-                var read = await input.ReadAsync(buffer, cancellationToken);
-                if (read == 0) break;
-                total += read;
-                if (total > MaximumInstallerBytes)
-                    throw new InvalidDataException("更新安装包超过 512 MiB 安全限制。");
-                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
-                if (length is > 0) progress?.Report((double)total / length.Value);
+                var buffer = new byte[128 * 1024];
+                long total = 0;
+                while (true)
+                {
+                    var read = await input.ReadAsync(buffer, cancellationToken);
+                    if (read == 0) break;
+                    total += read;
+                    if (total > MaximumInstallerBytes)
+                        throw new InvalidDataException("更新安装包超过 512 MiB 安全限制。");
+                    await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                    if (length is > 0) progress?.Report((double)total / length.Value);
+                }
+                await output.FlushAsync(cancellationToken);
             }
-            await output.FlushAsync(cancellationToken);
+            var actualHash = await HashFileAsync(temporary, cancellationToken);
+            if (!string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
+                throw new CryptographicException("更新安装包 SHA-256 校验失败。");
+            // SHA-256 proves the bytes match the release; Authenticode additionally proves the
+            // bytes come from the expected publisher and haven't been tampered with in flight.
+            // Both checks are required before the installer is allowed to run (goal §IV.6).
+            var status = AuthenticodeVerifier.VerifyFile(temporary, out var subject);
+            var decision = AuthenticodeVerifier.Evaluate(status, subject, AuthenticodeVerifier.ExpectedPublisher);
+            if (!decision.Accepted)
+                throw new SecurityException($"更新安装包被拒绝：{decision.Reason}");
+            File.Move(temporary, destination, true);
+            completed = true;
+            return destination;
         }
-        var actualHash = await HashFileAsync(temporary, cancellationToken);
-        if (!string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
-            throw new CryptographicException("更新安装包 SHA-256 校验失败。");
-        // SHA-256 proves the bytes match the release; Authenticode additionally proves the
-        // bytes come from the expected publisher and haven't been tampered with in flight.
-        // Both checks are required before the installer is allowed to run (goal §IV.6).
-        var status = AuthenticodeVerifier.VerifyFile(temporary, out var subject);
-        var decision = AuthenticodeVerifier.Evaluate(status, subject, AuthenticodeVerifier.ExpectedPublisher);
-        if (!decision.Accepted)
-            throw new SecurityException($"更新安装包被拒绝：{decision.Reason}");
-        File.Move(temporary, destination, true);
-        return destination;
+        finally
+        {
+            if (!completed)
+            {
+                try { if (File.Exists(temporary)) File.Delete(temporary); } catch { }
+            }
+        }
     }
 
     public static void LaunchInstaller(string path)
