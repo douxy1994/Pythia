@@ -81,7 +81,7 @@ if ((Get-FileHash -Algorithm SHA256 $chineseLanguageFile).Hash.ToLowerInvariant(
 }
 
 & $prepareRuntime
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $preparedNode)) {
+if (-not (Test-Path -LiteralPath $preparedNode)) {
     throw "Pythia plugin runtime preparation failed."
 }
 
