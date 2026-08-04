@@ -410,22 +410,40 @@ final class TranslationService {
     ) {
         let preferences = Preferences.shared
         guard !preferences.openAIKey.isEmpty else {
-            completion(.failure(TranslationError.missingKey("OpenAI API Key")))
+            completion(.failure(TranslationError.missingKey("自定义 API Key")))
             return
         }
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
+        let api = preferences.openAICompatibleAPI
+        guard let endpoint = Self.customLLMEndpoint(baseURL: preferences.openAIBaseURL, api: api) else {
+            completion(.failure(TranslationError.requestFailed("自定义 API 基础地址无效。")))
+            return
+        }
+        var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(preferences.openAIKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let prompt = "Translate the following text from \(sourceLanguage) to \(targetLanguage). Return only the translation.\n\n\(text)"
-        let body: [String: Any] = [
-            "model": preferences.openAIModel,
-            "messages": [
-                ["role": "system", "content": "You are a concise translation engine."],
-                ["role": "user", "content": prompt],
-            ],
-            "temperature": 0.2,
-        ]
+        let body: [String: Any]
+        if api == "anthropic" {
+            request.setValue(preferences.openAIKey, forHTTPHeaderField: "x-api-key")
+            request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+            body = [
+                "model": preferences.openAIModel,
+                "system": "You are a concise translation engine.",
+                "messages": [["role": "user", "content": prompt]],
+                "max_tokens": 4096,
+                "temperature": 0.2,
+            ]
+        } else {
+            request.setValue("Bearer \(preferences.openAIKey)", forHTTPHeaderField: "Authorization")
+            body = [
+                "model": preferences.openAIModel,
+                "messages": [
+                    ["role": "system", "content": "You are a concise translation engine."],
+                    ["role": "user", "content": prompt],
+                ],
+                "temperature": 0.2,
+            ]
+        }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         PythiaNetworkSession.dataTask(with: request) { data, response, error in
             if let error {
@@ -437,18 +455,61 @@ final class TranslationService {
                 completion(.failure(TranslationError.requestFailed(message)))
                 return
             }
-            guard
-                let data,
-                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let choices = json["choices"] as? [[String: Any]],
-                let message = choices.first?["message"] as? [String: Any],
-                let content = message["content"] as? String
+            guard let data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let content = Self.customLLMContent(from: json, api: api)
             else {
                 completion(.failure(TranslationError.invalidResponse))
                 return
             }
             completion(.success(content.trimmingCharacters(in: .whitespacesAndNewlines)))
         }.resume()
+    }
+
+    static func customLLMEndpoint(baseURL: String, api: String) -> URL? {
+        let raw = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var components = URLComponents(string: raw),
+              let scheme = components.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              components.host != nil
+        else { return nil }
+        components.query = nil
+        components.fragment = nil
+        var path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let suffix = api == "anthropic" ? "messages" : "chat/completions"
+        if path.hasSuffix(suffix) {
+            // The user supplied a complete endpoint.
+        } else if path.isEmpty {
+            path = "v1/\(suffix)"
+        } else {
+            path += "/\(suffix)"
+        }
+        components.path = "/\(path)"
+        return components.url
+    }
+
+    static func customLLMContent(from json: [String: Any], api: String) -> String? {
+        if api == "anthropic" {
+            let blocks = json["content"] as? [[String: Any]]
+            let text = blocks?
+                .filter { ($0["type"] as? String) == "text" }
+                .compactMap { $0["text"] as? String }
+                .joined()
+            return text?.isEmpty == false ? text : nil
+        }
+        guard let choices = json["choices"] as? [[String: Any]],
+              let message = choices.first?["message"] as? [String: Any]
+        else { return nil }
+        if let text = message["content"] as? String { return text }
+        if let blocks = message["content"] as? [[String: Any]] {
+            let text = blocks.compactMap { block -> String? in
+                if let value = block["text"] as? String { return value }
+                if let nested = block["text"] as? [String: Any] { return nested["value"] as? String }
+                return nil
+            }.joined()
+            return text.isEmpty ? nil : text
+        }
+        return nil
     }
 
     private func translateWithDeepL(

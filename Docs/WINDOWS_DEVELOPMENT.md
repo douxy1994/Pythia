@@ -4,9 +4,9 @@ This repository contains a 64-bit x64 Flutter Windows client under `Windows/Pyth
 
 The authoritative, detailed continuation document is [`../WINDOWS_CODEX_HANDOFF.md`](../WINDOWS_CODEX_HANDOFF.md). A Windows Codex agent must read it before changing the client. This file remains a shorter architecture and command reference.
 
-## Current Status (2026-08-01)
+## Current Status (2026-08-04)
 
-- The current repository baseline is `master` at `0d286b1a85b5c0a8bfa8f66b53d861f13185e972` (`Release Pythia 1.1.0`). This is the current repository/macOS release, not a Windows release number.
+- Start from the latest `master` / macOS `v1.2.0` release. Commit `0d286b1a85b5c0a8bfa8f66b53d861f13185e972` (`Release Pythia 1.1.0`) remains the minimum Windows CI-verified ancestor, not the current macOS release and not a Windows release number.
 - The Windows client remains Preview at Flutter version `1.0.0+100`. Until a Windows release is cut, keep the installer names `Pythia-1.0.0-windows-x64.exe` and `Pythia-1.0.0-windows-x64.exe.sha256`.
 - The latest Windows x64 workflow run [30703218631](https://github.com/douxy1994/Pythia/actions/runs/30703218631) passed on `windows-2025` at the current baseline.
 
@@ -112,12 +112,14 @@ Windows/Pythia.Windows/
 
 ## Next Milestone
 
-1. Pull the current `master` baseline, create `codex/windows-final`, and reproduce the pinned Flutter/Windows toolchain locally.
-2. Run the installer and verify startup, restart, uninstall, Credential Manager, UI Automation selection, screenshot OCR, launch-at-startup, tray, hotkeys, WebDAV, and always-on-top behavior on a real Windows 11 x64 machine.
-3. Verify screenshot OCR, global-hotkey conflicts, Chinese/English language packs, and the Authenticode-signed updater. The recorder UI, tray callbacks, hide-on-blur, secure download/install channel, and release check UI are implemented in code; the remaining task is real-machine validation and fixes.
-4. Synchronize Windows mixed-language routing with the dominant-script policy already used by macOS, then add Windows regression coverage before the next Windows release.
-5. Exercise WebDAV connection test/manual sync/automatic sync with the same WebDAV account used by macOS, and verify portable backup restore on a clean Windows profile.
-6. Keep Windows at `1.0.0+100` until the Windows acceptance matrix, Authenticode signing, release artifact verification, and GitHub Release assets are ready; update the Windows version and installer names together at that point.
+1. Pull the current `master` / `v1.2.0` baseline, create `codex/windows-final`, and reproduce the pinned Flutter/Windows toolchain locally.
+2. Port the compact result-only selection/screenshot-OCR window, synchronized multi-service picker, General default toggle, and expand-to-full-window flow introduced by macOS 1.2.0.
+3. Extend the configurable LLM provider and settings to support both OpenAI Chat Completions and Anthropic Messages, keeping the secret in Credential Manager and adding protocol fixture tests.
+4. Run the installer and verify startup, restart, uninstall, Credential Manager, UI Automation selection, screenshot OCR, launch-at-startup, tray, hotkeys, WebDAV, and always-on-top behavior on a real Windows 11 x64 machine.
+5. Verify screenshot OCR, global-hotkey conflicts, Chinese/English language packs, and the Authenticode-signed updater. The recorder UI, tray callbacks, hide-on-blur, secure download/install channel, and release check UI are implemented in code; the remaining task is real-machine validation and fixes.
+6. Synchronize Windows mixed-language routing with the dominant-script policy already used by macOS, then add Windows regression coverage before the next Windows release.
+7. Exercise WebDAV connection test/manual sync/automatic sync with the same WebDAV account used by macOS, and verify portable backup restore on a clean Windows profile.
+8. Keep Windows at `1.0.0+100` until the Windows acceptance matrix, 1.2 parity work, Authenticode signing, release artifact verification, and GitHub Release assets are ready; update the Windows version and installer names together at that point.
 
 ## First Checkout Commands
 

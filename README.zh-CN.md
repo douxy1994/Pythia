@@ -7,7 +7,7 @@
 
   本地优先的桌面翻译工具：多服务结果卡片、截图 OCR、全局快捷键、可同步的历史记录和真正的插件系统。
 
-  [![版本](https://img.shields.io/badge/版本-1.1.0-80B847)](#下载)
+  [![版本](https://img.shields.io/badge/版本-1.2.0-80B847)](#下载)
   [![macOS](https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white)](#macos)
   [![Windows](https://img.shields.io/badge/Windows_x64-预览版-0078D4?logo=windows11&logoColor=white)](#windows)
   [![Swift](https://img.shields.io/badge/Swift-AppKit-F05138?logo=swift&logoColor=white)](#macos-构建)
@@ -52,7 +52,8 @@ flowchart LR
 
 ### 多服务翻译
 
-- Google 开箱即用；OpenAI、DeepL、百度、有道、LibreTranslate 填入自己的 API Key 即可。
+- 划词与截图 OCR 翻译可默认打开简约窗口，只显示译文、重试和复制；翻译服务支持多选并与完整窗口实时同步，右上角可一键展开。
+- Google 开箱即用；自定义大模型 API 支持 OpenAI Chat Completions 与 Anthropic Messages 接口，也可使用 DeepL、百度、有道、LibreTranslate。
 - **设置 → 服务 → 验证**：按你刚输入的值发起一次真实翻译，Key 能不能用立刻知道。
 - 中英混排按主导文字决定方向；智能目标语言跟随自动检测。
 - 结果卡片支持单卡复制、重新翻译、朗读和自动复制规则。
@@ -83,7 +84,7 @@ flowchart LR
     <td width="50%" align="center">
       <img src="./Docs/images/platform-macos.svg" width="100%" alt="Pythia macOS 版">
       <h3 id="macos">macOS</h3>
-      <p><strong>原生版本 · 当前 1.1.0</strong></p>
+      <p><strong>原生版本 · 当前 1.2.0</strong></p>
       <p>Swift · AppKit · macOS 14+ · Apple silicon</p>
       <p>菜单栏应用、多服务卡片、OCR、快捷键、历史同步、插件、签名打包全链路。</p>
     </td>
@@ -101,11 +102,11 @@ flowchart LR
 
 ### macOS
 
-[下载 Pythia 1.1.0 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.1.0/Pythia-1.1.0-macos-arm64.dmg)
+[下载 Pythia 1.2.0 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.2.0/Pythia-1.2.0-macos-arm64.dmg)
 
 - 需要 macOS 14 或更高版本，Apple silicon（`arm64`）。
 - 当前构建使用项目稳定的本地代码签名身份，未经 Apple Developer ID 公证——首次打开如被拦截，请在「系统设置 > 隐私与安全性」中允许。
-- DMG 和 SHA-256 校验文件同时发布在 [v1.1.0 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.1.0)。
+- DMG 和 SHA-256 校验文件同时发布在 [v1.2.0 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.0)。
 
 ### Windows
 
@@ -208,7 +209,7 @@ WINDOWS_CODEX_HANDOFF.md 完整 Windows 交接文档
 
 ## 文档
 
-- [Pythia 1.1.0 发布说明](Docs/RELEASE_NOTES_1.1.0.md)
+- [Pythia 1.2.0 发布说明](Docs/RELEASE_NOTES_1.2.0.md)
 - [架构设计](Docs/ARCHITECTURE.md)
 - [功能矩阵](Docs/FEATURE_MATRIX.md)
 - [插件开发指南](Docs/PYTHIA_PLUGIN_DEVELOPMENT_GUIDE.md)

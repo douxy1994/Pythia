@@ -4,6 +4,7 @@ import Foundation
 
 final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerDelegate, NSWindowDelegate {
     private static let defaultWindowSize = NSSize(width: 1120, height: 720)
+    private static let compactWindowSize = NSSize(width: 680, height: 430)
     private static let fixedSourceTextHeight: CGFloat = 180
     private enum ContentMode {
         case translation
@@ -22,6 +23,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private var collapsedResultKeys = Set<String>()
     private var failedResultKeys = Set<String>()
     private let servicePicker = TranslationServicePickerButton()
+    private let compactServicePicker = TranslationServicePickerButton()
     private let pinWindowButton = GlassIconButton(systemName: "pin", accessibility: "窗口置顶", target: nil, action: nil)
     private let updateButton = PillButton("下载更新", target: nil, action: nil)
     private var availableUpdateInfo: PythiaUpdateInfo?
@@ -34,10 +36,21 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private let sourcePanelTitle = NSTextField(labelWithString: "原文")
     private let resultPanelTitle = NSTextField(labelWithString: "译文")
     private weak var sourcePanelContainer: NSView?
+    private weak var fullHeaderContainer: NSView?
+    private weak var compactHeaderContainer: NSView?
+    private weak var resultPanelContainer: NSView?
+    private weak var footerContainer: NSView?
     private var languageControls: [NSView] = []
     private var sourcePanelTopConstraint: NSLayoutConstraint?
     private var resultPanelTopToSourceConstraint: NSLayoutConstraint?
     private var resultPanelTopToHeaderConstraint: NSLayoutConstraint?
+    private var fullResultLeadingConstraint: NSLayoutConstraint?
+    private var fullResultTrailingConstraint: NSLayoutConstraint?
+    private var fullResultBottomConstraint: NSLayoutConstraint?
+    private var compactResultTopConstraint: NSLayoutConstraint?
+    private var compactResultLeadingConstraint: NSLayoutConstraint?
+    private var compactResultTrailingConstraint: NSLayoutConstraint?
+    private var compactResultBottomConstraint: NSLayoutConstraint?
     private weak var backgroundView: LiquidGlassBackgroundView?
     private var dynamicTranslateWorkItem: DispatchWorkItem?
     private var resultHeightRefreshWorkItem: DispatchWorkItem?
@@ -45,6 +58,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private var hasPresentedWindow = false
     private var isApplyingWindowPlacement = false
     private var contentMode: ContentMode = .translation
+    private var isCompactPresentation = false
 
     init() {
         let window = NSWindow(
@@ -93,10 +107,11 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         fatalError("init(coder:) has not been implemented")
     }
 
-    func showAndFocus(with text: String? = nil) {
+    func showAndFocus(with text: String? = nil, compact: Bool = false) {
         if let text, !text.isEmpty {
             sourceView.setPlainText(text)
         }
+        setCompactPresentation(compact)
         updateSourceHeight()
         applyWindowPlacementForPresentation()
         hasPresentedWindow = true
@@ -121,7 +136,9 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         let savedFrame = savedWindowFrame()
         var frame = window.frame
 
-        if preferences.translateRememberWindowSize, let savedFrame {
+        if isCompactPresentation {
+            frame.size = Self.compactWindowSize
+        } else if preferences.translateRememberWindowSize, let savedFrame {
             frame.size = savedFrame.size
         } else if !window.isVisible {
             frame.size = Self.defaultWindowSize
@@ -181,7 +198,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     }
 
     private func persistWindowFrame() {
-        guard hasPresentedWindow, !isApplyingWindowPlacement, let window else { return }
+        guard hasPresentedWindow, !isApplyingWindowPlacement, !isCompactPresentation, let window else { return }
         Preferences.shared.translateWindowFrame = NSStringFromRect(window.frame)
     }
 
@@ -732,6 +749,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         header.alignment = .width
         header.spacing = 12
         header.translatesAutoresizingMaskIntoConstraints = false
+        fullHeaderContainer = header
 
         let titleRow = NSStackView()
         titleRow.orientation = .horizontal
@@ -765,12 +783,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         controlsRow.alignment = .centerY
         controlsRow.spacing = 10
 
-        servicePicker.onChange = { services in
-            let existingOrder = Preferences.shared.translateServiceOrder
-            Preferences.shared.translateServiceList = services
-            Preferences.shared.translateServiceOrder = services + existingOrder.filter { !services.contains($0) }
-            NotificationCenter.default.post(name: .preferencesChanged, object: nil)
-        }
+        configureServicePicker(servicePicker)
 
         configureLanguagePopup(sourceLanguagePopup, includeAuto: true)
         configureLanguagePopup(targetLanguagePopup, includeAuto: false)
@@ -794,6 +807,25 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         header.addArrangedSubview(controlsRow)
         content.addSubview(header)
 
+        let compactHeader = NSStackView()
+        compactHeader.orientation = .horizontal
+        compactHeader.alignment = .centerY
+        compactHeader.spacing = 10
+        compactHeader.translatesAutoresizingMaskIntoConstraints = false
+        compactHeader.isHidden = true
+        compactHeaderContainer = compactHeader
+        configureServicePicker(compactServicePicker)
+        compactHeader.addArrangedSubview(compactServicePicker)
+        compactHeader.addArrangedSubview(NSView())
+        let expandButton = makeIconButton(
+            systemName: "arrow.up.left.and.arrow.down.right",
+            accessibility: "展开完整翻译窗口",
+            action: #selector(expandCompactWindow)
+        )
+        expandButton.toolTip = "展开完整窗口"
+        compactHeader.addArrangedSubview(expandButton)
+        content.addSubview(compactHeader)
+
         let sourceHeaderButtons: [NSView] = [
             makeCopyButton(action: #selector(copySourceButtonClicked)),
             makeIconButton(systemName: "doc.on.clipboard", accessibility: "粘贴", action: #selector(pasteSourceClicked)),
@@ -805,6 +837,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         sourcePanelContainer = sourcePanel
         sourcePanel.translatesAutoresizingMaskIntoConstraints = false
         resultPanel.translatesAutoresizingMaskIntoConstraints = false
+        resultPanelContainer = resultPanel
         content.addSubview(sourcePanel)
         content.addSubview(resultPanel)
 
@@ -813,6 +846,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         footer.alignment = .centerY
         footer.spacing = 10
         footer.translatesAutoresizingMaskIntoConstraints = false
+        footerContainer = footer
         footer.addArrangedSubview(statusLabel)
         footer.addArrangedSubview(NSView())
         let clearInputButton = PillButton("清空", target: self, action: #selector(clearInputButtonClicked))
@@ -830,11 +864,23 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         resultPanelTopToSourceConstraint = resultPanel.topAnchor.constraint(equalTo: sourcePanel.bottomAnchor, constant: 14)
         resultPanelTopToHeaderConstraint = resultPanel.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 18)
         resultPanelTopToHeaderConstraint?.isActive = false
+        fullResultLeadingConstraint = resultPanel.leadingAnchor.constraint(equalTo: sourcePanel.leadingAnchor)
+        fullResultTrailingConstraint = resultPanel.trailingAnchor.constraint(equalTo: sourcePanel.trailingAnchor)
+        fullResultBottomConstraint = resultPanel.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -14)
+        compactResultTopConstraint = resultPanel.topAnchor.constraint(equalTo: compactHeader.bottomAnchor, constant: 10)
+        compactResultLeadingConstraint = resultPanel.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 16)
+        compactResultTrailingConstraint = resultPanel.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -16)
+        compactResultBottomConstraint = resultPanel.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -16)
         NSLayoutConstraint.activate([
             header.topAnchor.constraint(equalTo: guide.topAnchor, constant: 18),
             header.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 24),
             header.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -24),
             header.heightAnchor.constraint(equalToConstant: 92),
+
+            compactHeader.topAnchor.constraint(equalTo: guide.topAnchor, constant: 12),
+            compactHeader.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 16),
+            compactHeader.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -16),
+            compactHeader.heightAnchor.constraint(equalToConstant: 38),
 
             footer.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 24),
             footer.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -24),
@@ -846,9 +892,9 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
             sourcePanel.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -24),
 
             resultPanelTopToSourceConstraint!,
-            resultPanel.leadingAnchor.constraint(equalTo: sourcePanel.leadingAnchor),
-            resultPanel.trailingAnchor.constraint(equalTo: sourcePanel.trailingAnchor),
-            resultPanel.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -14),
+            fullResultLeadingConstraint!,
+            fullResultTrailingConstraint!,
+            fullResultBottomConstraint!,
         ])
         // Make the source panel hug its content vertically (so it does not grow
         // with the window / leave blank space), while the result panel absorbs
@@ -857,6 +903,56 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         sourcePanel.setContentCompressionResistancePriority(.defaultHigh, for: .vertical)
         resultPanel.setContentHuggingPriority(.defaultLow, for: .vertical)
         resultPanel.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+    }
+
+    private func configureServicePicker(_ picker: TranslationServicePickerButton) {
+        picker.onChange = { services in
+            let existingOrder = Preferences.shared.translateServiceOrder
+            Preferences.shared.translateServiceList = services
+            Preferences.shared.translateServiceOrder = services + existingOrder.filter { !services.contains($0) }
+            NotificationCenter.default.post(name: .preferencesChanged, object: nil)
+        }
+    }
+
+    @objc private func expandCompactWindow() {
+        setCompactPresentation(false)
+        applyWindowPlacementForPresentation()
+        window?.makeKeyAndOrderFront(nil)
+    }
+
+    private func setCompactPresentation(_ compact: Bool) {
+        guard let window else { return }
+        isCompactPresentation = compact
+        fullHeaderContainer?.isHidden = compact
+        sourcePanelContainer?.isHidden = compact || Preferences.shared.hideSource
+        footerContainer?.isHidden = compact
+        compactHeaderContainer?.isHidden = !compact
+        resultPanelTitle.isHidden = compact
+        resultCollapseButtons.values.forEach { $0.isHidden = compact }
+
+        resultPanelTopToSourceConstraint?.isActive = !compact && !Preferences.shared.hideSource
+        resultPanelTopToHeaderConstraint?.isActive = !compact && Preferences.shared.hideSource
+        fullResultLeadingConstraint?.isActive = !compact
+        fullResultTrailingConstraint?.isActive = !compact
+        fullResultBottomConstraint?.isActive = !compact
+        compactResultTopConstraint?.isActive = compact
+        compactResultLeadingConstraint?.isActive = compact
+        compactResultTrailingConstraint?.isActive = compact
+        compactResultBottomConstraint?.isActive = compact
+
+        if compact {
+            window.minSize = NSSize(width: 480, height: 280)
+            var frame = window.frame
+            frame.size = Self.compactWindowSize
+            window.setFrame(frame, display: false)
+        } else {
+            window.minSize = NSSize(width: 900, height: 600)
+            var frame = window.frame
+            frame.size = savedWindowFrame()?.size ?? Self.defaultWindowSize
+            window.setFrame(frame, display: false)
+        }
+        window.contentView?.layoutSubtreeIfNeeded()
+        scheduleResultHeightRefresh()
     }
 
     private func configureLanguagePopup(_ popup: NSPopUpButton, includeAuto: Bool) {
@@ -1124,6 +1220,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
 
     @objc private func reloadPreferences() {
         servicePicker.reloadOptions(selected: Preferences.shared.translateServiceList)
+        compactServicePicker.reloadOptions(selected: Preferences.shared.translateServiceList)
         selectLanguage(Preferences.shared.sourceLanguage, in: sourceLanguagePopup)
         selectLanguage(Preferences.shared.targetLanguage, in: targetLanguagePopup)
         updatePanelTitles()
@@ -1191,9 +1288,9 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private func applyRuntimeTranslationPreferences() {
         let preferences = Preferences.shared
         languageControls.forEach { $0.isHidden = preferences.hideLanguage }
-        sourcePanelContainer?.isHidden = preferences.hideSource
-        resultPanelTopToSourceConstraint?.isActive = !preferences.hideSource
-        resultPanelTopToHeaderConstraint?.isActive = preferences.hideSource
+        sourcePanelContainer?.isHidden = isCompactPresentation || preferences.hideSource
+        resultPanelTopToSourceConstraint?.isActive = !isCompactPresentation && !preferences.hideSource
+        resultPanelTopToHeaderConstraint?.isActive = !isCompactPresentation && preferences.hideSource
         window?.alphaValue = 1.0
         sourceView.applyFontPreferences()
         resultViews.values.forEach { $0.applyFontPreferences() }
@@ -1299,6 +1396,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
 
         let collapseButton = makeIconButton(systemName: "chevron.down", accessibility: "收起 \(title)", action: #selector(toggleResultSection))
         collapseButton.identifier = NSUserInterfaceItemIdentifier(key)
+        collapseButton.isHidden = isCompactPresentation
         resultCollapseButtons[key] = collapseButton
 
         let copyButton = makeCopyButton(action: #selector(copyResultForService))

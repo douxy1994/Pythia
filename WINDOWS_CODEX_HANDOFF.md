@@ -2,8 +2,8 @@
 
 > 面向接手 Windows 版 Pythia 的 Codex。请先完整阅读本文，再修改代码。
 >
-> 更新日期：2026-08-01
-> 仓库/macOS 当前发布：Pythia 1.1.0
+> 更新日期：2026-08-04
+> 仓库/macOS 当前发布：Pythia 1.2.0
 > Windows 当前版本：Pythia 1.0.0+100（Preview）
 > Windows 目标：Windows 11 x64 / AMD64
 > 仓库：<https://github.com/douxy1994/Pythia>
@@ -23,6 +23,19 @@
 7. 发布包不得包含任何 API Key、密码、Cookie、WebDAV 凭据、证书私钥、用户历史或第三方插件。
 8. 不得破坏已经工作的 macOS AppKit 应用和跨平台格式。
 
+### macOS 1.2.0 新增的 Windows 对齐任务
+
+Windows 接手者应以最新 `master` / `v1.2.0` 为源码基线，并在不提前修改 Windows 版本号的前提下完成以下功能：
+
+1. 为划词翻译和截图 OCR 翻译增加简约结果窗口：只显示译文、重试、复制、服务选择和展开按钮。
+2. 简约窗口的翻译服务必须支持多选，并与完整窗口共享同一份启用列表和顺序；任一窗口修改后另一窗口立即同步。
+3. 在通用设置中加入“划词翻译或截图 OCR 翻译时默认打开简约窗口”开关。
+4. 把现有 OpenAI-compatible 配置升级为“自定义大模型 API”，支持显示名称、接口类型、基础地址、模型和安全存储的 API Key。
+5. 接口类型同时支持 OpenAI Chat Completions 与 Anthropic Messages，并为两种请求/响应格式添加单元测试和本地 mock 验证。
+6. 保持 Windows 屏幕捕获权限/失败反馈符合平台习惯，并明确区分用户取消、捕获失败和 OCR 空结果。
+
+完成上述对齐、Windows 11 x64 实机验收和签名发布门禁之前，Windows 仍保持 Preview `1.0.0+100`。
+
 ## 1. 仓库、分支与起点
 
 ### 1.1 正确仓库
@@ -37,7 +50,7 @@ https://github.com/douxy1994/Pythia.git
 
 ### 1.2 正确基线
 
-当前默认分支 `master` 的 Windows 开发基线是提交 `0d286b1a85b5c0a8bfa8f66b53d861f13185e972`，其提交说明为 `Release Pythia 1.1.0`。克隆后先确认：
+当前 Windows 开发应从 `master` 的 Pythia `v1.2.0` 发布基线开始。提交 `0d286b1a85b5c0a8bfa8f66b53d861f13185e972`（`Release Pythia 1.1.0`）仍是已通过 Windows CI 的最低祖先基线。克隆后先确认：
 
 ```powershell
 git clone https://github.com/douxy1994/Pythia.git
@@ -82,7 +95,7 @@ git switch -c codex/windows-final
 | 项目 | 固定值 |
 | --- | --- |
 | 产品名 | `Pythia` |
-| 仓库/macOS 当前发布 | `1.1.0` |
+| 仓库/macOS 当前发布 | `1.2.0` |
 | Windows 当前版本 | `1.0.0` |
 | Windows Flutter build number | `100` |
 | Windows 架构 | x64 / AMD64 only |
@@ -96,7 +109,7 @@ git switch -c codex/windows-final
 | 历史文件 | `/Pythia/history/history.json` |
 | 可移植备份 | `/Pythia/settings/portable-backup.json` |
 
-> 版本边界：仓库/macOS 的 `1.1.0` 已发布；Windows 客户端仍是 Preview `1.0.0+100`。Windows 在完成实机验收、Authenticode 签名和 Release 资产复核前，不要把 Windows 文档、更新检查器或安装程序名称提前改成 `1.1.0`。
+> 版本边界：仓库/macOS 的 `1.2.0` 已发布；Windows 客户端仍是 Preview `1.0.0+100`。Windows 在完成 1.2 功能对齐、实机验收、Authenticode 签名和 Release 资产复核前，不要提前修改 Windows 文档、更新检查器或安装程序版本。
 
 不要：
 

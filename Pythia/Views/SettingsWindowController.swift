@@ -38,6 +38,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let targetLanguagePopup = NSPopUpButton()
     private let secondTargetLanguagePopup = NSPopUpButton()
     private let openAIKeyField = NSSecureTextField()
+    private let openAINameField = NSTextField()
+    private let openAIBaseURLField = NSTextField()
+    private let openAICompatibleAPIPopup = NSPopUpButton()
     private let openAIModelField = NSTextField()
     private let deepLKeyField = NSSecureTextField()
     private let baiduAppIDField = NSTextField()
@@ -59,6 +62,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private var expandedPluginNames = Set<String>()
     private let serviceTestResultLabel = NSTextField(labelWithString: "")
     private let clipboardCheckbox = NSButton(checkboxWithTitle: "监听剪贴板", target: nil, action: nil)
+    private let compactTranslationWindowCheckbox = NSButton(checkboxWithTitle: "划词翻译或截图 OCR 翻译时默认打开简约窗口", target: nil, action: nil)
     private let recognizeLanguagePopup = NSPopUpButton()
     private let recognizeAutoCopyCheckbox = NSButton(checkboxWithTitle: "OCR 后自动复制", target: nil, action: nil)
     private let recognizeDeleteNewlineCheckbox = NSButton(checkboxWithTitle: "识别结果删除换行", target: nil, action: nil)
@@ -362,6 +366,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             views: [
                 row("自动复制", autoCopyPopup),
                 indented(clipboardCheckbox),
+                indented(compactTranslationWindowCheckbox),
                 row("托盘点击", trayClickPopup),
             ]
         ))
@@ -371,7 +376,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let permButtons = NSStackView()
         permButtons.orientation = .horizontal
         permButtons.spacing = 10
-        permButtons.addArrangedSubview(PillButton("请求系统权限", target: self, action: #selector(requestPermissions)))
+        permButtons.addArrangedSubview(PillButton("请求辅助功能与屏幕录制权限", target: self, action: #selector(requestPermissions)))
         stack.addArrangedSubview(settingsSection(
             "启动与系统集成",
             icon: "power",
@@ -436,6 +441,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private func servicesTab() -> NSView {
         let stack = formStack()
+        openAICompatibleAPIPopup.removeAllItems()
+        openAICompatibleAPIPopup.addItems(withTitles: ["OpenAI", "Anthropic"])
         let verifyButtons = NSStackView()
         verifyButtons.orientation = .horizontal
         verifyButtons.spacing = 10
@@ -463,12 +470,22 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         serviceResultBox.addArrangedSubview(serviceResultCaption)
         serviceResultBox.addArrangedSubview(serviceTestResultLabel)
         stack.addArrangedSubview(settingsSection(
-            "服务凭据",
+            "自定义大模型 API",
             icon: "key",
+            detail: "大模型翻译服务可连接 OpenAI Chat Completions 或 Anthropic Messages 兼容接口；密钥只写入本地凭据文件。",
+            views: [
+                row("显示名称", openAINameField),
+                row("接口类型", openAICompatibleAPIPopup),
+                row("API 基础地址", openAIBaseURLField),
+                row("模型", openAIModelField),
+                row("API Key", openAIKeyField),
+            ]
+        ))
+        stack.addArrangedSubview(settingsSection(
+            "其它服务凭据",
+            icon: "key.fill",
             detail: "密钥只写入 Pythia 的本地凭据文件，不进入普通设置 JSON。",
             views: [
-                row("OpenAI API key", openAIKeyField),
-                row("OpenAI 模型", openAIModelField),
                 row("DeepL API key", deepLKeyField),
                 row("百度 AppID", baiduAppIDField),
                 row("百度密钥", baiduSecretField),
@@ -485,7 +502,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             views: [
                 leadingFullWidth(verifyButtons, minHeight: 0),
                 leadingFullWidth(serviceResultBox, minHeight: 0),
-                note("OpenAI / DeepL / 百度 / 有道 / LibreTranslate 均需自行注册账号获取 API Key；LibreTranslate 公共实例已强制要求 Key，也可改为自托管实例地址。Google 与「本地预览」无需 Key。"),
+                note("自定义大模型 API / DeepL / 百度 / 有道 / LibreTranslate 均需自行配置 API Key；基础地址可填写服务根地址、/v1 地址或完整请求端点。Google 与「本地预览」无需 Key。"),
             ]
         ))
         return stack
@@ -1244,6 +1261,14 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private func persistServiceFields() {
         let preferences = Preferences.shared
         preferences.openAIKey = openAIKeyField.stringValue
+        let displayName = openAINameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        preferences.openAICompatibleName = displayName.isEmpty ? "OpenAI" : displayName
+        let baseURL = openAIBaseURLField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        preferences.openAIBaseURL = baseURL.isEmpty ? "https://api.openai.com/v1" : baseURL
+        preferences.openAICompatibleAPI = selectedPopupValue(
+            openAICompatibleAPIPopup,
+            mapping: ["openai": "OpenAI", "anthropic": "Anthropic"]
+        )
         preferences.openAIModel = openAIModelField.stringValue.isEmpty ? "gpt-4o-mini" : openAIModelField.stringValue
         preferences.deepLKey = deepLKeyField.stringValue
         preferences.baiduAppID = baiduAppIDField.stringValue
@@ -1820,10 +1845,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         ])
 
         let updateItems = [
-            aboutUpdateItem("macOS 27 设置体验", "使用 AppKit 与 SwiftUI 官方控件重构侧边栏、页面层级、悬停反馈与 Liquid Glass 适配。"),
-            aboutUpdateItem("插件管理重做", "已安装插件改为可展开列表，可就地配置、刷新与删除，并统一内容网格和滚动留白。"),
-            aboutUpdateItem("非打断式信息提示", "检查更新等结果统一显示为顶部信息条，五秒自动收起，不再弹出重复对话框。"),
-            aboutUpdateItem("启动检查与一键热更新", "发现新版本后在主页标题旁显示下载按钮；校验签名后替换应用并自动重新启动。"),
+            aboutUpdateItem("简约翻译窗口", "划词与截图 OCR 翻译可只显示译文、重试和复制；右上角可随时展开完整窗口。"),
+            aboutUpdateItem("多服务同步选择", "简约窗口支持多选翻译服务，并与完整窗口的选择和排序实时同步。"),
+            aboutUpdateItem("自定义大模型 API", "可配置显示名称、基础地址、模型与密钥，兼容 OpenAI Chat Completions 和 Anthropic Messages。"),
+            aboutUpdateItem("屏幕录制权限修复", "重新检测系统授权并在必要时自动重启，解决已开启权限仍无法截图的问题。"),
         ]
         let rows = FullWidthStackView()
         updateItems.forEach { item in
@@ -1868,7 +1893,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
         titleLabel.alignment = .left
 
-        let bodyLabel = AutoWrappingLabel(wrappingLabelWithString: "Pythia 是一款本地优先的桌面翻译工具。一个快捷键即可从划词、输入或截图中取词，让 Google、DeepL、百度、有道、OpenAI、LibreTranslate 与 .pythia 插件并排作答；历史记录可通过 WebDAV 在 macOS 与 Windows 之间同步，API Key 只保存在本机私有凭据文件中。")
+        let bodyLabel = AutoWrappingLabel(wrappingLabelWithString: "Pythia 是一款本地优先的桌面翻译工具。一个快捷键即可从划词、输入或截图中取词，在简约或完整窗口中让多个翻译服务并排作答；内置服务、自定义大模型 API 与 .pythia 插件可共同使用，历史记录可通过 WebDAV 在 macOS 与 Windows 之间同步，API Key 只保存在本机私有凭据文件中。")
         bodyLabel.translatesAutoresizingMaskIntoConstraints = false
         bodyLabel.font = .systemFont(ofSize: 13)
         bodyLabel.textColor = .secondaryLabelColor
@@ -2446,6 +2471,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         selectLanguage(preferences.targetLanguage, in: targetLanguagePopup)
         selectLanguage(preferences.translateSecondLanguage, in: secondTargetLanguagePopup)
         openAIKeyField.stringValue = preferences.openAIKey
+        openAINameField.stringValue = preferences.openAICompatibleName
+        openAIBaseURLField.stringValue = preferences.openAIBaseURL
+        selectPopup(openAICompatibleAPIPopup, value: preferences.openAICompatibleAPI, mapping: ["openai": "OpenAI", "anthropic": "Anthropic"])
         openAIModelField.stringValue = preferences.openAIModel
         deepLKeyField.stringValue = preferences.deepLKey
         baiduAppIDField.stringValue = preferences.baiduAppID
@@ -2503,6 +2531,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         updateWebDAVFieldsVisibility()
         updateWebDAVAutoSyncControls()
         clipboardCheckbox.state = preferences.clipboardMonitoring ? .on : .off
+        compactTranslationWindowCheckbox.state = preferences.compactTranslationWindow ? .on : .off
         refreshPlugins()
         if let plugin = PluginManager.shared.plugins().first(where: { $0.name == preferences.pluginName || $0.title == preferences.pluginName }) {
             let represented = (plugin.legacyDirectory as NSString?)?.lastPathComponent ?? plugin.name
@@ -2610,6 +2639,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             }
         }
         preferences.clipboardMonitoring = clipboardCheckbox.state == .on
+        preferences.compactTranslationWindow = compactTranslationWindowCheckbox.state == .on
         updateSidebarSelection()
         PythiaAppDelegate.shared?.applyClipboardPreference()
         let runtimeWarning = PythiaAppDelegate.shared?.applyRuntimePreferences()
@@ -2734,8 +2764,17 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func requestPermissions() {
-        _ = SelectionReader.shared.requestAccessibilityPermission()
-        showInfoBanner("已请求权限，请在系统设置中允许辅助功能；截图 OCR 还需要屏幕录制权限。")
+        let accessibilityGranted = SelectionReader.shared.requestAccessibilityPermission()
+        let screenWasGranted = OCRService.shared.hasScreenCapturePermission
+        let screenGranted = screenWasGranted || OCRService.shared.requestScreenCapturePermission()
+        if screenGranted && !screenWasGranted {
+            showInfoBanner("屏幕录制权限已启用，Pythia 将自动重启使权限生效。")
+            PythiaAppDelegate.shared?.relaunchAfterPermissionChange()
+        } else if accessibilityGranted && screenGranted {
+            showInfoBanner("辅助功能与屏幕录制权限均已启用。")
+        } else {
+            showInfoBanner("请在系统设置中允许 Pythia 使用辅助功能与屏幕录制。")
+        }
     }
 
     @objc private func checkForUpdates() {

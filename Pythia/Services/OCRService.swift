@@ -1,37 +1,81 @@
 import AppKit
+import CoreGraphics
 import Foundation
 import Vision
 
 final class OCRService {
     static let shared = OCRService()
 
+    var hasScreenCapturePermission: Bool {
+        CGPreflightScreenCaptureAccess()
+    }
+
+    @discardableResult
+    func requestScreenCapturePermission() -> Bool {
+        CGRequestScreenCaptureAccess()
+    }
+
     func recognizeScreen(completion: @escaping (Result<String, Error>) -> Void) {
+        guard hasScreenCapturePermission else {
+            DispatchQueue.main.async {
+                let granted = self.requestScreenCapturePermission()
+                let message = granted
+                    ? "屏幕录制权限已启用。Pythia 将自动重启，重启后请再次截图。"
+                    : "Pythia 尚未获得屏幕录制权限。请在系统设置的「隐私与安全性」-「屏幕与系统音频录制」中启用 Pythia。"
+                completion(.failure(TranslationError.requestFailed(message)))
+                if granted {
+                    PythiaAppDelegate.shared?.relaunchAfterPermissionChange()
+                }
+            }
+            return
+        }
         DispatchQueue.global(qos: .userInitiated).async {
+            let captureURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("Pythia-Screenshot-\(UUID().uuidString).png")
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-            process.arguments = ["-i", "-x", "-c"]
+            process.arguments = ["-i", "-x", captureURL.path]
             do {
                 try process.run()
                 process.waitUntilExit()
                 guard process.terminationStatus == 0 else {
-                    completion(.failure(TranslationError.requestFailed("无法截取屏幕。请确认屏幕录制权限。")))
+                    try? FileManager.default.removeItem(at: captureURL)
+                    let message = self.hasScreenCapturePermission
+                        ? "已取消截图。"
+                        : "屏幕录制权限未生效。Pythia 将打开权限设置；启用后请完全退出并重新打开 Pythia。"
+                    if !self.hasScreenCapturePermission {
+                        DispatchQueue.main.async {
+                            _ = self.requestScreenCapturePermission()
+                        }
+                    }
+                    completion(.failure(TranslationError.requestFailed(message)))
                     return
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    self.recognizeClipboardImage(completion: completion)
+                guard let image = NSImage(contentsOf: captureURL) else {
+                    try? FileManager.default.removeItem(at: captureURL)
+                    completion(.failure(TranslationError.requestFailed("截图文件为空，请重新选择截图区域。")))
+                    return
                 }
+                try? FileManager.default.removeItem(at: captureURL)
+                self.recognize(image: image, completion: completion)
             } catch {
+                try? FileManager.default.removeItem(at: captureURL)
                 completion(.failure(error))
             }
         }
     }
 
     func recognizeClipboardImage(completion: @escaping (Result<String, Error>) -> Void) {
-        guard
-            let image = NSPasteboard.general.readObjects(forClasses: [NSImage.self])?.first as? NSImage,
-            let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
-        else {
+        guard let image = NSPasteboard.general.readObjects(forClasses: [NSImage.self])?.first as? NSImage else {
             completion(.failure(TranslationError.requestFailed("剪贴板里没有图片。")))
+            return
+        }
+        recognize(image: image, completion: completion)
+    }
+
+    private func recognize(image: NSImage, completion: @escaping (Result<String, Error>) -> Void) {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            completion(.failure(TranslationError.requestFailed("无法读取截图图片。")))
             return
         }
         let services = Preferences.shared.recognizeServiceList

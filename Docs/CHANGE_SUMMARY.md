@@ -2,6 +2,9 @@
 
 ## Added
 
+- macOS 1.2 compact translation window for selection and screenshot-OCR workflows, including synchronized multi-service selection and expansion to the full window.
+- Configurable LLM translation service with OpenAI Chat Completions and Anthropic Messages protocol support.
+- Screen-recording permission recovery with preflight/request, automatic relaunch after grant, and temporary-file OCR capture.
 - Cross-platform history record schema.
 - Cross-platform history collection schema.
 - Cross-platform sync metadata schema.
@@ -21,8 +24,6 @@
 
 ## Remaining Major Work
 
-- Build the Windows client.
-- Port the WebDAV history sync implementation to Windows.
+- Port the macOS 1.2 compact window and Anthropic-compatible custom LLM provider to Windows, then complete live Windows verification.
 - Add richer conflict log UI and cross-platform sync status views.
-- Implement platform-secure credential storage without repeated macOS prompts.
 - Perform live Windows x64 runtime checks on the now CI-built installer, then Authenticode-sign the production installer from the Windows certificate store.

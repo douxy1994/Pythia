@@ -460,7 +460,12 @@ final class PluginManager {
         case "translate":
             builtIns = PythiaProvider.allCases
                 .filter { $0 != .plugin }
-                .map { (id: $0.rawValue, title: $0.rawValue) }
+                .map { provider in
+                    let title = provider == .openAI
+                        ? Preferences.shared.openAICompatibleName.trimmingCharacters(in: .whitespacesAndNewlines)
+                        : provider.rawValue
+                    return (id: provider.rawValue, title: title.isEmpty ? provider.rawValue : title)
+                }
         case "recognize":
             builtIns = [(id: "System OCR", title: "系统 OCR")]
         case "tts":
@@ -503,6 +508,10 @@ final class PluginManager {
 
     func displayName(forServiceIdentifier identifier: String) -> String {
         let trimmed = TranslationService.canonicalServiceIdentifier(identifier)
+        if trimmed.caseInsensitiveCompare(PythiaProvider.openAI.rawValue) == .orderedSame {
+            let customName = Preferences.shared.openAICompatibleName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return customName.isEmpty ? PythiaProvider.openAI.rawValue : customName
+        }
         if let provider = PythiaProvider.allCases.first(where: { $0.rawValue.caseInsensitiveCompare(trimmed) == .orderedSame }), provider != .plugin {
             return provider.rawValue
         }

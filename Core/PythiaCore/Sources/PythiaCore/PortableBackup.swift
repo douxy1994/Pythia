@@ -9,6 +9,8 @@ public struct PythiaPortableSettings: Codable, Equatable, Sendable {
     public var openAICompatibleName: String?
     public var openAICompatibleBaseUrl: String?
     public var openAICompatibleModel: String?
+    public var openAICompatibleAPI: String?
+    public var compactTranslationWindow: Bool?
     public var deepLEnabled: Bool?
     public var deepLBaseUrl: String?
     public var libreTranslateEnabled: Bool?
@@ -25,6 +27,8 @@ public struct PythiaPortableSettings: Codable, Equatable, Sendable {
         openAICompatibleName: String? = nil,
         openAICompatibleBaseUrl: String? = nil,
         openAICompatibleModel: String? = nil,
+        openAICompatibleAPI: String? = nil,
+        compactTranslationWindow: Bool? = nil,
         deepLEnabled: Bool? = nil,
         deepLBaseUrl: String? = nil,
         libreTranslateEnabled: Bool? = nil,
@@ -40,6 +44,8 @@ public struct PythiaPortableSettings: Codable, Equatable, Sendable {
         self.openAICompatibleName = openAICompatibleName
         self.openAICompatibleBaseUrl = openAICompatibleBaseUrl
         self.openAICompatibleModel = openAICompatibleModel
+        self.openAICompatibleAPI = openAICompatibleAPI
+        self.compactTranslationWindow = compactTranslationWindow
         self.deepLEnabled = deepLEnabled
         self.deepLBaseUrl = deepLBaseUrl
         self.libreTranslateEnabled = libreTranslateEnabled

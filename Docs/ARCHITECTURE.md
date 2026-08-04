@@ -39,3 +39,9 @@ Both clients now implement the shared history record and merge behavior. macOS a
 The Windows source, x64 native host, automated tests, release verifier, Inno Setup packaging, and CI runtime/install/uninstall smoke tests are present. The remaining Windows work and acceptance criteria are maintained in [`../WINDOWS_CODEX_HANDOFF.md`](../WINDOWS_CODEX_HANDOFF.md).
 
 Native `.pythia` plugins use one Manifest/request/response contract and byte-identical JavaScript runners on macOS and Windows. Public plugin downloads live in [`../Plugins`](../Plugins/README.md) but are intentionally excluded from application release packages.
+
+## macOS 1.2 Presentation and Provider Additions
+
+- Selection and screenshot-OCR translation may route into a compact result-only AppKit window. The compact and full windows share the same preference-backed enabled-service list and ordering; expansion transfers the active translation instead of issuing a second request.
+- The configurable LLM provider keeps non-secret metadata in preferences and its API key in the owner-only credentials file. A typed interface selector chooses OpenAI Chat Completions or Anthropic Messages request/response encoding.
+- Screen capture uses CoreGraphics permission preflight/request APIs and a temporary PNG passed to Vision OCR. When access is first granted, the signed app relaunches so TCC applies the permission without requiring manual troubleshooting.
