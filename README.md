@@ -53,8 +53,8 @@ flowchart LR
 ### Multi-service translation
 
 - Selection and screenshot-OCR translation can open a compact result-only window with retry, copy, synchronized multi-service selection, and one-click expansion.
-- Google works out of the box; custom LLM APIs support OpenAI Chat Completions and Anthropic Messages, alongside DeepL, Baidu, Youdao, and LibreTranslate.
-- On Windows, custom LLM translation splits long documents at semantic boundaries and applies bounded retries for timeouts, rate limits, and transient upstream failures; user cancellation remains immediate.
+- Google works out of the box; custom LLM APIs support OpenAI Chat Completions and Anthropic Messages on both platforms.
+- Custom LLM translation splits long documents at semantic boundaries and applies bounded retries for timeouts, rate limits, and transient upstream failures. On macOS, the shared pipeline also guarantees numeric/grapheme-safe ~1,800-character segments, exact source reconstruction, 300-second full-response attempts, and immediate cancellation. DeepL, Baidu, Youdao, and LibreTranslate keep their existing paths.
 - **Settings → Services → Verify** runs a real translation against the values you just typed — no guessing whether a key works.
 - Dominant-script Chinese/English routing picks the right direction for mixed text; smart target language follows detection.
 - Result cards support per-card copy, re-translate, TTS, and automatic copy rules.
@@ -85,7 +85,7 @@ flowchart LR
     <td width="50%" align="center">
       <img src="./Docs/images/platform-macos.svg" width="100%" alt="Pythia for macOS">
       <h3 id="macos">macOS</h3>
-      <p><strong>Native · current release 1.2.0</strong></p>
+      <p><strong>Native · current release 1.2.1</strong></p>
       <p>Swift · AppKit · macOS 14+ · Apple silicon</p>
       <p>Menu-bar app, multi-service cards, OCR, hotkeys, history sync, plugins, verified release packaging.</p>
     </td>
@@ -103,11 +103,11 @@ flowchart LR
 
 ### macOS
 
-[Download Pythia 1.2.0 for macOS Apple silicon](https://github.com/douxy1994/Pythia/releases/download/v1.2.0/Pythia-1.2.0-macos-arm64.dmg)
+[Download Pythia 1.2.1 for macOS Apple silicon](https://github.com/douxy1994/Pythia/releases/download/v1.2.1/Pythia-1.2.1-macos-arm64.dmg)
 
 - Requires macOS 14 or later, Apple silicon (`arm64`).
 - The current build uses the project's stable local code-signing identity and is not Apple Developer ID notarized — if macOS blocks the first launch, allow it in System Settings > Privacy & Security.
-- The DMG and its SHA-256 checksum are published together on the [v1.2.0 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.2.0).
+- The DMG and its SHA-256 checksum are published together on the [v1.2.1 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.2.1).
 
 ### Windows
 

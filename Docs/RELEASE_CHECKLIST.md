@@ -7,9 +7,9 @@
 
 ## Shared
 
-- macOS version is `1.2.0` (build `120`); Windows remains Preview `1.0.0+100` until its separate release gates pass.
+- macOS version is `1.2.1` (build `121`); Windows remains Preview `1.0.0+100` until its separate release gates pass.
 - Update checks point to `https://github.com/douxy1994/Pythia/releases`.
-- macOS release artifacts are named `Pythia-1.2.0-macos-arm64.dmg` and `Pythia-1.2.0-macos-arm64.dmg.sha256`.
+- macOS release artifacts are named `Pythia-1.2.1-macos-arm64.dmg` and `Pythia-1.2.1-macos-arm64.dmg.sha256`.
 - Release artifacts contain no bundled plugins.
 - README describes Pythia and does not link to the original project.
 - Sensitive values are not included in app bundles, archives, release notes, or generated logs.
@@ -26,11 +26,12 @@
 - `POST /translate` returns a translation for `hello`.
 - Compact selection/screenshot-OCR presentation shows only results, retry/copy, synchronized multi-service selection, and expands into the full window without losing state.
 - Custom LLM protocol fixtures verify both OpenAI Chat Completions and Anthropic Messages request/response paths without real credentials.
+- Custom LLM long-text fixtures verify exact chunk reconstruction; numeric/grapheme boundaries; whitespace/list preservation; 429/503/network retry; non-retryable 400/401; bounded Retry-After; cancellation during request and backoff; sanitized N/M errors; and both protocol response formats.
 - Screen-recording permission preflight/request and first-grant relaunch are verified with the stable signed application identity.
 - With a newer signed fixture release, startup check exposes `下载更新` beside the main Pythia title; clicking it replaces `/Applications/Pythia.app` and relaunches the new version.
 - App verifies with the stable local signing identity.
-- `./script/package_release.sh` produces `release/Pythia/Pythia.app`, `release/Pythia/Pythia-1.2.0-macos-arm64.dmg`, and its `.sha256` sidecar.
-- `hdiutil verify release/Pythia/Pythia-1.2.0-macos-arm64.dmg` and `shasum -a 256 -c release/Pythia/Pythia-1.2.0-macos-arm64.dmg.sha256` succeed.
+- `./script/package_release.sh` produces `release/Pythia/Pythia.app`, `release/Pythia/Pythia-1.2.1-macos-arm64.dmg`, and its `.sha256` sidecar.
+- `hdiutil verify release/Pythia/Pythia-1.2.1-macos-arm64.dmg` and `shasum -a 256 -c release/Pythia/Pythia-1.2.1-macos-arm64.dmg.sha256` succeed.
 - Accessibility selection translation does not prompt repeatedly after updates signed by the same identity.
 - Service, WebDAV, proxy, and plugin credentials migrate out of UserDefaults into `credentials.json`; the file is `0600`, portable backups omit it, and the app contains no `SecItem` runtime calls.
 

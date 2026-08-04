@@ -24,6 +24,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private var failedResultKeys = Set<String>()
     private let servicePicker = TranslationServicePickerButton()
     private let compactServicePicker = TranslationServicePickerButton()
+    private let translateButton = PillButton("翻译", target: nil, action: nil)
     private let pinWindowButton = GlassIconButton(systemName: "pin", accessibility: "窗口置顶", target: nil, action: nil)
     private let updateButton = PillButton("下载更新", target: nil, action: nil)
     private var availableUpdateInfo: PythiaUpdateInfo?
@@ -59,6 +60,12 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private var isApplyingWindowPlacement = false
     private var contentMode: ContentMode = .translation
     private var isCompactPresentation = false
+    private var activeTranslationGeneration = UUID()
+    private var activeTranslationCancellations: [String: TranslationCancellation] = [:]
+    private var activeTranslationTimeouts: [String: DispatchWorkItem] = [:]
+    private var activeUnfinishedServices = Set<String>()
+    private var activeTranslationCompletion: ((Result<String, Error>) -> Void)?
+    private var isTranslationInProgress = false
 
     init() {
         let window = NSWindow(
@@ -243,6 +250,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     func translate(_ text: String? = nil, completion: ((Result<String, Error>) -> Void)? = nil) {
         contentMode = .translation
         dynamicTranslateWorkItem?.cancel()
+        cancelActiveTranslation(showStatus: false)
         let usesProvidedText = text?.isEmpty == false
         if let text, !text.isEmpty {
             sourceView.setPlainText(text)
@@ -294,6 +302,12 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
             targetLanguage: requestedTargetLanguage
         )
         prepareResultCards(for: services)
+        let generation = UUID()
+        activeTranslationGeneration = generation
+        activeUnfinishedServices = Set(services)
+        activeTranslationCompletion = completion
+        isTranslationInProgress = true
+        translateButton.title = "取消"
         var completed = 0
         var succeeded = 0
         var failed = 0
@@ -303,8 +317,12 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
 
         let finishService: (String, Result<String, Error>) -> Void = { [weak self] service, result in
             guard let self else { return }
+            guard self.activeTranslationGeneration == generation else { return }
             guard !finishedServices.contains(service) else { return }
             finishedServices.insert(service)
+            self.activeTranslationCancellations.removeValue(forKey: service)
+            self.activeTranslationTimeouts.removeValue(forKey: service)?.cancel()
+            self.activeUnfinishedServices.remove(service)
             completed += 1
             // A finished service (success or failure) may be re-translated.
             self.resultRetranslateButtons[service]?.isEnabled = true
@@ -335,13 +353,14 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
                 self.setResult(error.localizedDescription, for: service)
             }
             if completed == services.count {
+                self.finishTranslationSession(generation: generation)
                 if let firstSuccess {
                     self.applyAutoCopyAfterTranslation(source: input)
                     self.status(failed > 0 ? "部分服务失败，\(succeeded)/\(services.count) 个成功" : "翻译完成")
-                    completion?(.success(firstSuccess))
+                    self.takeTranslationCompletion()?(.success(firstSuccess))
                 } else {
                     self.status("翻译失败")
-                    completion?(.failure(firstError ?? TranslationError.requestFailed("翻译失败")))
+                    self.takeTranslationCompletion()?(.failure(firstError ?? TranslationError.requestFailed("翻译失败")))
                 }
             } else {
                 self.status("翻译中 \(completed)/\(services.count)")
@@ -350,11 +369,13 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
 
         for service in services {
             let serviceTimeout = timeoutInterval(forServiceIdentifier: service, text: input)
-            let timeout = DispatchWorkItem {
+            let timeout = DispatchWorkItem { [weak self] in
+                self?.activeTranslationCancellations[service]?.cancel()
                 finishService(service, .failure(TranslationError.requestFailed("服务超时：\(PluginManager.shared.displayName(forServiceIdentifier: service)) 未在 \(Int(serviceTimeout)) 秒内返回。")))
             }
+            activeTranslationTimeouts[service] = timeout
             DispatchQueue.main.asyncAfter(deadline: .now() + serviceTimeout, execute: timeout)
-            TranslationService.shared.translateService(
+            let cancellation = TranslationService.shared.translateService(
                 identifier: service,
                 text: input,
                 sourceLanguage: effectiveLanguages.source,
@@ -365,6 +386,9 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
                     timeout.cancel()
                     finishService(service, result)
                 }
+            }
+            if let cancellation, activeTranslationGeneration == generation, activeUnfinishedServices.contains(service) {
+                activeTranslationCancellations[service] = cancellation
             }
         }
     }
@@ -377,10 +401,50 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
             let basePerChunk: TimeInterval = 300
             return min(7_200, max(basePerChunk, Double(chunkCount) * basePerChunk))
         }
+        if lower == PythiaProvider.openAI.rawValue.lowercased() {
+            let chunkCount = TranslationChunkPolicy.chunks(for: text).count
+            return min(7_200, max(300, Double(chunkCount) * 900 + 120))
+        }
         if lower == PythiaProvider.local.rawValue.lowercased() {
             return 10
         }
         return min(600, max(90, 90 + Double(characterCount) / 40.0))
+    }
+
+    private func finishTranslationSession(generation: UUID) {
+        guard activeTranslationGeneration == generation else { return }
+        activeTranslationCancellations.removeAll()
+        activeTranslationTimeouts.values.forEach { $0.cancel() }
+        activeTranslationTimeouts.removeAll()
+        activeUnfinishedServices.removeAll()
+        isTranslationInProgress = false
+        translateButton.title = "翻译"
+    }
+
+    private func takeTranslationCompletion() -> ((Result<String, Error>) -> Void)? {
+        defer { activeTranslationCompletion = nil }
+        return activeTranslationCompletion
+    }
+
+    private func cancelActiveTranslation(showStatus: Bool) {
+        guard isTranslationInProgress else { return }
+        let unfinished = activeUnfinishedServices
+        activeTranslationGeneration = UUID()
+        let cancellations = Array(activeTranslationCancellations.values)
+        activeTranslationCancellations.removeAll()
+        cancellations.forEach { $0.cancel() }
+        activeTranslationTimeouts.values.forEach { $0.cancel() }
+        activeTranslationTimeouts.removeAll()
+        activeUnfinishedServices.removeAll()
+        isTranslationInProgress = false
+        translateButton.title = "翻译"
+        unfinished.forEach { service in
+            resultRetranslateButtons[service]?.isEnabled = true
+            setResult("已取消", for: service)
+        }
+        let completion = takeTranslationCompletion()
+        if showStatus { status("已取消") }
+        completion?(.failure(TranslationError.cancelled))
     }
 
     private func handleSourceTextChanged() {
@@ -692,6 +756,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
 
     func clearInput() {
         dynamicTranslateWorkItem?.cancel()
+        cancelActiveTranslation(showStatus: false)
         sourceView.setPlainText("")
         clearResults()
         status("已清空")
@@ -789,7 +854,8 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         configureLanguagePopup(targetLanguagePopup, includeAuto: false)
         configureResultList()
 
-        let translateButton = PillButton("翻译", target: self, action: #selector(translateButtonClicked))
+        translateButton.target = self
+        translateButton.action = #selector(translateButtonClicked)
         let selectionButton = PillButton("划词", target: self, action: #selector(selectionButtonClicked))
         let ocrButton = PillButton("截图翻译", target: self, action: #selector(ocrButtonClicked))
         let swapButton = PillButton("⇄", target: self, action: #selector(swapLanguages))
@@ -1055,7 +1121,11 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     }
 
     @objc private func translateButtonClicked() {
-        translate()
+        if isTranslationInProgress {
+            cancelActiveTranslation(showStatus: true)
+        } else {
+            translate()
+        }
     }
 
     @objc private func copySourceButtonClicked() {
@@ -1092,6 +1162,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     }
 
     @objc private func clearSourceClicked() {
+        cancelActiveTranslation(showStatus: false)
         sourceView.setPlainText("")
         updateSourceHeight()
         clearResults()

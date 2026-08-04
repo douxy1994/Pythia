@@ -20,7 +20,7 @@ This checklist tracks visible actions and whether they map to real behavior.
 - General appearance/theme color: real for macOS UI preferences.
 - General compact-window toggle: real. Controls the default presentation for selection and screenshot-OCR translation.
 - Translation behavior: real for target language, smart target routing, delete-newline, dynamic/incremental preferences where implemented.
-- Services: real for built-in and local legacy service selection/order/configuration. Custom LLM translation services support configurable OpenAI Chat Completions or Anthropic Messages interfaces, name, base URL, model, and private API key.
+- Services: real for built-in and local legacy service selection/order/configuration. Custom LLM translation services support configurable OpenAI Chat Completions or Anthropic Messages interfaces, name, base URL, model, and private API key. Their long-document path performs numeric/grapheme-safe ~1,800-character sequential segmentation, whitespace restoration, up to three bounded attempts, Retry-After parsing, sanitized segment errors, and request/backoff cancellation.
 - OCR: real for macOS Vision and configured OCR plugin fallback order.
 - TTS: real for macOS Speech and compatible service entries.
 - Collection: real for configured collection plugins.

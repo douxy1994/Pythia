@@ -21,14 +21,18 @@ enum PythiaNetworkSession {
         return task
     }
 
-    static func configuration(for url: URL?) -> URLSessionConfiguration {
+    static func configuration(
+        for url: URL?,
+        requestTimeout: TimeInterval = 180,
+        resourceTimeout: TimeInterval = 1_200
+    ) -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCredentialStorage = nil
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.timeoutIntervalForRequest = 180
-        configuration.timeoutIntervalForResource = 1_200
+        configuration.timeoutIntervalForRequest = requestTimeout
+        configuration.timeoutIntervalForResource = resourceTimeout
         configuration.waitsForConnectivity = true
         if let proxy = proxyDictionary(for: url) {
             configuration.connectionProxyDictionary = proxy
@@ -103,6 +107,72 @@ enum PythiaNetworkSession {
     }
 }
 
+final class TranslationCancellation {
+    private let lock = NSLock()
+    private var task: URLSessionTask?
+    private var backoff: DispatchWorkItem?
+    private var cancelHandler: (() -> Void)?
+    private var cancelled = false
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
+    func cancel() {
+        let currentTask: URLSessionTask?
+        let currentBackoff: DispatchWorkItem?
+        let handler: (() -> Void)?
+        lock.lock()
+        guard !cancelled else { lock.unlock(); return }
+        cancelled = true
+        currentTask = task
+        currentBackoff = backoff
+        handler = cancelHandler
+        task = nil
+        backoff = nil
+        cancelHandler = nil
+        lock.unlock()
+        currentTask?.cancel()
+        currentBackoff?.cancel()
+        handler?()
+    }
+
+    fileprivate func setTask(_ newTask: URLSessionTask?) {
+        lock.lock()
+        let shouldCancel = cancelled
+        task = shouldCancel ? nil : newTask
+        lock.unlock()
+        if shouldCancel { newTask?.cancel() }
+    }
+
+    fileprivate func setBackoff(_ workItem: DispatchWorkItem?) {
+        lock.lock()
+        let shouldCancel = cancelled
+        backoff = shouldCancel ? nil : workItem
+        lock.unlock()
+        if shouldCancel { workItem?.cancel() }
+    }
+
+    fileprivate func setCancelHandler(_ handler: @escaping () -> Void) {
+        lock.lock()
+        let alreadyCancelled = cancelled
+        if !alreadyCancelled { cancelHandler = handler }
+        lock.unlock()
+        if alreadyCancelled { handler() }
+    }
+
+    fileprivate func finish() {
+        lock.lock()
+        task = nil
+        backoff?.cancel()
+        backoff = nil
+        cancelHandler = nil
+        lock.unlock()
+    }
+}
+
 final class TranslationService {
     static let shared = TranslationService()
 
@@ -122,13 +192,14 @@ final class TranslationService {
         return trimmed
     }
 
+    @discardableResult
     func translateService(
         identifier: String,
         text: String,
         sourceLanguage: String,
         targetLanguage: String,
         completion: @escaping (Result<String, Error>) -> Void
-    ) {
+    ) -> TranslationCancellation? {
         let trimmed = Self.canonicalServiceIdentifier(identifier)
         let languages = Self.resolvedLanguages(text: text, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage)
         if trimmed.lowercased().hasPrefix("plugin:") {
@@ -139,13 +210,13 @@ final class TranslationService {
                 targetLanguage: languages.target,
                 completion: completion
             )
-            return
+            return nil
         }
         guard let provider = PythiaProvider.allCases.first(where: { $0.rawValue.caseInsensitiveCompare(trimmed) == .orderedSame }) else {
             completion(.failure(TranslationError.requestFailed("未知翻译服务：\(identifier)。")))
-            return
+            return nil
         }
-        translate(text: text, provider: provider, sourceLanguage: languages.source, targetLanguage: languages.target, completion: completion)
+        return translate(text: text, provider: provider, sourceLanguage: languages.source, targetLanguage: languages.target, completion: completion)
     }
 
     private func translatePluginText(
@@ -276,35 +347,42 @@ final class TranslationService {
         return chunks
     }
 
+    @discardableResult
     func translate(
         text: String,
         provider: PythiaProvider,
         sourceLanguage: String,
         targetLanguage: String,
         completion: @escaping (Result<String, Error>) -> Void
-    ) {
+    ) -> TranslationCancellation? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             completion(.failure(TranslationError.emptyInput))
-            return
+            return nil
         }
         let languages = Self.resolvedLanguages(text: trimmed, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage)
 
         switch provider {
         case .local:
             completion(.success("【本地预览】\n\(trimmed)"))
+            return nil
         case .google:
             translateWithGoogle(text: trimmed, sourceLanguage: languages.source, targetLanguage: languages.target, completion: completion)
+            return nil
         case .openAI:
-            translateWithOpenAI(text: trimmed, sourceLanguage: languages.source, targetLanguage: languages.target, completion: completion)
+            return translateWithOpenAI(text: text, sourceLanguage: languages.source, targetLanguage: languages.target, completion: completion)
         case .deepL:
             translateWithDeepL(text: trimmed, sourceLanguage: languages.source, targetLanguage: languages.target, completion: completion)
+            return nil
         case .baidu:
             translateWithBaidu(text: trimmed, sourceLanguage: languages.source, targetLanguage: languages.target, completion: completion)
+            return nil
         case .youdao:
             translateWithYoudao(text: trimmed, sourceLanguage: languages.source, targetLanguage: languages.target, completion: completion)
+            return nil
         case .libreTranslate:
             translateWithLibreTranslate(text: trimmed, sourceLanguage: languages.source, targetLanguage: languages.target, completion: completion)
+            return nil
         case .plugin:
             PluginManager.shared.translate(
                 text: trimmed,
@@ -312,6 +390,7 @@ final class TranslationService {
                 targetLanguage: languages.target,
                 completion: completion
             )
+            return nil
         }
     }
 
@@ -407,36 +486,171 @@ final class TranslationService {
         sourceLanguage: String,
         targetLanguage: String,
         completion: @escaping (Result<String, Error>) -> Void
-    ) {
+    ) -> TranslationCancellation? {
         let preferences = Preferences.shared
         guard !preferences.openAIKey.isEmpty else {
             completion(.failure(TranslationError.missingKey("自定义 API Key")))
-            return
+            return nil
         }
         let api = preferences.openAICompatibleAPI
         guard let endpoint = Self.customLLMEndpoint(baseURL: preferences.openAIBaseURL, api: api) else {
             completion(.failure(TranslationError.requestFailed("自定义 API 基础地址无效。")))
-            return
+            return nil
         }
-        var request = URLRequest(url: endpoint)
+        let key = preferences.openAIKey
+        let model = preferences.openAIModel
+        let chunks = TranslationChunkPolicy.chunks(for: text)
+        let cancellation = TranslationCancellation()
+        let stateQueue = DispatchQueue(label: "com.douxy.pythia.custom-llm")
+        var index = 0
+        var translatedChunks: [String] = []
+        var finished = false
+        var processNext: (() -> Void)!
+        var performAttempt: ((TranslationChunk, Int) -> Void)!
+
+        func finish(_ result: Result<String, Error>) {
+            guard !finished else { return }
+            finished = true
+            cancellation.finish()
+            completion(result)
+        }
+
+        func segmentFailure(_ detail: String) {
+            finish(.failure(TranslationError.requestFailed("第 \(index + 1)/\(chunks.count) 段翻译失败：\(detail)")))
+        }
+
+        performAttempt = { chunk, attempt in
+            guard !finished else { return }
+            guard !cancellation.isCancelled else { finish(.failure(TranslationError.cancelled)); return }
+
+            let segmentLine = chunks.count > 1
+                ? "This is segment \(index + 1) of \(chunks.count); preserve its paragraph and list formatting.\n"
+                : ""
+            let prompt = "Translate the following text from \(sourceLanguage) to \(targetLanguage). \(segmentLine)Return only the translation.\n\n\(chunk.body)"
+            guard let request = Self.customLLMRequest(
+                endpoint: endpoint,
+                api: api,
+                key: key,
+                model: model,
+                prompt: prompt
+            ) else {
+                segmentFailure("请求编码失败。")
+                return
+            }
+
+            let configuration = PythiaNetworkSession.configuration(for: endpoint, requestTimeout: 300, resourceTimeout: 300)
+            let session = URLSession(configuration: configuration)
+            let task = session.dataTask(with: PythiaNetworkSession.requestWithProxyAuthorization(request)) { data, response, error in
+                session.finishTasksAndInvalidate()
+                stateQueue.async {
+                    guard !finished else { return }
+                    if cancellation.isCancelled {
+                        finish(.failure(TranslationError.cancelled))
+                        return
+                    }
+
+                    let http = response as? HTTPURLResponse
+                    let status = http?.statusCode
+                    let retryableNetwork = error.map(Self.isRetryableCustomLLMNetworkError) ?? false
+                    let retryableHTTP = status.map(TranslationRetryPolicy.isRetryableHTTPStatus) ?? false
+                    if (retryableNetwork || retryableHTTP), attempt < 3 {
+                        let delay = TranslationRetryPolicy.retryDelay(
+                            retryAfter: http?.value(forHTTPHeaderField: "Retry-After"),
+                            retryNumber: attempt
+                        )
+                        let work = DispatchWorkItem {
+                            guard !cancellation.isCancelled else { finish(.failure(TranslationError.cancelled)); return }
+                            performAttempt(chunk, attempt + 1)
+                        }
+                        cancellation.setBackoff(work)
+                        stateQueue.asyncAfter(deadline: .now() + delay, execute: work)
+                        return
+                    }
+
+                    if let error {
+                        if (error as? URLError)?.code == .cancelled {
+                            finish(.failure(TranslationError.cancelled))
+                        } else if (error as? URLError)?.code == .timedOut {
+                            segmentFailure("请求超时。")
+                        } else {
+                            segmentFailure("网络请求失败。")
+                        }
+                        return
+                    }
+                    if let status, !(200..<300).contains(status) {
+                        let detail = TranslationRetryPolicy.isRetryableHTTPStatus(status)
+                            ? "HTTP \(status)，重试三次后仍未成功。"
+                            : "HTTP \(status)，请检查接口、鉴权、模型与配置。"
+                        segmentFailure(detail)
+                        return
+                    }
+                    guard let data,
+                          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let content = Self.customLLMContent(from: json, api: api),
+                          !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    else {
+                        segmentFailure("服务返回了无法解析的响应。")
+                        return
+                    }
+                    let translated = content.trimmingCharacters(in: .whitespacesAndNewlines)
+                    translatedChunks.append(chunk.leadingWhitespace + translated + chunk.trailingWhitespace)
+                    index += 1
+                    processNext()
+                }
+            }
+            cancellation.setTask(task)
+            task.resume()
+        }
+
+        processNext = {
+            guard !finished else { return }
+            guard !cancellation.isCancelled else { finish(.failure(TranslationError.cancelled)); return }
+            guard index < chunks.count else {
+                finish(.success(translatedChunks.joined()))
+                return
+            }
+            let chunk = chunks[index]
+            if chunk.body.isEmpty {
+                translatedChunks.append(chunk.original)
+                index += 1
+                processNext()
+                return
+            }
+            performAttempt(chunk, 1)
+        }
+
+        cancellation.setCancelHandler {
+            stateQueue.async { finish(.failure(TranslationError.cancelled)) }
+        }
+        stateQueue.async { processNext() }
+        return cancellation
+    }
+
+    private static func customLLMRequest(
+        endpoint: URL,
+        api: String,
+        key: String,
+        model: String,
+        prompt: String
+    ) -> URLRequest? {
+        var request = URLRequest(url: endpoint, timeoutInterval: 300)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let prompt = "Translate the following text from \(sourceLanguage) to \(targetLanguage). Return only the translation.\n\n\(text)"
         let body: [String: Any]
         if api == "anthropic" {
-            request.setValue(preferences.openAIKey, forHTTPHeaderField: "x-api-key")
+            request.setValue(key, forHTTPHeaderField: "x-api-key")
             request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
             body = [
-                "model": preferences.openAIModel,
+                "model": model,
                 "system": "You are a concise translation engine.",
                 "messages": [["role": "user", "content": prompt]],
                 "max_tokens": 4096,
                 "temperature": 0.2,
             ]
         } else {
-            request.setValue("Bearer \(preferences.openAIKey)", forHTTPHeaderField: "Authorization")
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
             body = [
-                "model": preferences.openAIModel,
+                "model": model,
                 "messages": [
                     ["role": "system", "content": "You are a concise translation engine."],
                     ["role": "user", "content": prompt],
@@ -444,26 +658,18 @@ final class TranslationService {
                 "temperature": 0.2,
             ]
         }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        PythiaNetworkSession.dataTask(with: request) { data, response, error in
-            if let error {
-                completion(.failure(error))
-                return
-            }
-            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                let message = data.flatMap { String(data: $0, encoding: .utf8) } ?? "HTTP \(http.statusCode)"
-                completion(.failure(TranslationError.requestFailed(message)))
-                return
-            }
-            guard let data,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let content = Self.customLLMContent(from: json, api: api)
-            else {
-                completion(.failure(TranslationError.invalidResponse))
-                return
-            }
-            completion(.success(content.trimmingCharacters(in: .whitespacesAndNewlines)))
-        }.resume()
+        guard let data = try? JSONSerialization.data(withJSONObject: body) else { return nil }
+        request.httpBody = data
+        return request
+    }
+
+    private static func isRetryableCustomLLMNetworkError(_ error: Error) -> Bool {
+        guard let code = (error as? URLError)?.code else { return false }
+        return [
+            .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost,
+            .dnsLookupFailed, .notConnectedToInternet, .resourceUnavailable,
+            .secureConnectionFailed, .cannotLoadFromNetwork,
+        ].contains(code)
     }
 
     static func customLLMEndpoint(baseURL: String, api: String) -> URL? {

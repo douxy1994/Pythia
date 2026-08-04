@@ -472,7 +472,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         stack.addArrangedSubview(settingsSection(
             "自定义大模型 API",
             icon: "key",
-            detail: "大模型翻译服务可连接 OpenAI Chat Completions 或 Anthropic Messages 兼容接口；密钥只写入本地凭据文件。",
+            detail: "大模型翻译服务可连接 OpenAI Chat Completions 或 Anthropic Messages 兼容接口；长文档自动安全分段，密钥只写入本地凭据文件。",
             views: [
                 row("显示名称", openAINameField),
                 row("接口类型", openAICompatibleAPIPopup),
@@ -1845,10 +1845,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         ])
 
         let updateItems = [
-            aboutUpdateItem("简约翻译窗口", "划词与截图 OCR 翻译可只显示译文、重试和复制；右上角可随时展开完整窗口。"),
-            aboutUpdateItem("多服务同步选择", "简约窗口支持多选翻译服务，并与完整窗口的选择和排序实时同步。"),
-            aboutUpdateItem("自定义大模型 API", "可配置显示名称、基础地址、模型与密钥，兼容 OpenAI Chat Completions 和 Anthropic Messages。"),
-            aboutUpdateItem("屏幕录制权限修复", "重新检测系统授权并在必要时自动重启，解决已开启权限仍无法截图的问题。"),
+            aboutUpdateItem("大模型长文档翻译", "自定义 OpenAI 与 Anthropic 接口按约 1800 字符安全分段并顺序合并，不再被固定短超时中断。"),
+            aboutUpdateItem("数字与格式保护", "分段不切断小数、日期、时间、版本号、科学计数法或扩展字形簇，并保留段落、列表和空白。"),
+            aboutUpdateItem("有界重试", "临时网络错误、限流和服务端错误最多尝试三次，支持 Retry-After 秒数与 HTTP 日期。"),
+            aboutUpdateItem("真正可取消", "取消会立即终止当前请求或退避等待、停止后续分段，并与请求超时显示不同结果。"),
         ]
         let rows = FullWidthStackView()
         updateItems.forEach { item in

@@ -7,6 +7,10 @@
 
 ## Added
 
+- macOS 1.2.1 custom-LLM long-document pipeline with numeric/grapheme-safe chunking, exact source reconstruction, whitespace restoration, 300-second full-response attempts, bounded retry/Retry-After, sanitized N/M errors, and active request/backoff cancellation.
+- macOS 1.2 compact translation window for selection and screenshot-OCR workflows, including synchronized multi-service selection and expansion to the full window.
+- Configurable LLM translation service with OpenAI Chat Completions and Anthropic Messages protocol support.
+- Screen-recording permission recovery with preflight/request, automatic relaunch after grant, and temporary-file OCR capture.
 - Cross-platform history record schema.
 - Cross-platform history collection schema.
 - Cross-platform sync metadata schema.

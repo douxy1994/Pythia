@@ -53,8 +53,8 @@ flowchart LR
 ### 多服务翻译
 
 - 划词与截图 OCR 翻译可默认打开简约窗口，只显示译文、重试和复制；翻译服务支持多选并与完整窗口实时同步，右上角可一键展开。
-- Google 开箱即用；自定义大模型 API 支持 OpenAI Chat Completions 与 Anthropic Messages 接口，也可使用 DeepL、百度、有道、LibreTranslate。
-- Windows 自定义大模型翻译会按语义边界拆分长文档，并对网络超时、限流和服务端临时错误进行有限重试；用户取消仍会立即停止。
+- Google 开箱即用；两个平台的自定义大模型 API 均支持 OpenAI Chat Completions 与 Anthropic Messages。
+- 自定义大模型翻译会按语义边界拆分长文档，并对网络超时、限流和服务端临时错误进行有限重试。macOS 共用管线还保证约 1800 字符的数字/扩展字形安全分段、原文精确重组、每次请求 300 秒完整响应超时和立即取消；DeepL、百度、有道、LibreTranslate 保持原有路径。
 - **设置 → 服务 → 验证**：按你刚输入的值发起一次真实翻译，Key 能不能用立刻知道。
 - 中英混排按主导文字决定方向；智能目标语言跟随自动检测。
 - 结果卡片支持单卡复制、重新翻译、朗读和自动复制规则。
@@ -85,7 +85,7 @@ flowchart LR
     <td width="50%" align="center">
       <img src="./Docs/images/platform-macos.svg" width="100%" alt="Pythia macOS 版">
       <h3 id="macos">macOS</h3>
-      <p><strong>原生版本 · 当前 1.2.0</strong></p>
+      <p><strong>原生版本 · 当前 1.2.1</strong></p>
       <p>Swift · AppKit · macOS 14+ · Apple silicon</p>
       <p>菜单栏应用、多服务卡片、OCR、快捷键、历史同步、插件、签名打包全链路。</p>
     </td>
@@ -103,11 +103,11 @@ flowchart LR
 
 ### macOS
 
-[下载 Pythia 1.2.0 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.2.0/Pythia-1.2.0-macos-arm64.dmg)
+[下载 Pythia 1.2.1 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.2.1/Pythia-1.2.1-macos-arm64.dmg)
 
 - 需要 macOS 14 或更高版本，Apple silicon（`arm64`）。
 - 当前构建使用项目稳定的本地代码签名身份，未经 Apple Developer ID 公证——首次打开如被拦截，请在「系统设置 > 隐私与安全性」中允许。
-- DMG 和 SHA-256 校验文件同时发布在 [v1.2.0 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.0)。
+- DMG 和 SHA-256 校验文件同时发布在 [v1.2.1 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.1)。
 
 ### Windows
 

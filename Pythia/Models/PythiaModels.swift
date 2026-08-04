@@ -72,6 +72,7 @@ enum TranslationError: LocalizedError {
     case emptyInput
     case missingKey(String)
     case invalidResponse
+    case cancelled
     case requestFailed(String)
 
     var errorDescription: String? {
@@ -82,6 +83,8 @@ enum TranslationError: LocalizedError {
             return "请先在设置里填写 \(name)。"
         case .invalidResponse:
             return "翻译服务返回了无法解析的响应。"
+        case .cancelled:
+            return "已取消"
         case .requestFailed(let message):
             return message
         }

@@ -1,61 +1,59 @@
-# Pythia 1.2.1
+# Pythia 1.2.1 Release Notes
 
 发布日期：2026-08-04
 
 ## 中文
 
-Pythia 1.2.1 修复 Windows 自定义大模型 API 翻译长文档时，因服务响应超过固定 30 秒而被取消或显示超时的问题。本次先发布 Windows x64 安装包；macOS 完成同策略移植后，其 1.2.1 arm64 资产将追加到同一个 GitHub Release。
+Pythia 1.2.1 为 Windows x64 与 macOS Apple silicon 同步提供自定义大模型 API 长文档翻译修复，两个安装资产位于同一个 GitHub Release。
 
 ### 长文档大模型翻译
 
-- OpenAI Chat Completions 与 Anthropic Messages 自定义服务统一使用有序的长文本分段流程。
-- 文档以约 1,800 字符为软上限，优先在换行、句末标点和自然语义边界处分段。
-- 分段不会切断 UTF-16 代理项、小数、日期、时间、版本号、带符号数值或科学计数法。
-- 每段独立翻译并按原顺序拼接，保留段首、段尾空白和列表/段落结构。
-- 自定义大模型请求不再复用普通翻译服务的固定 30 秒超时；每次尝试最长等待 5 分钟，响应正文也受相同超时约束。
-- 超时、网络异常、HTTP 408/409/425/429 和 5xx 临时错误最多尝试三次，并尊重服务端 `Retry-After`（最长 60 秒）。
-- HTTP 400/401/403 等请求、配置或鉴权错误不会重试；用户主动取消会立即终止当前请求、退避等待和后续分段。
-- 失败信息包含当前分段序号，便于定位长文档中的失败位置。
+- OpenAI Chat Completions 与 Anthropic Messages 自定义服务共用顺序分段管线；Google、DeepL 等普通服务保持原逻辑。
+- 文本按约 1800 个字符的软上限分段，优先段落、换行与句末标点，并避免切断 Swift Character、连续数字、小数、千位数、日期、时间、版本号、正负数及科学计数法。
+- 分段原文可精确重组；段首、段尾空白在请求外保存并恢复，维持空白行、段落和 Markdown 列表结构。
+- 多段提示包含当前 N/M 位置，并继续要求只返回译文。
 
-### 验证与发布
+### 超时、重试与取消
 
-- Windows 原生解决方案 Release 构建通过，0 警告、0 错误。
-- 原生 smoke tests 覆盖长文本精确重组、科学计数法边界、Unicode 代理项和临时 HTTP 状态分类。
-- Windows 安装包继续排除第三方插件、`.pythia`、`.potext`、调试符号和私密材料。
-- `Pythia-1.2.1-windows-x64.exe` 暂未进行 Authenticode 签名，可能触发 Microsoft Defender SmartScreen；安装前请核对随附 SHA-256。
+- macOS 每次尝试最多等待 300 秒，并覆盖完整响应正文读取；主窗口按分段数延长服务生命周期，总上限 7200 秒。
+- 最多三次尝试，仅重试临时网络错误、超时、HTTP 408/409/425/429 与 5xx。
+- 支持 Retry-After 秒数与 HTTP 日期，等待限制为 0.75–60 秒；没有响应头时采用约 0.75 秒、2 秒的有界退避。
+- HTTP 400/401/403/404 等请求、鉴权、模型或配置错误不重试。
+- 用户取消会终止当前请求、退避等待和后续分段，界面明确显示“已取消”。
+- 最终分段错误只显示“第 N/M 段翻译失败”和安全状态信息，不包含 API Key、Authorization、完整原文或服务端正文。
 
-### 下载
+### 凭据与下载
 
-- `Pythia-1.2.1-windows-x64.exe`：Windows 10/11 x64 安装程序。
-- `Pythia-1.2.1-windows-x64.exe.sha256`：Windows 安装程序的 SHA-256 校验文件。
-- macOS 1.2.1 arm64 安装资产将在同步实现和 macOS 端验证完成后追加到本 Release。
+API Key 的保存方式不变：macOS 继续仅写入本地私有 `credentials.json`，Windows 继续使用 Credential Manager；凭据不会进入偏好设置、日志、备份或 Release。
+
+- `Pythia-1.2.1-macos-arm64.dmg` 与 `.sha256`
+- `Pythia-1.2.1-windows-x64.exe` 与 `.sha256`
 
 ---
 
 ## English
 
-Pythia 1.2.1 fixes Windows custom-LLM translation being cancelled or reported as timed out when a long document makes the provider exceed the previous fixed 30-second limit. This release initially ships the Windows x64 installer; the macOS 1.2.1 arm64 assets will be added to the same GitHub Release after the strategy is ported and verified.
+Pythia 1.2.1 brings the custom-LLM long-document translation fix to Windows x64 and macOS Apple silicon, with both installers published in the same GitHub Release.
 
 ### Long-document LLM translation
 
-- Custom OpenAI Chat Completions and Anthropic Messages services now share an ordered long-text chunking pipeline.
-- Documents use an approximately 1,800-character soft limit, preferring newlines, sentence punctuation, and natural semantic boundaries.
-- Chunk boundaries do not split UTF-16 surrogate pairs, decimals, dates, times, versions, signed values, or scientific notation.
-- Chunks are translated sequentially and recombined in source order while preserving leading/trailing whitespace and paragraph/list structure.
-- Custom LLM requests no longer share the fixed 30-second timeout used by ordinary translation providers. Each attempt may wait up to five minutes, including the response body.
-- Timeouts, network failures, HTTP 408/409/425/429, and 5xx responses receive at most three attempts and honor `Retry-After` up to 60 seconds.
-- HTTP 400/401/403 request, configuration, and authentication failures are not retried. Explicit user cancellation immediately stops the active request, backoff, and remaining chunks.
-- Failure messages include the current chunk index for easier diagnosis.
+- Custom OpenAI Chat Completions and Anthropic Messages services share an ordered segmentation pipeline; Google, DeepL, and other regular providers keep their existing paths.
+- Text is split at a soft limit of about 1,800 characters, preferring paragraphs, newlines, and sentence punctuation while protecting grapheme clusters, digit runs, decimals, grouped numbers, dates, times, versions, signed values, and scientific notation.
+- Source chunks reconstruct exactly. Leading and trailing whitespace is kept outside each model request and restored to preserve blank lines, paragraphs, and Markdown lists.
+- Multi-segment prompts identify segment N/M and still request translation-only output.
 
-### Verification and packaging
+### Timeout, retry, and cancellation
 
-- The Windows native Release solution builds with zero warnings and zero errors.
-- Native smoke tests cover exact long-text recombination, scientific-notation boundaries, Unicode surrogate pairs, and transient HTTP classification.
-- The Windows installer continues to exclude third-party plugins, `.pythia`, `.potext`, debug symbols, and private material.
-- `Pythia-1.2.1-windows-x64.exe` is not yet Authenticode-signed and may trigger Microsoft Defender SmartScreen. Verify the accompanying SHA-256 checksum before installation.
+- Each macOS attempt has a 300-second full-response deadline, including response-body reading; the main window scales the service lifetime by segment count up to 7,200 seconds.
+- At most three attempts are made, limited to transient URLSession failures, timeouts, HTTP 408/409/425/429, and 5xx responses.
+- Retry-After accepts seconds or an HTTP date and is clamped to 0.75–60 seconds; bounded fallback delays are about 0.75 and 2 seconds.
+- Request, authentication, model, and configuration failures such as HTTP 400/401/403/404 are not retried.
+- User cancellation terminates the active request, backoff delay, and remaining segments, and the UI reports “已取消”.
+- Final errors identify segment N/M with sanitized status text and never expose API keys, Authorization headers, the full source, or server response bodies.
 
-### Downloads
+### Credentials and downloads
 
-- `Pythia-1.2.1-windows-x64.exe`: Windows 10/11 x64 installer.
-- `Pythia-1.2.1-windows-x64.exe.sha256`: SHA-256 checksum for the Windows installer.
-- The macOS 1.2.1 arm64 assets will be added to this Release after the port and macOS verification are complete.
+Credential storage is unchanged: macOS keeps secrets only in the private local `credentials.json`, while Windows uses Credential Manager. Secrets are excluded from preferences, logs, backups, and release assets.
+
+- `Pythia-1.2.1-macos-arm64.dmg` and `.sha256`
+- `Pythia-1.2.1-windows-x64.exe` and `.sha256`
