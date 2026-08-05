@@ -1,6 +1,6 @@
 # Pythia 1.2.2
 
-Pythia 1.2.2 focuses on reliable selection translation and compact-window behavior across varied Windows displays. The Windows x64 installer is available now; the matching macOS package will be added to this same Release after its port is built and verified.
+Pythia 1.2.2 focuses on reliable selection translation and compact-window behavior across varied Windows and macOS displays. The Windows x64 and macOS Apple-silicon installers are published in the same Release.
 
 ## 中文
 
@@ -8,6 +8,7 @@ Pythia 1.2.2 focuses on reliable selection translation and compact-window behavi
 - 修复简约窗口“翻译服务与顺序”列表显示不全且无法滚动的问题；列表高度会随可用空间变化，并始终支持纵向滚动。
 - 增强 WPS Office 划词兼容性：在 Pythia 激活前优先通过剪贴板取得选区，并在完成后恢复用户原有剪贴板内容。
 - 新增默认关闭的“实验性悬浮划词按钮”。在 Word、常见 PDF 阅读器、浏览器和聊天软件中拖选文字后，会显示 34 DIP 的 Pythia 图标；按钮不抢占焦点、5 秒后自动消失，仅在用户点击后读取文字并打开简约翻译窗口。
+- macOS 对应功能使用 36 点无边框悬浮面板与应用图标，保持目标应用焦点；简约窗口和服务列表会在屏幕参数变化及跨屏后重新约束到当前可见工作区。
 
 ## English
 
@@ -15,10 +16,16 @@ Pythia 1.2.2 focuses on reliable selection translation and compact-window behavi
 - Fixed the compact “Translation services and order” picker being clipped without a scrollbar. Its height is bounded by available space and vertical scrolling remains available.
 - Improved WPS Office selection capture by using clipboard-first extraction before Pythia activates and restoring the user's clipboard afterward.
 - Added a default-off experimental floating selection button. After a drag selection in Word, common PDF readers, browsers, or chat clients, a 34-DIP Pythia icon appears without stealing focus, hides after five seconds, and reads/translates only after an explicit click.
+- On macOS, the feature uses a 36-point borderless non-activating panel with the app icon; compact-window and service-list geometry is re-clamped after display changes and cross-screen moves.
 
 ## Windows download
 
 - `Pythia-1.2.2-windows-x64.exe`
 - `Pythia-1.2.2-windows-x64.exe.sha256`
+
+## macOS download
+
+- `Pythia-1.2.2-macos-arm64.dmg`
+- `Pythia-1.2.2-macos-arm64.dmg.sha256`
 
 The Windows installer is not Authenticode-signed and may trigger Microsoft Defender SmartScreen. Verify the SHA-256 sidecar before installation. Release packages contain no third-party plugins or user credentials.

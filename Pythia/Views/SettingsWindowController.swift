@@ -63,6 +63,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let serviceTestResultLabel = NSTextField(labelWithString: "")
     private let clipboardCheckbox = NSButton(checkboxWithTitle: "监听剪贴板", target: nil, action: nil)
     private let compactTranslationWindowCheckbox = NSButton(checkboxWithTitle: "划词翻译或截图 OCR 翻译时默认打开简约窗口", target: nil, action: nil)
+    private let floatingSelectionButtonCheckbox = NSButton(checkboxWithTitle: "实验性悬浮划词按钮（默认关闭）", target: nil, action: nil)
     private let recognizeLanguagePopup = NSPopUpButton()
     private let recognizeAutoCopyCheckbox = NSButton(checkboxWithTitle: "OCR 后自动复制", target: nil, action: nil)
     private let recognizeDeleteNewlineCheckbox = NSButton(checkboxWithTitle: "识别结果删除换行", target: nil, action: nil)
@@ -367,6 +368,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
                 row("自动复制", autoCopyPopup),
                 indented(clipboardCheckbox),
                 indented(compactTranslationWindowCheckbox),
+                indented(floatingSelectionButtonCheckbox),
+                note("启用后，在 Word、PDF、网页和聊天软件中拖选文字会显示小型 Pythia 图标；图标不抢占焦点，点击后读取选区并打开简约翻译窗口，5 秒后自动隐藏。"),
                 row("托盘点击", trayClickPopup),
             ]
         ))
@@ -2532,6 +2535,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         updateWebDAVAutoSyncControls()
         clipboardCheckbox.state = preferences.clipboardMonitoring ? .on : .off
         compactTranslationWindowCheckbox.state = preferences.compactTranslationWindow ? .on : .off
+        floatingSelectionButtonCheckbox.state = preferences.experimentalFloatingSelectionButton ? .on : .off
         refreshPlugins()
         if let plugin = PluginManager.shared.plugins().first(where: { $0.name == preferences.pluginName || $0.title == preferences.pluginName }) {
             let represented = (plugin.legacyDirectory as NSString?)?.lastPathComponent ?? plugin.name
@@ -2640,6 +2644,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
         preferences.clipboardMonitoring = clipboardCheckbox.state == .on
         preferences.compactTranslationWindow = compactTranslationWindowCheckbox.state == .on
+        preferences.experimentalFloatingSelectionButton = floatingSelectionButtonCheckbox.state == .on
         updateSidebarSelection()
         PythiaAppDelegate.shared?.applyClipboardPreference()
         let runtimeWarning = PythiaAppDelegate.shared?.applyRuntimePreferences()

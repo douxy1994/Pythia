@@ -7,6 +7,7 @@
 
 ## Added
 
+- macOS 1.2.2 adaptive compact/full window placement across mixed-size displays, a bounded scrollable compact service picker, broader WPS PDF clipboard-first selection capture, and a default-off non-activating Pythia floating selection button.
 - Windows 1.2.2 per-monitor DPI-aware full/compact window placement, WPS-compatible selection capture, a default-off experimental floating selection button, and a bounded scrollable compact service picker.
 - macOS 1.2.1 custom-LLM long-document pipeline with numeric/grapheme-safe chunking, exact source reconstruction, whitespace restoration, 300-second full-response attempts, bounded retry/Retry-After, sanitized N/M errors, and active request/backoff cancellation.
 - macOS 1.2 compact translation window for selection and screenshot-OCR workflows, including synchronized multi-service selection and expansion to the full window.

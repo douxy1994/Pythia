@@ -86,7 +86,7 @@ flowchart LR
     <td width="50%" align="center">
       <img src="./Docs/images/platform-macos.svg" width="100%" alt="Pythia for macOS">
       <h3 id="macos">macOS</h3>
-      <p><strong>Native · current release 1.2.1</strong></p>
+      <p><strong>Native · current release 1.2.2</strong></p>
       <p>Swift · AppKit · macOS 14+ · Apple silicon</p>
       <p>Menu-bar app, multi-service cards, OCR, hotkeys, history sync, plugins, verified release packaging.</p>
     </td>
@@ -104,11 +104,11 @@ flowchart LR
 
 ### macOS
 
-[Download Pythia 1.2.1 for macOS Apple silicon](https://github.com/douxy1994/Pythia/releases/download/v1.2.1/Pythia-1.2.1-macos-arm64.dmg)
+[Download Pythia 1.2.2 for macOS Apple silicon](https://github.com/douxy1994/Pythia/releases/download/v1.2.2/Pythia-1.2.2-macos-arm64.dmg)
 
 - Requires macOS 14 or later, Apple silicon (`arm64`).
 - The current build uses the project's stable local code-signing identity and is not Apple Developer ID notarized — if macOS blocks the first launch, allow it in System Settings > Privacy & Security.
-- The DMG and its SHA-256 checksum are published together on the [v1.2.1 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.2.1).
+- The DMG and its SHA-256 checksum are published together on the [v1.2.2 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.2.2).
 
 ### Windows
 

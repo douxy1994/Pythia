@@ -86,7 +86,7 @@ flowchart LR
     <td width="50%" align="center">
       <img src="./Docs/images/platform-macos.svg" width="100%" alt="Pythia macOS 版">
       <h3 id="macos">macOS</h3>
-      <p><strong>原生版本 · 当前 1.2.1</strong></p>
+      <p><strong>原生版本 · 当前 1.2.2</strong></p>
       <p>Swift · AppKit · macOS 14+ · Apple silicon</p>
       <p>菜单栏应用、多服务卡片、OCR、快捷键、历史同步、插件、签名打包全链路。</p>
     </td>
@@ -104,11 +104,11 @@ flowchart LR
 
 ### macOS
 
-[下载 Pythia 1.2.1 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.2.1/Pythia-1.2.1-macos-arm64.dmg)
+[下载 Pythia 1.2.2 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.2.2/Pythia-1.2.2-macos-arm64.dmg)
 
 - 需要 macOS 14 或更高版本，Apple silicon（`arm64`）。
 - 当前构建使用项目稳定的本地代码签名身份，未经 Apple Developer ID 公证——首次打开如被拦截，请在「系统设置 > 隐私与安全性」中允许。
-- DMG 和 SHA-256 校验文件同时发布在 [v1.2.1 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.1)。
+- DMG 和 SHA-256 校验文件同时发布在 [v1.2.2 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.2)。
 
 ### Windows
 

@@ -22,8 +22,11 @@ final class SelectionReader {
 
     private func prefersClipboardCopy(for app: NSRunningApplication?) -> Bool {
         guard let bundleID = app?.bundleIdentifier else { return false }
+        let normalized = bundleID.lowercased()
         return Self.clipboardFirstBundleIDs.contains(bundleID)
             || bundleID.hasPrefix("com.kingsoft.wpsoffice.mac.")
+            || normalized.contains("kingsoft")
+            || normalized.contains("wpsoffice")
     }
 
     func selectedText(targetApplication: NSRunningApplication? = nil, completion: @escaping (String) -> Void) {
@@ -36,12 +39,18 @@ final class SelectionReader {
         let read: () -> Void = { [weak self] in
             guard let self else { completion(""); return }
             if self.prefersClipboardCopy(for: target) {
-                self.readClipboardFallback(targetApplication: target) { text in
-                    if !text.isEmpty {
-                        completion(text)
-                        return
+                // Global shortcuts can arrive while their modifier keys are
+                // still physically held. Give Word/WPS a brief release window
+                // before synthesizing Command-C, which is especially important
+                // for WPS's PDF canvas.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                    self.readClipboardFallback(targetApplication: target) { text in
+                        if !text.isEmpty {
+                            completion(text)
+                            return
+                        }
+                        completion(self.readAccessibilitySelection(targetApplication: target) ?? "")
                     }
-                    completion(self.readAccessibilitySelection(targetApplication: target) ?? "")
                 }
                 return
             }
@@ -133,20 +142,27 @@ final class SelectionReader {
         let pasteboard = NSPasteboard.general
         let original = capturePasteboard(pasteboard)
         let changeBefore = pasteboard.changeCount
-        let copyAndWait: (@escaping (Bool) -> Void) -> Void = { [weak self] done in
+        let copyAndWait: (NSRunningApplication?, Int, @escaping (Bool) -> Void) -> Void = { [weak self] copyTarget, baseline, done in
             guard let self else { done(false); return }
-            self.sendCopyShortcut()
-            self.waitForClipboardChange(from: changeBefore, remainingChecks: 16, completion: done)
+            self.sendCopyShortcut(targetApplication: copyTarget)
+            self.waitForClipboardChange(from: baseline, remainingChecks: 16, completion: done)
         }
-        copyAndWait { [weak self] changed in
+        copyAndWait(targetApplication, changeBefore) { [weak self] changed in
             guard let self else { completion(""); return }
             if changed {
                 let result = pasteboard.string(forType: .string) ?? ""
-                self.restorePasteboard(original, to: pasteboard)
-                completion(result)
-                return
+                if !result.isEmpty {
+                    self.restorePasteboard(original, to: pasteboard)
+                    completion(result)
+                    return
+                }
             }
-            copyAndWait { [weak self] changedAfterRetry in
+            // WPS PDF builds vary: some accept process-targeted key events,
+            // while others only respond to a HID-level Command-C while active.
+            // A rejected targeted copy can still increment changeCount while
+            // writing an empty item, so take a fresh baseline for the HID retry.
+            let retryBaseline = pasteboard.changeCount
+            copyAndWait(nil, retryBaseline) { [weak self] changedAfterRetry in
                 guard let self else { completion(""); return }
                 let result = changedAfterRetry ? (pasteboard.string(forType: .string) ?? "") : ""
                 self.restorePasteboard(original, to: pasteboard)
@@ -194,14 +210,23 @@ final class SelectionReader {
         }
     }
 
-    private func sendCopyShortcut() {
+    private func sendCopyShortcut(targetApplication: NSRunningApplication?) {
         guard let source = CGEventSource(stateID: .hidSystemState) else { return }
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: true)
         let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: false)
         keyDown?.flags = .maskCommand
         keyUp?.flags = .maskCommand
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
+        if let target = validExternalApplication(targetApplication) {
+            // WPS's PDF canvas can remain the apparent frontmost surface while
+            // its custom renderer misses HID-tap keyboard events. Address the
+            // copy chord to the owning process so the exact selected canvas
+            // receives it without relying on focus propagation timing.
+            keyDown?.postToPid(target.processIdentifier)
+            keyUp?.postToPid(target.processIdentifier)
+        } else {
+            keyDown?.post(tap: .cghidEventTap)
+            keyUp?.post(tap: .cghidEventTap)
+        }
     }
 
     private func activate(_ app: NSRunningApplication) {

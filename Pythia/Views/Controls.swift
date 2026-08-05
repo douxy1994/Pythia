@@ -800,7 +800,10 @@ final class ServiceOrderListView: NSView, NSTableViewDataSource, NSTableViewDele
         // before the native table scroll view takes over.
         let height = heightForServiceCount(0)
         let constraint = heightAnchor.constraint(equalToConstant: height)
-        constraint.priority = .required
+        // The list normally advertises its ideal height, but popovers can be
+        // smaller on short/scaled displays. Let the enclosing viewport shrink;
+        // the native scroll view remains available for every row.
+        constraint.priority = .defaultHigh
         constraint.isActive = true
         listHeightConstraint = constraint
     }
@@ -1216,7 +1219,17 @@ final class TranslationServicePickerButton: NSButton {
             self.onChange?(self.selectedIDs)
         }
         let controller = NSViewController()
-        let contentSize = NSSize(width: 300, height: min(440, max(210, 44 + options.count * 34)))
+        let desiredHeight = min(CGFloat(440), max(CGFloat(176), CGFloat(44 + options.count * 34)))
+        let screen = window?.screen
+            ?? NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
+            ?? NSScreen.main
+        let buttonOnScreen = window.map { $0.convertPoint(toScreen: convert(bounds.origin, to: nil)) }
+            ?? NSEvent.mouseLocation
+        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 300, height: desiredHeight)
+        let spaceBelow = max(0, buttonOnScreen.y - visible.minY)
+        let spaceAbove = max(0, visible.maxY - buttonOnScreen.y)
+        let availableHeight = max(spaceBelow, spaceAbove) - 24
+        let contentSize = NSSize(width: 300, height: min(desiredHeight, max(132, availableHeight)))
         let container = NSView(frame: NSRect(origin: .zero, size: contentSize))
         container.autoresizingMask = [.width, .height]
         serviceList.translatesAutoresizingMaskIntoConstraints = false

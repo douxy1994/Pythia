@@ -21,6 +21,7 @@
 		A10000000000000000000009 /* TranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* TranslationService.swift */; };
 			A1000000000000000000000A /* PluginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001C /* PluginManager.swift */; };
 				A1000000000000000000000B /* SelectionReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* SelectionReader.swift */; };
+				A1000000000000000000004C /* FloatingSelectionButtonService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000004D /* FloatingSelectionButtonService.swift */; };
 				A1000000000000000000000C /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001E /* OCRService.swift */; };
 				A1000000000000000000000D /* PythiaHTTPServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001F /* PythiaHTTPServer.swift */; };
 				A1000000000000000000000E /* ClipboardMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* ClipboardMonitor.swift */; };
@@ -43,6 +44,7 @@
 				A100000000000000000000A1 /* AutomaticLanguagePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A0 /* AutomaticLanguagePolicy.swift */; };
 				A100000000000000000000A3 /* PluginPackagePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A2 /* PluginPackagePolicy.swift */; };
 				A100000000000000000000B4 /* TranslationChunkPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B5 /* TranslationChunkPolicy.swift */; };
+				A100000000000000000000B6 /* WindowPlacementPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B7 /* WindowPlacementPolicy.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -64,6 +66,7 @@
 		A1000000000000000000001B /* TranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationService.swift; sourceTree = "<group>"; };
 			A1000000000000000000001C /* PluginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginManager.swift; sourceTree = "<group>"; };
 				A1000000000000000000001D /* SelectionReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionReader.swift; sourceTree = "<group>"; };
+				A1000000000000000000004D /* FloatingSelectionButtonService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingSelectionButtonService.swift; sourceTree = "<group>"; };
 				A1000000000000000000001E /* OCRService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRService.swift; sourceTree = "<group>"; };
 				A1000000000000000000001F /* PythiaHTTPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythiaHTTPServer.swift; sourceTree = "<group>"; };
 				A10000000000000000000021 /* ClipboardMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardMonitor.swift; sourceTree = "<group>"; };
@@ -86,6 +89,7 @@
 				A100000000000000000000A0 /* AutomaticLanguagePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/AutomaticLanguagePolicy.swift; sourceTree = SOURCE_ROOT; };
 				A100000000000000000000A2 /* PluginPackagePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/PluginPackagePolicy.swift; sourceTree = SOURCE_ROOT; };
 				A100000000000000000000B5 /* TranslationChunkPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/TranslationChunkPolicy.swift; sourceTree = SOURCE_ROOT; };
+				A100000000000000000000B7 /* WindowPlacementPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/WindowPlacementPolicy.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -175,6 +179,7 @@
 						A10000000000000000000021 /* ClipboardMonitor.swift */,
 						A10000000000000000000023 /* HotKeyMonitor.swift */,
 						A1000000000000000000001D /* SelectionReader.swift */,
+						A1000000000000000000004D /* FloatingSelectionButtonService.swift */,
 						A1000000000000000000001E /* OCRService.swift */,
 						A1000000000000000000002F /* PythiaBackupService.swift */,
 						A10000000000000000000093 /* PythiaUpdateChecker.swift */,
@@ -336,6 +341,7 @@
 				A10000000000000000000009 /* TranslationService.swift in Sources */,
 					A1000000000000000000000A /* PluginManager.swift in Sources */,
 						A1000000000000000000000B /* SelectionReader.swift in Sources */,
+						A1000000000000000000004C /* FloatingSelectionButtonService.swift in Sources */,
 						A1000000000000000000000C /* OCRService.swift in Sources */,
 						A1000000000000000000000D /* PythiaHTTPServer.swift in Sources */,
 						A1000000000000000000000E /* ClipboardMonitor.swift in Sources */,
@@ -358,6 +364,7 @@
 						A100000000000000000000A1 /* AutomaticLanguagePolicy.swift in Sources */,
 						A100000000000000000000A3 /* PluginPackagePolicy.swift in Sources */,
 						A100000000000000000000B4 /* TranslationChunkPolicy.swift in Sources */,
+						A100000000000000000000B6 /* WindowPlacementPolicy.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

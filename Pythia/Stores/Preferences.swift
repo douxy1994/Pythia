@@ -305,6 +305,14 @@ final class Preferences {
         set { defaults.set(newValue, forKey: "compactTranslationWindow") }
     }
 
+    /// Shows a small, non-activating Pythia button after a credible text-selection
+    /// drag in supported document, browser, PDF, and chat applications.
+    /// Experimental behavior is deliberately opt-in.
+    var experimentalFloatingSelectionButton: Bool {
+        get { defaults.object(forKey: "experimentalFloatingSelectionButton") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "experimentalFloatingSelectionButton") }
+    }
+
     var translateWindowPosition: String {
         get { defaults.string(forKey: "translateWindowPosition") ?? "center" }
         set { defaults.set(newValue, forKey: "translateWindowPosition") }

@@ -112,6 +112,7 @@ enum PythiaBackupService {
                 openAICompatibleModel: preferences.openAIModel,
                 openAICompatibleAPI: preferences.openAICompatibleAPI,
                 compactTranslationWindow: preferences.compactTranslationWindow,
+                experimentalFloatingSelectionButton: preferences.experimentalFloatingSelectionButton,
                 deepLEnabled: services.contains("deepl"),
                 deepLBaseUrl: "https://api-free.deepl.com/v2",
                 libreTranslateEnabled: services.contains("libretranslate"),
@@ -138,6 +139,7 @@ enum PythiaBackupService {
         if let value = settings.openAICompatibleBaseUrl { preferences.openAIBaseURL = value }
         if let value = settings.openAICompatibleAPI { preferences.openAICompatibleAPI = value }
         if let value = settings.compactTranslationWindow { preferences.compactTranslationWindow = value }
+        if let value = settings.experimentalFloatingSelectionButton { preferences.experimentalFloatingSelectionButton = value }
         if let value = settings.libreTranslateBaseUrl { preferences.libreTranslateURL = value }
         if let value = settings.saveHistory { preferences.historyDisable = !value }
         if let value = settings.themeMode, ["system", "light", "dark"].contains(value) {

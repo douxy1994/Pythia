@@ -7,9 +7,9 @@
 
 ## Shared
 
-- Windows version is `1.2.2`; macOS remains `1.2.1` (build `121`) until the 1.2.2 UI and floating-selection port is built and verified as build `122`.
+- Windows and macOS versions are `1.2.2`; macOS build is `122`.
 - Update checks point to `https://github.com/douxy1994/Pythia/releases`.
-- The future macOS 1.2.2 release artifacts are named `Pythia-1.2.2-macos-arm64.dmg` and `Pythia-1.2.2-macos-arm64.dmg.sha256`.
+- macOS 1.2.2 release artifacts are named `Pythia-1.2.2-macos-arm64.dmg` and `Pythia-1.2.2-macos-arm64.dmg.sha256`.
 - Release artifacts contain no bundled plugins.
 - README describes Pythia and does not link to the original project.
 - Sensitive values are not included in app bundles, archives, release notes, or generated logs.
@@ -30,7 +30,7 @@
 - Screen-recording permission preflight/request and first-grant relaunch are verified with the stable signed application identity.
 - With a newer signed fixture release, startup check exposes `下载更新` beside the main Pythia title; clicking it replaces `/Applications/Pythia.app` and relaunches the new version.
 - App verifies with the stable local signing identity.
-- After the macOS version is bumped to 1.2.2/build 122, `./script/package_release.sh` produces `release/Pythia/Pythia.app`, `release/Pythia/Pythia-1.2.2-macos-arm64.dmg`, and its `.sha256` sidecar.
+- `./script/package_release.sh` produces `release/Pythia/Pythia.app`, `release/Pythia/Pythia-1.2.2-macos-arm64.dmg`, and its `.sha256` sidecar.
 - `hdiutil verify release/Pythia/Pythia-1.2.2-macos-arm64.dmg` and `shasum -a 256 -c release/Pythia/Pythia-1.2.2-macos-arm64.dmg.sha256` succeed.
 - Accessibility selection translation does not prompt repeatedly after updates signed by the same identity.
 - Service, WebDAV, proxy, and plugin credentials migrate out of UserDefaults into `credentials.json`; the file is `0600`, portable backups omit it, and the app contains no `SecItem` runtime calls.

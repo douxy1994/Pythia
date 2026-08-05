@@ -24,6 +24,7 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
         buildMenuBar()
         configureHotKeys()
         configureHTTPServer()
+        configureFloatingSelectionButton()
         applyClipboardPreference()
         applyRuntimePreferences()
         translator.showAndFocus()
@@ -107,7 +108,10 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
     }
 
     func translateSelection() {
-        let targetApplication = selectionTargetApplication()
+        translateSelection(targetApplication: selectionTargetApplication(), anchorPoint: nil)
+    }
+
+    private func translateSelection(targetApplication: NSRunningApplication?, anchorPoint: NSPoint?) {
         let targetName = targetApplication?.localizedName ?? "当前应用"
         translator.setStatus("正在读取选中文本...")
         // Read the selection BEFORE focusing the Pot window: once Pot comes to
@@ -131,11 +135,19 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
                 }
                 self.translator.showAndFocus(
                     with: trimmed,
-                    compact: Preferences.shared.compactTranslationWindow
+                    compact: anchorPoint == nil ? Preferences.shared.compactTranslationWindow : true,
+                    anchorPoint: anchorPoint
                 )
                 self.translator.translate(trimmed)
             }
         }
+    }
+
+    private func configureFloatingSelectionButton() {
+        FloatingSelectionButtonService.shared.onSelectionRequested = { [weak self] app, point in
+            self?.translateSelection(targetApplication: app, anchorPoint: point)
+        }
+        FloatingSelectionButtonService.shared.setEnabled(Preferences.shared.experimentalFloatingSelectionButton)
     }
 
     private func configureFrontmostApplicationTracking() {
@@ -188,6 +200,7 @@ final class PythiaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
         applyTheme()
         applyProxy()
         applyWindowPreferences()
+        FloatingSelectionButtonService.shared.setEnabled(Preferences.shared.experimentalFloatingSelectionButton)
         translator.applyVisualPreferences()
         let hotKeyWarning = hotKeys.start()
         let serverWarning = applyHTTPServerPreference()

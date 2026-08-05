@@ -21,6 +21,8 @@ final class PortableBackupTests: XCTestCase {
                 sourceLanguage: "en",
                 targetLanguage: "zh-CN",
                 enabledTranslateServices: ["Local"],
+                compactTranslationWindow: true,
+                experimentalFloatingSelectionButton: true,
                 saveHistory: true,
                 themeMode: "system"
             ),
@@ -34,6 +36,7 @@ final class PortableBackupTests: XCTestCase {
         XCTAssertEqual(decoded, backup)
         XCTAssertEqual(object["product"] as? String, "Pythia")
         XCTAssertEqual(object["sensitiveFieldsOmitted"] as? Bool, true)
+        XCTAssertEqual((object["settings"] as? [String: Any])?["experimentalFloatingSelectionButton"] as? Bool, true)
         XCTAssertNil((object["settings"] as? [String: Any])?["webdavPassword"])
     }
 

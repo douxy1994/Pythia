@@ -66,6 +66,8 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private var activeUnfinishedServices = Set<String>()
     private var activeTranslationCompletion: ((Result<String, Error>) -> Void)?
     private var isTranslationInProgress = false
+    private var pendingPresentationAnchor: NSPoint?
+    private var screenParametersObserver: NSObjectProtocol?
 
     init() {
         let window = NSWindow(
@@ -95,6 +97,13 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         }
         reloadPreferences()
         NotificationCenter.default.addObserver(self, selector: #selector(reloadPreferences), name: .preferencesChanged, object: nil)
+        screenParametersObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.adaptToCurrentScreens()
+        }
         // Keep the source text box fixed; long source text scrolls internally
         // while the result panel absorbs all vertical window resizing.
         sourceHeightConstraint = sourceView.heightAnchor.constraint(equalToConstant: Self.fixedSourceTextHeight)
@@ -114,13 +123,20 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         fatalError("init(coder:) has not been implemented")
     }
 
-    func showAndFocus(with text: String? = nil, compact: Bool = false) {
+    deinit {
+        if let screenParametersObserver {
+            NotificationCenter.default.removeObserver(screenParametersObserver)
+        }
+    }
+
+    func showAndFocus(with text: String? = nil, compact: Bool = false, anchorPoint: NSPoint? = nil) {
         if let text, !text.isEmpty {
             sourceView.setPlainText(text)
         }
         setCompactPresentation(compact)
         updateSourceHeight()
-        applyWindowPlacementForPresentation()
+        pendingPresentationAnchor = anchorPoint
+        applyWindowPlacementForPresentation(anchorPoint: anchorPoint)
         hasPresentedWindow = true
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
@@ -135,7 +151,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         status("请输入文本，按回车翻译")
     }
 
-    private func applyWindowPlacementForPresentation() {
+    private func applyWindowPlacementForPresentation(anchorPoint: NSPoint? = nil) {
         guard let window else { return }
         isApplyingWindowPlacement = true
         defer { isApplyingWindowPlacement = false }
@@ -143,15 +159,25 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         let savedFrame = savedWindowFrame()
         var frame = window.frame
 
+        let anchor = anchorPoint ?? pendingPresentationAnchor
+        let targetScreen = screen(containing: anchor ?? NSEvent.mouseLocation) ?? window.screen ?? NSScreen.main
+        let visible = targetScreen?.visibleFrame ?? frame
+        updateMinimumSize(for: visible)
+
         if isCompactPresentation {
-            frame.size = Self.compactWindowSize
+            frame.size = fittedSize(Self.compactWindowSize, minimum: NSSize(width: 480, height: 280), visibleFrame: visible)
         } else if preferences.translateRememberWindowSize, let savedFrame {
             frame.size = savedFrame.size
         } else if !window.isVisible {
             frame.size = Self.defaultWindowSize
         }
 
-        switch preferences.translateWindowPosition {
+        if let anchor {
+            frame.origin = NSPoint(x: anchor.x + 14, y: anchor.y - frame.height - 14)
+            if frame.minY < visible.minY {
+                frame.origin.y = min(visible.maxY - frame.height, anchor.y + 14)
+            }
+        } else { switch preferences.translateWindowPosition {
         case "remember":
             if let savedFrame {
                 frame.origin = savedFrame.origin
@@ -172,15 +198,15 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
                 frame.origin.y = min(visible.maxY - frame.height, mouse.y + 18)
             }
         default:
-            let screen = window.screen ?? NSScreen.main
-            let visible = screen?.visibleFrame ?? frame
             frame.origin = NSPoint(
                 x: visible.midX - frame.width / 2,
                 y: visible.midY - frame.height / 2
             )
         }
+        }
 
-        window.setFrame(clampedFrame(frame), display: false)
+        window.setFrame(clampedFrame(frame, preferredScreen: targetScreen), display: false)
+        pendingPresentationAnchor = nil
     }
 
     private func savedWindowFrame() -> NSRect? {
@@ -191,17 +217,56 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         return rect
     }
 
-    private func clampedFrame(_ frame: NSRect) -> NSRect {
-        let screen = NSScreen.screens.first { $0.frame.intersects(frame) } ?? NSScreen.main
+    private func clampedFrame(_ frame: NSRect, preferredScreen: NSScreen? = nil) -> NSRect {
+        let screen = preferredScreen ?? NSScreen.screens.max { lhs, rhs in
+            let left = lhs.frame.intersection(frame)
+            let right = rhs.frame.intersection(frame)
+            return (left.width * left.height) < (right.width * right.height)
+        } ?? NSScreen.main
         guard let visible = screen?.visibleFrame else { return frame }
-        var result = frame
-        result.size.width = min(max(result.width, window?.minSize.width ?? 900), visible.width)
-        result.size.height = min(max(result.height, window?.minSize.height ?? 600), visible.height)
-        if result.maxX > visible.maxX { result.origin.x = visible.maxX - result.width }
-        if result.minX < visible.minX { result.origin.x = visible.minX }
-        if result.maxY > visible.maxY { result.origin.y = visible.maxY - result.height }
-        if result.minY < visible.minY { result.origin.y = visible.minY }
-        return result
+        return PythiaWindowPlacementPolicy.clampedFrame(
+            frame,
+            minimum: window?.minSize ?? NSSize(width: 900, height: 600),
+            visibleFrame: visible
+        )
+    }
+
+    private func screen(containing point: NSPoint) -> NSScreen? {
+        NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) }
+    }
+
+    private func fittedSize(_ preferred: NSSize, minimum: NSSize, visibleFrame: NSRect) -> NSSize {
+        PythiaWindowPlacementPolicy.fittedSize(
+            preferred: preferred,
+            minimum: minimum,
+            visibleFrame: visibleFrame
+        )
+    }
+
+    private func updateMinimumSize(for visibleFrame: NSRect) {
+        let preferredMinimum = isCompactPresentation
+            ? NSSize(width: 480, height: 280)
+            : NSSize(width: 900, height: 600)
+        window?.minSize = NSSize(
+            width: min(preferredMinimum.width, visibleFrame.width),
+            height: min(preferredMinimum.height, visibleFrame.height)
+        )
+    }
+
+    private func adaptToCurrentScreens() {
+        guard hasPresentedWindow, let window else { return }
+        let center = NSPoint(x: window.frame.midX, y: window.frame.midY)
+        let target = window.screen ?? screen(containing: center) ?? NSScreen.main
+        guard let visible = target?.visibleFrame else { return }
+        updateMinimumSize(for: visible)
+        var frame = window.frame
+        let preferred = isCompactPresentation ? Self.compactWindowSize : frame.size
+        let minimum = isCompactPresentation ? NSSize(width: 480, height: 280) : window.minSize
+        frame.size = fittedSize(preferred, minimum: minimum, visibleFrame: visible)
+        isApplyingWindowPlacement = true
+        window.setFrame(clampedFrame(frame, preferredScreen: target), display: true, animate: false)
+        isApplyingWindowPlacement = false
+        scheduleResultHeightRefresh()
     }
 
     private func persistWindowFrame() {
@@ -217,6 +282,10 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         updateSourceHeight()
         scheduleResultHeightRefresh()
         persistWindowFrame()
+    }
+
+    func windowDidChangeScreen(_ notification: Notification) {
+        adaptToCurrentScreens()
     }
 
     func windowDidResignKey(_ notification: Notification) {
@@ -1007,14 +1076,16 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         compactResultBottomConstraint?.isActive = compact
 
         if compact {
-            window.minSize = NSSize(width: 480, height: 280)
             var frame = window.frame
-            frame.size = Self.compactWindowSize
+            let visible = (window.screen ?? NSScreen.main)?.visibleFrame ?? frame
+            updateMinimumSize(for: visible)
+            frame.size = fittedSize(Self.compactWindowSize, minimum: NSSize(width: 480, height: 280), visibleFrame: visible)
             window.setFrame(frame, display: false)
         } else {
-            window.minSize = NSSize(width: 900, height: 600)
             var frame = window.frame
-            frame.size = savedWindowFrame()?.size ?? Self.defaultWindowSize
+            let visible = (window.screen ?? NSScreen.main)?.visibleFrame ?? frame
+            updateMinimumSize(for: visible)
+            frame.size = fittedSize(savedWindowFrame()?.size ?? Self.defaultWindowSize, minimum: window.minSize, visibleFrame: visible)
             window.setFrame(frame, display: false)
         }
         window.contentView?.layoutSubtreeIfNeeded()

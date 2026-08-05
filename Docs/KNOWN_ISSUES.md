@@ -16,7 +16,7 @@
 
 ## macOS
 
-- Pythia 1.2.2 initially ships as a Windows x64 installer. The macOS 1.2.2 asset will be added to the same GitHub Release after the matching UI and floating-selection work is ported and verified.
+- Pythia 1.2.2 ships Windows x64 and macOS Apple-silicon installers in the same GitHub Release.
 - Pythia 1.2.1 keeps a 7,200-second main-window upper bound for a custom-LLM job. Extremely large documents that exhaust repeated 300-second attempts across many segments still terminate at this deliberate overall cap.
 - The macOS app is AppKit-based. The objective mentions SwiftUI, but the current real implementation uses AppKit windows and controls with Liquid Glass-inspired material views.
 - API keys and WebDAV passwords are intentionally stored in `~/Library/Application Support/Pythia/credentials.json` with `0600` permissions. This removes all runtime Keychain prompts, but it is local access control rather than encrypted-at-rest storage; anyone who fully compromises the macOS user account can read the file.
