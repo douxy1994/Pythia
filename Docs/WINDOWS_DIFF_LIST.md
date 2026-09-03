@@ -72,7 +72,7 @@
 - 凭据存入 Windows Credential Manager（`CredentialStore`，`CredWriteW/CredReadW`，UTF-8 blob）
 - UI Automation 划词 + 剪贴板回退 + 原剪贴板恢复（`SelectionCaptureService`）
 - 截图选区 + Windows.Media.Ocr + 反向拖拽 + 取消（`OcrService` + `ScreenRegionSelector`）
-- 4 组全局快捷键 + 冲突检测 + 原子回滚（`WindowsShellService`，`RegisterHotKey`/`MOD_NOREPEAT`）
+- 5 组全局快捷键（含独立输入翻译）+ 已占用按键录入提示 + 原子回滚（`WindowsShellService`，`RegisterHotKey`/`MOD_NOREPEAT`）
 - 托盘菜单（6 项）/ 开机启动（HKCU Run）/ 关闭到托盘 / 失焦隐藏 / 窗口置顶 / 多显示器窗口位置恢复
 - `.pythia` 插件格式、严格校验、进程隔离、Node 运行时、密钥脱敏、原子更新回滚、连通性分类测试
 - 历史：逻辑删除/墓碑、收藏时间戳、冲突合并、周期/本地变化/托盘触发 WebDAV 同步、同步前备份

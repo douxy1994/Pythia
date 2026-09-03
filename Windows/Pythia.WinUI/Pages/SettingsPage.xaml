@@ -114,11 +114,13 @@
                         <TextBlock FontSize="20" FontWeight="SemiBold" Text="快捷键" />
                         <Border Style="{StaticResource PythiaCardStyle}">
                             <StackPanel Spacing="12">
-                                <TextBox x:Name="ShowWindowHotkeyBox" Header="显示/隐藏窗口" IsReadOnly="True" PlaceholderText="单击后按组合键" PreviewKeyDown="HotkeyBox_PreviewKeyDown" />
-                                <TextBox x:Name="SelectionHotkeyBox" Header="划词翻译" IsReadOnly="True" PlaceholderText="单击后按组合键" PreviewKeyDown="HotkeyBox_PreviewKeyDown" />
-                                <TextBox x:Name="ScreenshotTranslateHotkeyBox" Header="截图翻译" IsReadOnly="True" PlaceholderText="单击后按组合键" PreviewKeyDown="HotkeyBox_PreviewKeyDown" />
-                                <TextBox x:Name="ScreenshotOcrHotkeyBox" Header="截图 OCR" IsReadOnly="True" PlaceholderText="单击后按组合键" PreviewKeyDown="HotkeyBox_PreviewKeyDown" />
-                                <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="单击输入框后直接按下组合键。保存时会先验证冲突；注册失败会原子恢复原快捷键。" TextWrapping="Wrap" />
+                                <TextBox x:Name="ShowWindowHotkeyBox" Header="显示/隐藏窗口" IsReadOnly="True" PlaceholderText="单击后按单键或组合键" PreviewKeyDown="HotkeyBox_PreviewKeyDown" GotFocus="HotkeyBox_GotFocus" LostFocus="HotkeyBox_LostFocus" />
+                                <TextBox x:Name="InputTranslateHotkeyBox" Header="输入翻译" IsReadOnly="True" PlaceholderText="单击后按单键或组合键" PreviewKeyDown="HotkeyBox_PreviewKeyDown" GotFocus="HotkeyBox_GotFocus" LostFocus="HotkeyBox_LostFocus" />
+                                <TextBox x:Name="SelectionHotkeyBox" Header="划词翻译" IsReadOnly="True" PlaceholderText="单击后按单键或组合键" PreviewKeyDown="HotkeyBox_PreviewKeyDown" GotFocus="HotkeyBox_GotFocus" LostFocus="HotkeyBox_LostFocus" />
+                                <TextBox x:Name="ScreenshotTranslateHotkeyBox" Header="截图翻译" IsReadOnly="True" PlaceholderText="单击后按单键或组合键" PreviewKeyDown="HotkeyBox_PreviewKeyDown" GotFocus="HotkeyBox_GotFocus" LostFocus="HotkeyBox_LostFocus" />
+                                <TextBox x:Name="ScreenshotOcrHotkeyBox" Header="截图 OCR" IsReadOnly="True" PlaceholderText="单击后按单键或组合键" PreviewKeyDown="HotkeyBox_PreviewKeyDown" GotFocus="HotkeyBox_GotFocus" LostFocus="HotkeyBox_LostFocus" />
+                                <InfoBar x:Name="HotkeyConflictInfoBar" IsOpen="False" IsClosable="True" Severity="Error" Title="快捷键已被占用" />
+                                <TextBlock FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="支持 Insert、Home、功能键、字母数字等单键，也支持带 Ctrl、Alt、Shift 或 Win 的组合键。保存时会检查系统占用；冲突时显示提示并自动恢复原快捷键。" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
                     </StackPanel>

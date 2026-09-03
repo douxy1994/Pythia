@@ -1,6 +1,6 @@
 #define AppName "Pythia"
 #ifndef AppVersion
-  #define AppVersion "1.2.2"
+  #define AppVersion "1.2.3"
 #endif
 #define AppPublisher "douxy1994"
 #define AppExeName "Pythia.exe"

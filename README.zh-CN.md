@@ -7,9 +7,9 @@
 
   本地优先的桌面翻译工具：多服务结果卡片、截图 OCR、全局快捷键、可同步的历史记录和真正的插件系统。
 
-  [![版本](https://img.shields.io/badge/版本-1.2.2-80B847)](#下载)
+  [![版本](https://img.shields.io/badge/版本-1.2.3-80B847)](#下载)
   [![macOS](https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white)](#macos)
-  [![Windows](https://img.shields.io/badge/Windows_x64-1.2.2-0078D4?logo=windows11&logoColor=white)](#windows)
+  [![Windows](https://img.shields.io/badge/Windows_x64-1.2.3-0078D4?logo=windows11&logoColor=white)](#windows)
   [![Swift](https://img.shields.io/badge/Swift-AppKit-F05138?logo=swift&logoColor=white)](#macos-构建)
   [![WinUI](https://img.shields.io/badge/C%23-WinUI_3-512BD4?logo=dotnet&logoColor=white)](#windows-开发)
   [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-2ea44f.svg)](./LICENSE)
@@ -62,7 +62,7 @@ flowchart LR
 
 ### 随处取词
 
-- 划词翻译、输入翻译、截图 OCR、截图翻译四组全局快捷键，全部可自定义。
+- 划词翻译、输入翻译、截图 OCR、截图翻译四组翻译快捷键，另有显示/隐藏窗口快捷键，五组均可自定义并支持 Insert、Home 等单键。
 - 应用拒绝辅助功能读取时自动回退剪贴板。
 - OCR 使用 macOS Vision 自动识别语言；旧版 OCR 插件依然可用。
 
@@ -93,7 +93,7 @@ flowchart LR
     <td width="50%" align="center">
       <img src="./Docs/images/platform-windows.svg" width="100%" alt="Pythia Windows 版">
       <h3 id="windows">Windows</h3>
-      <p><strong>原生 WinUI 3 · 当前版本 1.2.2</strong></p>
+      <p><strong>原生 WinUI 3 · 当前版本 1.2.3</strong></p>
       <p>C# 14 · .NET 10 · x64 · Windows 10/11</p>
       <p>简约翻译、多服务卡片、Windows OCR、快捷键、历史同步、插件与 Inno Setup 打包。</p>
     </td>
@@ -112,12 +112,12 @@ flowchart LR
 
 ### Windows
 
-[下载 Pythia 1.2.2 Windows x64 版](https://github.com/douxy1994/Pythia/releases/download/v1.2.2/Pythia-1.2.2-windows-x64.exe)
+[下载 Pythia 1.2.3 Windows x64 版](https://github.com/douxy1994/Pythia/releases/download/v1.2.3/Pythia-1.2.3-windows-x64.exe)
 
 - 支持 64 位 Windows 10 和 Windows 11。
-- 安装程序与 SHA-256 校验文件发布在 [v1.2.2 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.2)；macOS 端同步后会把 1.2.2 arm64 资产追加到同一 Release。
+- 安装程序与 SHA-256 校验文件发布在 [v1.2.3 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.3)；macOS 版本仍为 1.2.2。
 - 安装包只包含 Pythia 及其隔离运行时，不捆绑任何第三方插件或 `.pythia` 包。
-- Windows 1.2.2 安装包暂未进行 Authenticode 签名，可能触发 Microsoft Defender SmartScreen；安装前请核对 SHA-256。
+- Windows 1.2.3 安装包暂未进行 Authenticode 签名，可能触发 Microsoft Defender SmartScreen；安装前请核对 SHA-256。
 
 ## 可下载插件
 
@@ -176,7 +176,7 @@ Set-Location Windows\Pythia.WinUI
 node ..\..\script\validate_pythia_plugins.mjs
 dotnet build .\Pythia.WinUI.csproj -c Release -p:Platform=x64
 dotnet run --project ..\Pythia.WinUI.Tests\Pythia.WinUI.Tests.csproj -c Release
-.\tool\build-installer.ps1 -Version 1.2.2
+.\tool\build-installer.ps1 -Version 1.2.3
 ```
 
 ## 数据与隐私
@@ -189,7 +189,7 @@ dotnet run --project ..\Pythia.WinUI.Tests\Pythia.WinUI.Tests.csproj -c Release
 - 可移植备份不包含 API Key、WebDAV 凭据、快捷键、启动状态与窗口状态。
 - Release 包不含第三方插件，发布前经过私密材料扫描。
 - 仓库与 Release 资产绝不包含私钥、API Key、密码、用户历史或本机配置。
-- Windows 1.2.2 以未做 Authenticode 签名的形式发布；签名留待后续版本，证书文件始终不得进入 Git。
+- Windows 1.2.3 以未做 Authenticode 签名的形式发布；签名留待后续版本，证书文件始终不得进入 Git。
 
 ## 仓库结构
 
@@ -213,6 +213,7 @@ WINDOWS_CODEX_HANDOFF.md 完整 Windows 交接文档
 
 ## 文档
 
+- [Pythia 1.2.3 发布说明](Docs/RELEASE_NOTES_1.2.3.md)
 - [Pythia 1.2.2 发布说明](Docs/RELEASE_NOTES_1.2.2.md)
 - [Pythia 1.2.1 发布说明](Docs/RELEASE_NOTES_1.2.1.md)
 - [Pythia 1.2.0 发布说明](Docs/RELEASE_NOTES_1.2.0.md)

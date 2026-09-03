@@ -141,6 +141,10 @@ public sealed partial class MainWindow : Window
                 case PythiaHotkeyAction.ShowWindow:
                     if (AppWindow.IsVisible) AppWindow.Hide(); else ShowWindow();
                     break;
+                case PythiaHotkeyAction.InputTranslate:
+                    await ShowHomeTextAsync(string.Empty, false);
+                    App.Services.Status.Report("请输入需要翻译的文本");
+                    break;
                 case PythiaHotkeyAction.SelectionTranslate:
                     await TranslateSelectionAsync();
                     break;
@@ -498,7 +502,8 @@ public sealed partial class MainWindow : Window
 
     [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
     [DllImport("user32.dll")] private static extern IntPtr MonitorFromPoint(NativePoint point, uint flags);
-    [DllImport("shcore.dll")] private static extern int GetDpiForMonitor(
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(
         IntPtr monitor, int dpiType, out uint dpiX, out uint dpiY);
 
 }

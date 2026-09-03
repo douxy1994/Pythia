@@ -7,7 +7,7 @@
 
 ## Shared
 
-- Windows and macOS versions are `1.2.2`; macOS build is `122`.
+- Windows version is `1.2.3`; macOS remains `1.2.2` (build `122`).
 - Update checks point to `https://github.com/douxy1994/Pythia/releases`.
 - macOS 1.2.2 release artifacts are named `Pythia-1.2.2-macos-arm64.dmg` and `Pythia-1.2.2-macos-arm64.dmg.sha256`.
 - Release artifacts contain no bundled plugins.
@@ -41,7 +41,7 @@
 > Authenticode 代码路径已就绪，真实签名待 EXT-1 证书（见 [`WINDOWS_DIFF_LIST.md`](WINDOWS_DIFF_LIST.md)）。
 
 - `dotnet build Windows/Pythia.WinUI -c Debug` 与 `-c Release` 均通过（0 warning / 0 error）。
-- `dotnet run --project Windows/Pythia.WinUI.Tests` 通过（83 项原生 smoke 断言）。
+- `dotnet run --project Windows/Pythia.WinUI.Tests` 通过（102 项原生 smoke 断言）。
 - `node script/validate_pythia_plugins.mjs` 通过（Git Bash 下需用 Windows 原生 `tar` 或改用 cmd/PowerShell）。
 - `dotnet publish Windows/Pythia.WinUI -c Release -r win-x64 --self-contained` 通过；发布树为 win-x64、自包含、不含 Flutter/Dart 运行时、不含插件/凭据/私钥/测试项目。
 - `Windows/Pythia.WinUI/tool/build-installer.ps1` 生成 `dist/Pythia-<version>-windows-x64.exe` 与同名 `.sha256` sidecar。
@@ -50,7 +50,7 @@
 - Authenticode 签名（**待 EXT-1 证书**）：配置 `PYTHIA_WIN_CERT_FILE`+`PYTHIA_WIN_CERT_PASSWORD`（或 `PYTHIA_WIN_CERT_SHA1`，可选 `PYTHIA_WIN_TIMESTAMP_URL`）后，`build-installer.ps1` 自动签名 exe 与安装包；签名失败中止正式发布构建。证书与私钥文件绝不提交或上传。
 - Authenticode 校验：`UpdateService` 在 SHA-256 通过后执行 `WinVerifyTrust`（`AuthenticodeVerifier`）；配置 `ExpectedPublisher` 后启用签名身份锁定；签名无效/不可信/身份不符时拒绝更新。
 - App starts, exits, restarts; 单实例运行通过。
-- 主翻译流程、设置保存与行为、Credential Manager 凭据存储、托盘菜单（6 项）、4 组全局快捷键均工作。
+- 主翻译流程、设置保存与行为、Credential Manager 凭据存储、托盘菜单（6 项）、5 组全局快捷键均工作；输入翻译有独立入口，Insert、Home 等无修饰单键可录入并通过 `RegisterHotKey` 触发，录入期间使用临时低级键盘钩子捕获被占用按键以显示冲突提示。
 - 卸载移除当前用户 `Pythia` Run 值且不影响既存值；卸载后无残留启动项或运行进程。
 - 安装包与 `.sha256` 一同上传至同一 GitHub Release。
 

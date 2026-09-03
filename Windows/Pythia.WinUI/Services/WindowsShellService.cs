@@ -11,6 +11,7 @@ public enum PythiaHotkeyAction
     SelectionTranslate = 2,
     ScreenshotTranslate = 3,
     ScreenshotOcr = 4,
+    InputTranslate = 5,
 }
 
 public enum PythiaTrayAction
@@ -54,6 +55,7 @@ public sealed class WindowsShellService : IDisposable
     private const uint ModWin = 0x0008;
     private const uint ModNoRepeat = 0x4000;
     private const uint ScClose = 0xF060;
+    private const int ErrorHotkeyAlreadyRegistered = 1409;
 
     private readonly Window _window;
     private readonly IntPtr _hwnd;
@@ -126,6 +128,7 @@ public sealed class WindowsShellService : IDisposable
         var requested = new[]
         {
             ((int)PythiaHotkeyAction.ShowWindow, settings.ShowWindowHotkey),
+            ((int)PythiaHotkeyAction.InputTranslate, settings.InputTranslateHotkey),
             ((int)PythiaHotkeyAction.SelectionTranslate, settings.SelectionTranslateHotkey),
             ((int)PythiaHotkeyAction.ScreenshotTranslate, settings.ScreenshotTranslateHotkey),
             ((int)PythiaHotkeyAction.ScreenshotOcr, settings.ScreenshotOcrHotkey),
@@ -157,6 +160,7 @@ public sealed class WindowsShellService : IDisposable
                 registeredIds.Add(item.Id);
                 continue;
             }
+            var registrationError = Marshal.GetLastWin32Error();
             foreach (var id in registeredIds) UnregisterHotKey(_hwnd, id);
             _registeredHotkeys.Clear();
             foreach (var old in previous)
@@ -164,7 +168,9 @@ public sealed class WindowsShellService : IDisposable
                 if (RegisterHotKey(_hwnd, old.Key, old.Value.Modifiers | ModNoRepeat, old.Value.Key))
                     _registeredHotkeys[old.Key] = old.Value;
             }
-            error = $"快捷键已被其他程序占用：{item.Expression}；原快捷键已恢复。";
+            error = registrationError == ErrorHotkeyAlreadyRegistered
+                ? $"快捷键已被其他程序占用：{item.Expression}。请更换快捷键；原快捷键已恢复。"
+                : $"快捷键注册失败：{item.Expression}（{new Win32Exception(registrationError).Message}）；原快捷键已恢复。";
             return false;
         }
 
@@ -283,20 +289,108 @@ public sealed class WindowsShellService : IDisposable
                 case "SHIFT": modifiers |= ModShift; continue;
                 case "WIN": case "WINDOWS": modifiers |= ModWin; continue;
             }
-            if (part.Length == 1 && char.IsLetterOrDigit(part[0])) { key = part[0]; continue; }
-            if (part.StartsWith('F') && int.TryParse(part[1..], out var number) && number is >= 1 and <= 24)
-            {
-                key = (uint)(0x70 + number - 1);
-                continue;
-            }
-            return false;
+            if (key != 0 || !TryParseHotkeyKey(part, out key)) return false;
         }
-        return key != 0 && modifiers != 0;
+        return key != 0;
+    }
+
+    private static bool TryParseHotkeyKey(string token, out uint key)
+    {
+        key = 0;
+        if (token.Length == 1 && (token[0] is >= 'A' and <= 'Z' or >= '0' and <= '9'))
+        {
+            key = token[0];
+            return true;
+        }
+        if (token.StartsWith('F') && int.TryParse(token[1..], out var number) && number is >= 1 and <= 24)
+        {
+            key = (uint)(0x70 + number - 1);
+            return true;
+        }
+
+        key = token switch
+        {
+            "BACKSPACE" or "BACK" => 0x08,
+            "TAB" => 0x09,
+            "ENTER" or "RETURN" => 0x0D,
+            "PAUSE" => 0x13,
+            "CAPSLOCK" => 0x14,
+            "ESCAPE" or "ESC" => 0x1B,
+            "SPACE" => 0x20,
+            "PAGEUP" or "PGUP" => 0x21,
+            "PAGEDOWN" or "PGDN" => 0x22,
+            "END" => 0x23,
+            "HOME" => 0x24,
+            "LEFT" => 0x25,
+            "UP" => 0x26,
+            "RIGHT" => 0x27,
+            "DOWN" => 0x28,
+            "PRINTSCREEN" or "PRTSC" => 0x2C,
+            "INSERT" or "INS" => 0x2D,
+            "DELETE" or "DEL" => 0x2E,
+            "NUM0" or "NUMPAD0" => 0x60,
+            "NUM1" or "NUMPAD1" => 0x61,
+            "NUM2" or "NUMPAD2" => 0x62,
+            "NUM3" or "NUMPAD3" => 0x63,
+            "NUM4" or "NUMPAD4" => 0x64,
+            "NUM5" or "NUMPAD5" => 0x65,
+            "NUM6" or "NUMPAD6" => 0x66,
+            "NUM7" or "NUMPAD7" => 0x67,
+            "NUM8" or "NUMPAD8" => 0x68,
+            "NUM9" or "NUMPAD9" => 0x69,
+            "MULTIPLY" => 0x6A,
+            "ADD" => 0x6B,
+            "SEPARATOR" => 0x6C,
+            "SUBTRACT" => 0x6D,
+            "DECIMAL" => 0x6E,
+            "DIVIDE" => 0x6F,
+            "NUMLOCK" => 0x90,
+            "SCROLLLOCK" => 0x91,
+            _ => 0,
+        };
+        return key != 0;
+    }
+
+    public static string? HotkeyToken(uint key)
+    {
+        if (key is >= 'A' and <= 'Z' or >= '0' and <= '9') return ((char)key).ToString();
+        if (key is >= 0x70 and <= 0x87) return $"F{key - 0x70 + 1}";
+        if (key is >= 0x60 and <= 0x69) return $"Num{key - 0x60}";
+        return key switch
+        {
+            0x08 => "Backspace",
+            0x09 => "Tab",
+            0x0D => "Enter",
+            0x13 => "Pause",
+            0x14 => "CapsLock",
+            0x1B => "Escape",
+            0x20 => "Space",
+            0x21 => "PageUp",
+            0x22 => "PageDown",
+            0x23 => "End",
+            0x24 => "Home",
+            0x25 => "Left",
+            0x26 => "Up",
+            0x27 => "Right",
+            0x28 => "Down",
+            0x2C => "PrintScreen",
+            0x2D => "Insert",
+            0x2E => "Delete",
+            0x6A => "Multiply",
+            0x6B => "Add",
+            0x6C => "Separator",
+            0x6D => "Subtract",
+            0x6E => "Decimal",
+            0x6F => "Divide",
+            0x90 => "NumLock",
+            0x91 => "ScrollLock",
+            _ => null,
+        };
     }
 
     public void Dispose()
     {
-        for (var id = 1; id <= 4; id++) UnregisterHotKey(_hwnd, id);
+        foreach (var id in _registeredHotkeys.Keys) UnregisterHotKey(_hwnd, id);
         if (_trayAdded)
         {
             var data = CreateNotifyData();

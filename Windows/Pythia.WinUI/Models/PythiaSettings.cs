@@ -35,6 +35,7 @@ public sealed class PythiaSettings
     public int WindowHeight { get; set; }
     public int WindowDpi { get; set; }
     public string ShowWindowHotkey { get; set; } = "Ctrl+Alt+P";
+    public string InputTranslateHotkey { get; set; } = "Ctrl+Alt+T";
     public string SelectionTranslateHotkey { get; set; } = "Ctrl+Alt+D";
     public string ScreenshotTranslateHotkey { get; set; } = "Ctrl+Alt+Shift+D";
     public string ScreenshotOcrHotkey { get; set; } = "Ctrl+Alt+Shift+R";

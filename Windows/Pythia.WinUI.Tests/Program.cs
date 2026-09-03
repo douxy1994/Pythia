@@ -132,6 +132,8 @@ Check(homePageXaml.Contains("x:Name=\"PinIcon\"", StringComparison.Ordinal),
     "pin action exposes a stateful icon");
 var settingsPageXamlPath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Pages", "SettingsPage.xaml"));
 var settingsPageXaml = settingsPageXamlPath is null ? string.Empty : File.ReadAllText(settingsPageXamlPath);
+var settingsPageSourcePath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Pages", "SettingsPage.xaml.cs"));
+var settingsPageSource = settingsPageSourcePath is null ? string.Empty : File.ReadAllText(settingsPageSourcePath);
 var llmCardIndex = settingsPageXaml.IndexOf("Header=\"大模型翻译服务\"", StringComparison.Ordinal);
 var googleCardIndex = settingsPageXaml.IndexOf("Header=\"Google 翻译\"", StringComparison.Ordinal);
 Check(settingsPageXaml.Contains("Tag=\"plugins\"", StringComparison.Ordinal) &&
@@ -171,6 +173,8 @@ Check(!mainWindowXaml.Contains("Tag=\"plugins\"", StringComparison.Ordinal) &&
     "main sidebar defaults collapsed, excludes Plugins, keeps About in Settings, and uses the Pythia-only title");
 var selectionServicePath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Services", "SelectionCaptureService.cs"));
 var selectionServiceSource = selectionServicePath is null ? string.Empty : File.ReadAllText(selectionServicePath);
+var windowsShellServicePath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "Services", "WindowsShellService.cs"));
+var windowsShellServiceSource = windowsShellServicePath is null ? string.Empty : File.ReadAllText(windowsShellServicePath);
 var mainWindowSourcePath = FindRepositoryFile(Path.Combine("Windows", "Pythia.WinUI", "MainWindow.xaml.cs"));
 var mainWindowSource = mainWindowSourcePath is null ? string.Empty : File.ReadAllText(mainWindowSourcePath);
 Check(mainWindowXaml.Contains("x:Name=\"TitleBarRow\"", StringComparison.Ordinal) &&
@@ -445,8 +449,62 @@ Check(WebDavService.NormalizeRootUrl("https://example.invalid/dav").AbsoluteUri 
       "https://example.invalid/dav/Pythia/", "WebDAV root normalization");
 Check(WindowsShellService.TryParseHotkey("Ctrl+Alt+P", out var parsedModifiers, out var parsedKey) &&
       parsedModifiers != 0 && parsedKey == (uint)'P', "hotkey parser accepts recorded shortcut");
-Check(!WindowsShellService.TryParseHotkey("P", out _, out _),
-    "hotkey parser rejects unmodified keys");
+Check(WindowsShellService.TryParseHotkey("Insert", out var insertModifiers, out var insertKey) &&
+      insertModifiers == 0 && insertKey == 0x2D,
+    "hotkey parser accepts Insert as an unmodified shortcut");
+Check(WindowsShellService.TryParseHotkey("Home", out var homeModifiers, out var homeKey) &&
+      homeModifiers == 0 && homeKey == 0x24,
+    "hotkey parser accepts Home as an unmodified shortcut");
+Check(WindowsShellService.TryParseHotkey("P", out var letterModifiers, out var letterKey) &&
+      letterModifiers == 0 && letterKey == (uint)'P',
+    "hotkey parser accepts an unmodified letter shortcut");
+Check(WindowsShellService.TryParseHotkey("Ctrl+PageDown", out var pageModifiers, out var pageKey) &&
+      pageModifiers != 0 && pageKey == 0x22,
+    "hotkey parser accepts modified navigation keys");
+Check(WindowsShellService.HotkeyToken(0x2D) == "Insert" &&
+      WindowsShellService.HotkeyToken(0x24) == "Home" &&
+      WindowsShellService.HotkeyToken(0x64) == "Num4",
+    "hotkey recorder emits canonical special-key tokens");
+Check(new PythiaSettings().InputTranslateHotkey == "Ctrl+Alt+T" &&
+      settingsPageXaml.Contains("x:Name=\"InputTranslateHotkeyBox\"", StringComparison.Ordinal) &&
+      windowsShellServiceSource.Contains("PythiaHotkeyAction.InputTranslate", StringComparison.Ordinal) &&
+      mainWindowSource.Contains("case PythiaHotkeyAction.InputTranslate", StringComparison.Ordinal) &&
+      mainWindowSource.Contains("ShowHomeTextAsync(string.Empty, false)", StringComparison.Ordinal),
+    "input translation has an independent configurable global shortcut");
+Check(windowsShellServiceSource.Contains("foreach (var item in parsed)", StringComparison.Ordinal) &&
+      windowsShellServiceSource.Contains("ErrorHotkeyAlreadyRegistered", StringComparison.Ordinal) &&
+      windowsShellServiceSource.Contains("快捷键已被其他程序占用", StringComparison.Ordinal),
+    "single-key and modified shortcuts use RegisterHotKey and report external ownership conflicts");
+Check(settingsPageXaml.Contains("x:Name=\"HotkeyConflictInfoBar\"", StringComparison.Ordinal) &&
+      settingsPageSource.Contains("ShowHotkeyRegistrationError", StringComparison.Ordinal) &&
+      settingsPageSource.Contains("RestoreHotkeyBoxes(previousHotkeys)", StringComparison.Ordinal),
+    "occupied hotkeys show a persistent settings alert and restore the active shortcut values");
+Check(settingsPageXaml.Contains("GotFocus=\"HotkeyBox_GotFocus\"", StringComparison.Ordinal) &&
+      settingsPageSource.Contains("SetWindowsHookEx(", StringComparison.Ordinal) &&
+      settingsPageSource.Contains("return new IntPtr(1);", StringComparison.Ordinal),
+    "shortcut recorder captures and suppresses keys even when another program owns them");
+Check(!WindowsShellService.TryParseHotkey("Ctrl", out _, out _) &&
+      !WindowsShellService.TryParseHotkey("Home+End", out _, out _) &&
+      !WindowsShellService.TryParseHotkey("中", out _, out _),
+    "hotkey parser rejects modifier-only, multiple-main-key, and non-virtual-key shortcuts");
+var googleBatchBodyFixture = JsonSerializer.Serialize(new object?[]
+{
+    null,
+    new object?[]
+    {
+        new object?[]
+        {
+            new object?[] { null, null, null, null, null, new object?[] { new object?[] { "你" }, new object?[] { "好" } } },
+        },
+    },
+});
+var googleBatchFixture = ")]}'\n321\n" + JsonSerializer.Serialize(new object?[]
+{
+    new object?[] { "wrb.fr", "MkEWBc", googleBatchBodyFixture },
+});
+Check(TranslationCoordinator.ParseGoogleBatchResponse(googleBatchFixture) == "你好" &&
+      TranslationCoordinator.ParseGoogleCompactResponse("[\"你\",\"好\"]") == "你好",
+    "Google translation parses web-RPC and compact fallback responses");
 Check(UpdateService.TryParseVersion("v1.2.3", out var updateVersion) && updateVersion == new Version(1, 2, 3) &&
       UpdateService.TryParseVersion("2.0.0-beta.1", out var previewVersion) && previewVersion == new Version(2, 0, 0),
     "update version parser");

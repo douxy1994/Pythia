@@ -7,6 +7,7 @@
 
 ## Added
 
+- Windows 1.2.3 adds a separate input-translation shortcut, single-key global shortcuts including Insert/Home, capture of already-owned keys for visible conflict feedback, and atomic rollback. Google translation now uses web RPC with a compact-endpoint fallback instead of the rate-limited legacy endpoint.
 - macOS 1.2.2 adaptive compact/full window placement across mixed-size displays, a bounded scrollable compact service picker, broader WPS PDF clipboard-first selection capture, and a default-off non-activating Pythia floating selection button.
 - Windows 1.2.2 per-monitor DPI-aware full/compact window placement, WPS-compatible selection capture, a default-off experimental floating selection button, and a bounded scrollable compact service picker.
 - macOS 1.2.1 custom-LLM long-document pipeline with numeric/grapheme-safe chunking, exact source reconstruction, whitespace restoration, 300-second full-response attempts, bounded retry/Retry-After, sanitized N/M errors, and active request/backoff cancellation.
@@ -34,4 +35,4 @@
 
 - Add richer conflict log UI and cross-platform sync status views.
 - Complete the remaining user-driven Windows acceptance matrix for IME, representative selection targets, screenshot OCR language packs, tray/hotkey conflicts, mixed-DPI displays, live provider credentials, WebDAV cross-device sync, and startup-after-login.
-- Add Authenticode signing in a later release; Windows 1.2.2 is published unsigned with an explicit SmartScreen warning and SHA-256 sidecar.
+- Add Authenticode signing in a later release; Windows 1.2.3 is published unsigned with an explicit SmartScreen warning and SHA-256 sidecar.

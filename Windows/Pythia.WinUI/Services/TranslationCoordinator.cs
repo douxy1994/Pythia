@@ -69,17 +69,117 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
 
     private async Task<TranslationResult> TranslateGoogleAsync(string text, string source, string target, CancellationToken ct)
     {
-        var url = "https://translate.googleapis.com/translate_a/single?client=gtx" +
-                  $"&sl={Uri.EscapeDataString(source)}&tl={Uri.EscapeDataString(target)}&dt=t&q={Uri.EscapeDataString(text)}";
-        using var response = await _http.GetAsync(url, ct);
-        EnsureSuccess(response, "Google 翻译");
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync(ct));
-        var builder = new StringBuilder();
-        foreach (var segment in json.RootElement[0].EnumerateArray())
-            if (segment.GetArrayLength() > 0 && segment[0].ValueKind == JsonValueKind.String)
-                builder.Append(segment[0].GetString());
-        if (builder.Length == 0) throw new InvalidOperationException("Google 翻译未返回文本。");
-        return new("google", "Google 翻译", builder.ToString());
+        var failures = new List<string>();
+        foreach (var origin in new[] { "https://translate.google.com", "https://translate.google.co.uk" })
+        {
+            try
+            {
+                var inner = JsonSerializer.Serialize(new object?[]
+                {
+                    new object?[] { text, source, target, true },
+                    new object?[] { null },
+                });
+                var payload = JsonSerializer.Serialize(new object?[]
+                {
+                    new object?[] { new object?[] { "MkEWBc", inner, null, "generic" } },
+                });
+                using var request = new HttpRequestMessage(HttpMethod.Post,
+                    $"{origin}/_/TranslateWebserverUi/data/batchexecute?rpcids=MkEWBc&rt=c")
+                {
+                    Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["f.req"] = payload }),
+                };
+                request.Headers.TryAddWithoutValidation("Origin", origin);
+                request.Headers.Referrer = new Uri(origin + "/");
+                request.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 Pythia/1.2.3");
+                using var response = await _http.SendAsync(request, ct);
+                if (response.IsSuccessStatusCode)
+                {
+                    var translated = ParseGoogleBatchResponse(await response.Content.ReadAsStringAsync(ct));
+                    if (!string.IsNullOrWhiteSpace(translated))
+                        return new("google", "Google 翻译", translated);
+                    failures.Add($"{new Uri(origin).Host} 未返回译文");
+                }
+                else failures.Add($"{new Uri(origin).Host} HTTP {(int)response.StatusCode}");
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                failures.Add($"{new Uri(origin).Host} 请求超时");
+            }
+            catch (HttpRequestException exception)
+            {
+                failures.Add($"{new Uri(origin).Host} {exception.Message}");
+            }
+        }
+
+        var compactUrl = "https://clients5.google.com/translate_a/t?client=dict-chrome-ex" +
+                         $"&sl={Uri.EscapeDataString(source)}&tl={Uri.EscapeDataString(target)}&q={Uri.EscapeDataString(text)}";
+        try
+        {
+            using var compactResponse = await _http.GetAsync(compactUrl, ct);
+            if (compactResponse.IsSuccessStatusCode)
+            {
+                var translated = ParseGoogleCompactResponse(await compactResponse.Content.ReadAsStringAsync(ct));
+                if (!string.IsNullOrWhiteSpace(translated))
+                    return new("google", "Google 翻译", translated);
+                failures.Add("clients5.google.com 未返回译文");
+            }
+            else failures.Add($"clients5.google.com HTTP {(int)compactResponse.StatusCode}");
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            failures.Add("clients5.google.com 请求超时");
+        }
+        catch (HttpRequestException exception)
+        {
+            failures.Add($"clients5.google.com {exception.Message}");
+        }
+
+        throw new HttpRequestException($"Google 翻译请求失败（{string.Join("；", failures)}）。");
+    }
+
+    public static string? ParseGoogleBatchResponse(string responseText)
+    {
+        foreach (var line in responseText.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!line.StartsWith("[", StringComparison.Ordinal) ||
+                !line.Contains("\"MkEWBc\"", StringComparison.Ordinal)) continue;
+            try
+            {
+                using var envelope = JsonDocument.Parse(line);
+                foreach (var record in envelope.RootElement.EnumerateArray())
+                {
+                    if (record.ValueKind != JsonValueKind.Array || record.GetArrayLength() < 3 ||
+                        record[1].ValueKind != JsonValueKind.String || record[1].GetString() != "MkEWBc" ||
+                        record[2].ValueKind != JsonValueKind.String) continue;
+                    using var body = JsonDocument.Parse(record[2].GetString()!);
+                    var segments = body.RootElement[1][0][0][5];
+                    var builder = new StringBuilder();
+                    foreach (var segment in segments.EnumerateArray())
+                        if (segment.ValueKind == JsonValueKind.Array && segment.GetArrayLength() > 0 &&
+                            segment[0].ValueKind == JsonValueKind.String)
+                            builder.Append(segment[0].GetString());
+                    if (builder.Length > 0) return builder.ToString();
+                }
+            }
+            catch (JsonException) { }
+            catch (InvalidOperationException) { }
+            catch (IndexOutOfRangeException) { }
+        }
+        return null;
+    }
+
+    public static string? ParseGoogleCompactResponse(string responseText)
+    {
+        try
+        {
+            using var json = JsonDocument.Parse(responseText);
+            if (json.RootElement.ValueKind != JsonValueKind.Array) return null;
+            var builder = new StringBuilder();
+            foreach (var segment in json.RootElement.EnumerateArray())
+                if (segment.ValueKind == JsonValueKind.String) builder.Append(segment.GetString());
+            return builder.Length > 0 ? builder.ToString() : null;
+        }
+        catch (JsonException) { return null; }
     }
 
     private async Task<TranslationResult> TranslateBaiduAsync(string text, string source, string target, CancellationToken ct)

@@ -1,25 +1,35 @@
 using Microsoft.UI.Windowing;
-using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Pythia.Models;
 using Pythia.Services;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Windows.System;
-using Windows.UI.Core;
 using Windows.Storage.Pickers;
 
 namespace Pythia.Pages;
 
 public sealed partial class SettingsPage : Page
 {
+    private const int WhKeyboardLl = 13;
+    private const uint WmKeyDown = 0x0100;
+    private const uint WmKeyUp = 0x0101;
+    private const uint WmSysKeyDown = 0x0104;
+    private const uint WmSysKeyUp = 0x0105;
     private readonly Dictionary<string, FrameworkElement> _sections = [];
+    private readonly LowLevelKeyboardProc _hotkeyRecorderProc;
+    private readonly HashSet<uint> _recordingModifierKeys = [];
     private CancellationTokenSource? _autoSaveDelay;
+    private IntPtr _hotkeyRecorderHook;
+    private TextBox? _activeHotkeyBox;
+    private uint _suppressedHotkey;
     private bool _loadingValues;
 
     public SettingsPage()
     {
+        _hotkeyRecorderProc = HotkeyRecorderHook;
         InitializeComponent();
         _sections.Add("general", GeneralSection);
         _sections.Add("services", ServicesSection);
@@ -41,6 +51,7 @@ public sealed partial class SettingsPage : Page
         Unloaded += (_, _) =>
         {
             App.UpdateAvailable -= App_UpdateAvailable;
+            StopHotkeyRecorder();
             _autoSaveDelay?.Cancel();
             _ = SaveSettingsCoreAsync(false);
         };
@@ -76,6 +87,7 @@ public sealed partial class SettingsPage : Page
         LibreUrlBox.Text = settings.LibreTranslateBaseUrl;
         OcrAutoTranslateSwitch.IsOn = settings.ScreenshotOcrAutoTranslate;
         ShowWindowHotkeyBox.Text = settings.ShowWindowHotkey;
+        InputTranslateHotkeyBox.Text = settings.InputTranslateHotkey;
         SelectionHotkeyBox.Text = settings.SelectionTranslateHotkey;
         ScreenshotTranslateHotkeyBox.Text = settings.ScreenshotTranslateHotkey;
         ScreenshotOcrHotkeyBox.Text = settings.ScreenshotOcrHotkey;
@@ -114,9 +126,9 @@ public sealed partial class SettingsPage : Page
             UpdateCard.Visibility = Visibility.Collapsed;
             UpdateButton.Visibility = Visibility.Collapsed;
             LatestNotesText.Text =
-                "1.2.2 · 窗口现可适配不同屏幕尺寸、分辨率和每显示器 DPI。\n" +
-                "修复简约窗口翻译服务列表显示不全且无法滚动的问题，并增强 WPS 划词。\n" +
-                "新增默认关闭的实验性悬浮划词按钮，可在 Word、PDF、网页和聊天软件中使用。";
+                "1.2.3 · 新增输入翻译快捷键，所有快捷键均可直接录入单一按键。\n" +
+                "支持 Insert、Home 等按键；被其他程序占用时会显示提示并恢复原设置。\n" +
+                "Google 翻译改用可用的新通道，修复旧接口 HTTP 429。";
             return;
         }
 
@@ -148,7 +160,7 @@ public sealed partial class SettingsPage : Page
         foreach (var textBox in new[]
                  {
                      BaiduAppIdBox, YoudaoAppKeyBox, OpenAiNameBox, OpenAiUrlBox, OpenAiModelBox,
-                     DeepLUrlBox, LibreUrlBox, ShowWindowHotkeyBox, SelectionHotkeyBox,
+                     DeepLUrlBox, LibreUrlBox, ShowWindowHotkeyBox, InputTranslateHotkeyBox, SelectionHotkeyBox,
                      ScreenshotTranslateHotkeyBox, ScreenshotOcrHotkeyBox, WebDavUrlBox, WebDavUserBox,
                  })
             textBox.TextChanged += (_, _) => ScheduleAutoSave();
@@ -227,6 +239,7 @@ public sealed partial class SettingsPage : Page
         var settings = App.Services.Settings;
         var previousHotkeys = (
             settings.ShowWindowHotkey,
+            settings.InputTranslateHotkey,
             settings.SelectionTranslateHotkey,
             settings.ScreenshotTranslateHotkey,
             settings.ScreenshotOcrHotkey);
@@ -234,6 +247,7 @@ public sealed partial class SettingsPage : Page
         try
         {
             settings.ShowWindowHotkey = ShowWindowHotkeyBox.Text.Trim();
+            settings.InputTranslateHotkey = InputTranslateHotkeyBox.Text.Trim();
             settings.SelectionTranslateHotkey = SelectionHotkeyBox.Text.Trim();
             settings.ScreenshotTranslateHotkey = ScreenshotTranslateHotkeyBox.Text.Trim();
             settings.ScreenshotOcrHotkey = ScreenshotOcrHotkeyBox.Text.Trim();
@@ -241,9 +255,12 @@ public sealed partial class SettingsPage : Page
                 !window.TryApplyHotkeys(settings, out var hotkeyError))
             {
                 RestorePreviousHotkeys(settings, previousHotkeys);
-                throw new InvalidOperationException(hotkeyError);
+                RestoreHotkeyBoxes(previousHotkeys);
+                ShowHotkeyRegistrationError(hotkeyError ?? "无法应用快捷键，请更换后重试。");
+                throw new InvalidOperationException(hotkeyError ?? "无法应用快捷键，请更换后重试。");
             }
             hotkeysApplied = true;
+            HotkeyConflictInfoBar.IsOpen = false;
             settings.ThemeMode = (string)((ComboBoxItem)ThemeBox.SelectedItem).Tag;
             settings.SaveHistory = SaveHistorySwitch.IsOn;
             settings.CompactTranslationWindow = CompactTranslationWindowSwitch.IsOn;
@@ -320,57 +337,159 @@ public sealed partial class SettingsPage : Page
 
     private static void RestorePreviousHotkeys(
         PythiaSettings settings,
-        (string Show, string Selection, string ScreenshotTranslate, string ScreenshotOcr) previous)
+        (string Show, string InputTranslate, string Selection, string ScreenshotTranslate, string ScreenshotOcr) previous)
     {
         settings.ShowWindowHotkey = previous.Show;
+        settings.InputTranslateHotkey = previous.InputTranslate;
         settings.SelectionTranslateHotkey = previous.Selection;
         settings.ScreenshotTranslateHotkey = previous.ScreenshotTranslate;
         settings.ScreenshotOcrHotkey = previous.ScreenshotOcr;
+    }
+
+    private void RestoreHotkeyBoxes(
+        (string Show, string InputTranslate, string Selection, string ScreenshotTranslate, string ScreenshotOcr) previous)
+    {
+        _loadingValues = true;
+        try
+        {
+            ShowWindowHotkeyBox.Text = previous.Show;
+            InputTranslateHotkeyBox.Text = previous.InputTranslate;
+            SelectionHotkeyBox.Text = previous.Selection;
+            ScreenshotTranslateHotkeyBox.Text = previous.ScreenshotTranslate;
+            ScreenshotOcrHotkeyBox.Text = previous.ScreenshotOcr;
+        }
+        finally
+        {
+            _loadingValues = false;
+        }
+    }
+
+    private void ShowHotkeyRegistrationError(string message)
+    {
+        HotkeyConflictInfoBar.Title = message.StartsWith("快捷键已被其他程序占用", StringComparison.Ordinal)
+            ? "快捷键已被占用"
+            : "快捷键设置失败";
+        HotkeyConflictInfoBar.Message = message;
+        HotkeyConflictInfoBar.IsOpen = true;
     }
 
     private void HotkeyBox_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (sender is not TextBox box) return;
         e.Handled = true;
-        if (e.Key is VirtualKey.Control or VirtualKey.LeftControl or VirtualKey.RightControl or
-            VirtualKey.Shift or VirtualKey.LeftShift or VirtualKey.RightShift or
-            VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu or
-            VirtualKey.LeftWindows or VirtualKey.RightWindows)
-            return;
+        var virtualKey = (uint)e.Key;
+        if (IsModifierKey(virtualKey)) return;
+        RecordHotkey(box, virtualKey,
+            IsKeyDown(VirtualKey.Control),
+            IsKeyDown(VirtualKey.Menu),
+            IsKeyDown(VirtualKey.Shift),
+            IsKeyDown(VirtualKey.LeftWindows) || IsKeyDown(VirtualKey.RightWindows));
+    }
 
-        var key = HotkeyToken(e.Key);
+    private void HotkeyBox_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TextBox box) return;
+        _activeHotkeyBox = box;
+        StartHotkeyRecorder();
+    }
+
+    private void HotkeyBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (ReferenceEquals(sender, _activeHotkeyBox)) StopHotkeyRecorder();
+    }
+
+    private void StartHotkeyRecorder()
+    {
+        if (_hotkeyRecorderHook != IntPtr.Zero) return;
+        _recordingModifierKeys.Clear();
+        _suppressedHotkey = 0;
+        _hotkeyRecorderHook = SetWindowsHookEx(
+            WhKeyboardLl, _hotkeyRecorderProc, GetModuleHandle(null), 0);
+        if (_hotkeyRecorderHook == IntPtr.Zero)
+            SaveStatusText.Text = "无法启动快捷键录入，请重新打开设置后重试。";
+    }
+
+    private void StopHotkeyRecorder()
+    {
+        if (_hotkeyRecorderHook != IntPtr.Zero)
+        {
+            UnhookWindowsHookEx(_hotkeyRecorderHook);
+            _hotkeyRecorderHook = IntPtr.Zero;
+        }
+        _activeHotkeyBox = null;
+        _recordingModifierKeys.Clear();
+        _suppressedHotkey = 0;
+    }
+
+    private IntPtr HotkeyRecorderHook(int code, IntPtr wParam, IntPtr lParam)
+    {
+        var box = _activeHotkeyBox;
+        if (code < 0 || box is null)
+            return CallNextHookEx(_hotkeyRecorderHook, code, wParam, lParam);
+
+        var message = unchecked((uint)wParam.ToInt64());
+        var key = Marshal.PtrToStructure<KbdLlHookStruct>(lParam).VkCode;
+        var keyDown = message is WmKeyDown or WmSysKeyDown;
+        var keyUp = message is WmKeyUp or WmSysKeyUp;
+        if (!keyDown && !keyUp)
+            return CallNextHookEx(_hotkeyRecorderHook, code, wParam, lParam);
+
+        if (IsModifierKey(key))
+        {
+            if (keyDown) _recordingModifierKeys.Add(key);
+            else _recordingModifierKeys.Remove(key);
+            return new IntPtr(1);
+        }
+
+        if (keyDown)
+        {
+            if (_suppressedHotkey == 0)
+            {
+                _suppressedHotkey = key;
+                var control = IsRecordingModifierDown(0x11, 0xA2, 0xA3);
+                var alt = IsRecordingModifierDown(0x12, 0xA4, 0xA5);
+                var shift = IsRecordingModifierDown(0x10, 0xA0, 0xA1);
+                var windows = IsRecordingModifierDown(0x5B, 0x5C);
+                DispatcherQueue.TryEnqueue(() => RecordHotkey(box, key, control, alt, shift, windows));
+            }
+            return new IntPtr(1);
+        }
+
+        if (_suppressedHotkey == key) _suppressedHotkey = 0;
+        return new IntPtr(1);
+    }
+
+    private bool IsRecordingModifierDown(params uint[] keys) =>
+        keys.Any(key => _recordingModifierKeys.Contains(key) || IsKeyDown(key));
+
+    private void RecordHotkey(TextBox box, uint virtualKey, bool control, bool alt, bool shift, bool windows)
+    {
+        var key = WindowsShellService.HotkeyToken(virtualKey);
         if (key is null)
         {
-            SaveStatusText.Text = "快捷键主键仅支持 A–Z、0–9 和 F1–F24。";
+            SaveStatusText.Text = "暂不支持这个按键作为快捷键。";
             return;
         }
         var parts = new List<string>();
-        if (IsKeyDown(VirtualKey.Control)) parts.Add("Ctrl");
-        if (IsKeyDown(VirtualKey.Menu)) parts.Add("Alt");
-        if (IsKeyDown(VirtualKey.Shift)) parts.Add("Shift");
-        if (IsKeyDown(VirtualKey.LeftWindows) || IsKeyDown(VirtualKey.RightWindows)) parts.Add("Win");
-        if (parts.Count == 0)
-        {
-            SaveStatusText.Text = "快捷键必须至少包含 Ctrl、Alt、Shift 或 Win 中的一个修饰键。";
-            return;
-        }
+        if (control) parts.Add("Ctrl");
+        if (alt) parts.Add("Alt");
+        if (shift) parts.Add("Shift");
+        if (windows) parts.Add("Win");
         parts.Add(key);
         box.Text = string.Join('+', parts);
         box.SelectAll();
-            SaveStatusText.Text = "快捷键已录入，将自动保存并生效。";
+        SaveStatusText.Text = parts.Count == 1
+            ? "单键快捷键已录入，将自动保存并生效。"
+            : "组合快捷键已录入，将自动保存并生效。";
     }
 
-    private static bool IsKeyDown(VirtualKey key) =>
-        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
+    private static bool IsModifierKey(uint key) =>
+        key is 0x10 or 0xA0 or 0xA1 or 0x11 or 0xA2 or 0xA3 or
+            0x12 or 0xA4 or 0xA5 or 0x5B or 0x5C;
 
-    private static string? HotkeyToken(VirtualKey key)
-    {
-        var code = (int)key;
-        if (code >= (int)VirtualKey.A && code <= (int)VirtualKey.Z) return ((char)code).ToString();
-        if (code >= (int)VirtualKey.Number0 && code <= (int)VirtualKey.Number9) return ((char)code).ToString();
-        if (code >= (int)VirtualKey.F1 && code <= (int)VirtualKey.F24) return key.ToString();
-        return null;
-    }
+    private static bool IsKeyDown(VirtualKey key) => IsKeyDown((uint)key);
+
+    private static bool IsKeyDown(uint key) => (GetAsyncKeyState((int)key) & 0x8000) != 0;
 
     private static void SaveCredential(string key, string value)
     {
@@ -559,4 +678,34 @@ public sealed partial class SettingsPage : Page
             UpdateStatusText.Text = $"无法打开 GitHub：{exception.Message}";
         }
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KbdLlHookStruct
+    {
+        public uint VkCode;
+        public uint ScanCode;
+        public uint Flags;
+        public uint Time;
+        public nuint ExtraInfo;
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    private delegate IntPtr LowLevelKeyboardProc(int code, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetWindowsHookEx(
+        int hookId, LowLevelKeyboardProc hookProc, IntPtr module, uint threadId);
+
+    [DllImport("user32.dll")]
+    private static extern bool UnhookWindowsHookEx(IntPtr hook);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr CallNextHookEx(
+        IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int virtualKey);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr GetModuleHandle(string? moduleName);
 }
