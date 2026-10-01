@@ -63,6 +63,32 @@ public enum TranslationChunkPolicy {
         return result
     }
 
+    /// Keep line separators outside provider input: providers may flatten them
+    /// even when the application's delete-newline preference is disabled.
+    public static func linePreservingChunks(for text: String, maxCharacters: Int = defaultLimit) -> [TranslationChunk] {
+        var result: [TranslationChunk] = []
+        var line = ""
+        for character in text {
+            if character.isNewline {
+                result.append(contentsOf: chunks(for: line, maxCharacters: maxCharacters))
+                result.append(envelope(String(character)))
+                line = ""
+            } else {
+                line.append(character)
+            }
+        }
+        result.append(contentsOf: chunks(for: line, maxCharacters: maxCharacters))
+        return result
+    }
+
+    public static func reassemble(_ chunks: [TranslationChunk], translations: [String]) -> String {
+        precondition(chunks.count == translations.count)
+        return zip(chunks, translations).map { chunk, translated in
+            chunk.body.isEmpty ? chunk.original
+                : chunk.leadingWhitespace + translated.trimmingCharacters(in: .whitespacesAndNewlines) + chunk.trailingWhitespace
+        }.joined()
+    }
+
     private static func boundaryPriority(characters: [Character], boundary: Int) -> Int? {
         guard boundary > 0, boundary <= characters.count else { return nil }
         let previous = characters[boundary - 1]

@@ -13,12 +13,31 @@ enum PythiaNetworkSession {
         with request: URLRequest,
         completion: @escaping (Data?, URLResponse?, Error?) -> Void
     ) -> URLSessionDataTask {
-        let session = URLSession(configuration: configuration(for: request.url))
-        let task = session.dataTask(with: requestWithProxyAuthorization(request)) { data, response, error in
-            completion(data, response, error)
-            session.finishTasksAndInvalidate()
+        let session = reusableSession(configuration: configuration(for: request.url))
+        return session.dataTask(with: requestWithProxyAuthorization(request), completionHandler: completion)
+    }
+
+    private static let sessionLock = NSLock()
+    private static var sessions: [String: URLSession] = [:]
+
+    /// Reuse TLS/HTTP connections, but never reuse a session across proxy or
+    /// timeout configuration changes. Credentials remain on each request.
+    static func reusableSession(configuration: URLSessionConfiguration) -> URLSession {
+        let proxy = configuration.connectionProxyDictionary ?? [:]
+        let proxyKey = proxy.keys.map { String(describing: $0) }.sorted().map { key in
+            "\(key)=\(proxy[key] ?? "")"
+        }.joined(separator: "|")
+        let key = "\(configuration.timeoutIntervalForRequest)|\(configuration.timeoutIntervalForResource)|\(proxyKey)"
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        if let session = sessions[key] { return session }
+        if sessions.count >= 8 {
+            sessions.values.forEach { $0.finishTasksAndInvalidate() }
+            sessions.removeAll()
         }
-        return task
+        let session = URLSession(configuration: configuration)
+        sessions[key] = session
+        return session
     }
 
     static func configuration(
@@ -194,6 +213,86 @@ final class TranslationService {
 
     @discardableResult
     func translateService(
+        identifier: String,
+        text: String,
+        sourceLanguage: String,
+        targetLanguage: String,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) -> TranslationCancellation? {
+        // Snapshot the preference at request start. Every entry point, including
+        // per-card retry and HTTP translation, passes through this path.
+        let chunks = Preferences.shared.translateDeleteNewline
+            ? TranslationChunkPolicy.chunks(for: text)
+            : TranslationChunkPolicy.linePreservingChunks(for: text)
+        guard chunks.count > 1 else {
+            return translateRawService(identifier: identifier, text: text, sourceLanguage: sourceLanguage,
+                                       targetLanguage: targetLanguage, completion: completion)
+        }
+        let languages = Self.resolvedLanguages(text: text, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage)
+        let cancellation = TranslationCancellation()
+        let queue = DispatchQueue(label: "com.douxy.pythia.translation-batch")
+        var next = 0
+        var running = 0
+        var completed = 0
+        var outputs = Array(repeating: "", count: chunks.count)
+        var children: [Int: TranslationCancellation] = [:]
+        var finished = false
+        var pump: (() -> Void)!
+
+        func finish(_ result: Result<String, Error>) {
+            guard !finished else { return }
+            finished = true
+            children.values.forEach { $0.cancel() }
+            children.removeAll()
+            cancellation.finish()
+            // Break the recursive closure's retain cycle after completion.
+            pump = nil
+            completion(result)
+        }
+
+        pump = { [self] in
+            guard !finished else { return }
+            guard !cancellation.isCancelled else { finish(.failure(TranslationError.cancelled)); return }
+            // Two requests at a time reduce long-selection latency without an
+            // unbounded burst at a provider. Output order is independent of completion order.
+            while running < 2 && next < chunks.count {
+                let index = next
+                next += 1
+                let chunk = chunks[index]
+                if chunk.body.isEmpty {
+                    completed += 1
+                    continue
+                }
+                running += 1
+                let child = translateRawService(identifier: identifier, text: chunk.body,
+                    sourceLanguage: languages.source, targetLanguage: languages.target) { result in
+                    queue.async {
+                        guard !finished else { return }
+                        children.removeValue(forKey: index)
+                        running -= 1
+                        switch result {
+                        case .success(let output):
+                            outputs[index] = output
+                            completed += 1
+                            pump()
+                        case .failure(let error):
+                            finish(.failure(error))
+                        }
+                    }
+                }
+                if let child { children[index] = child }
+            }
+            if completed == chunks.count {
+                finish(.success(TranslationChunkPolicy.reassemble(chunks, translations: outputs)))
+            }
+        }
+        cancellation.setCancelHandler { queue.async { finish(.failure(TranslationError.cancelled)) } }
+        queue.async { pump?() }
+        return cancellation
+    }
+
+    @discardableResult
+    private func translateRawService(
         identifier: String,
         text: String,
         sourceLanguage: String,
@@ -526,7 +625,7 @@ final class TranslationService {
             let segmentLine = chunks.count > 1
                 ? "This is segment \(index + 1) of \(chunks.count); preserve its paragraph and list formatting.\n"
                 : ""
-            let prompt = "Translate the following text from \(sourceLanguage) to \(targetLanguage). \(segmentLine)Return only the translation.\n\n\(chunk.body)"
+            let prompt = "Translate the following text from \(sourceLanguage) to \(targetLanguage). \(segmentLine)Preserve all line breaks, paragraph boundaries and list formatting. Return only the translation.\n\n\(chunk.body)"
             guard let request = Self.customLLMRequest(
                 endpoint: endpoint,
                 api: api,
@@ -539,9 +638,8 @@ final class TranslationService {
             }
 
             let configuration = PythiaNetworkSession.configuration(for: endpoint, requestTimeout: 300, resourceTimeout: 300)
-            let session = URLSession(configuration: configuration)
+            let session = PythiaNetworkSession.reusableSession(configuration: configuration)
             let task = session.dataTask(with: PythiaNetworkSession.requestWithProxyAuthorization(request)) { data, response, error in
-                session.finishTasksAndInvalidate()
                 stateQueue.async {
                     guard !finished else { return }
                     if cancellation.isCancelled {

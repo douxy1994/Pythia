@@ -2,6 +2,30 @@ import XCTest
 @testable import PythiaCore
 
 final class TranslationChunkPolicyTests: XCTestCase {
+    func testProviderCannotFlattenSavedLineSeparators() {
+        let input = "  First paragraph.\r\n\r\n\t- Second item.\nThird.\rFourth.\u{2028}Fifth.\u{2029}"
+        let chunks = TranslationChunkPolicy.linePreservingChunks(for: input)
+        XCTAssertEqual(chunks.map(\.original).joined(), input)
+        XCTAssertTrue(chunks.allSatisfy { !$0.body.contains(where: \.isNewline) })
+        let outputs = chunks.map { $0.body.uppercased() }
+        XCTAssertEqual(TranslationChunkPolicy.reassemble(chunks, translations: outputs), input.uppercased())
+    }
+
+    func testBlankSelectionRequiresNoProviderText() {
+        let input = "\r\n\n  \t\n"
+        let chunks = TranslationChunkPolicy.linePreservingChunks(for: input)
+        XCTAssertTrue(chunks.allSatisfy { $0.body.isEmpty })
+        XCTAssertEqual(TranslationChunkPolicy.reassemble(chunks, translations: chunks.map { _ in "" }), input)
+    }
+
+    func testLinePreservingLongTextKeepsNumericTokensAndOrder() {
+        let input = String(repeating: "First sentence 1,240.50. ", count: 200) + "\n\n" + String(repeating: "界", count: 2_000)
+        let chunks = TranslationChunkPolicy.linePreservingChunks(for: input)
+        XCTAssertEqual(chunks.map(\.original).joined(), input)
+        XCTAssertEqual(TranslationChunkPolicy.reassemble(chunks, translations: chunks.map(\.body)), input)
+        XCTAssertTrue(chunks.allSatisfy { !$0.body.contains(where: \.isNewline) })
+    }
+
     func testShortTextRemainsOneRequest() {
         let text = String(repeating: "a", count: 1_800)
         let chunks = TranslationChunkPolicy.chunks(for: text)

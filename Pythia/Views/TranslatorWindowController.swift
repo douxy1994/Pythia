@@ -20,6 +20,10 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     private var resultHeightConstraints: [String: NSLayoutConstraint] = [:]
     private var resultCollapseButtons: [String: NSButton] = [:]
     private var resultRetranslateButtons: [String: NSButton] = [:]
+    private var resultRetryGenerations: [String: UUID] = [:]
+    private var resultRetryCancellations: [String: TranslationCancellation] = [:]
+    private var resultRetryTimeouts: [String: DispatchWorkItem] = [:]
+    private var resultProgressIndicators: [String: NSProgressIndicator] = [:]
     private var collapsedResultKeys = Set<String>()
     private var failedResultKeys = Set<String>()
     private let servicePicker = TranslationServicePickerButton()
@@ -332,6 +336,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
             completion?(.failure(TranslationError.requestFailed("没有可翻译的文本")))
             return
         }
+        let deleteNewlines = Preferences.shared.translateDeleteNewline
         status("翻译中...")
         if usesProvidedText {
             selectLanguage(Preferences.shared.sourceLanguage, in: sourceLanguagePopup)
@@ -395,12 +400,13 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
             completed += 1
             // A finished service (success or failure) may be re-translated.
             self.resultRetranslateButtons[service]?.isEnabled = true
+            self.setServiceLoading(false, for: service)
             let displayName = PluginManager.shared.displayName(forServiceIdentifier: service)
             switch result {
             case .success(let output):
                 succeeded += 1
                 failedResultKeys.remove(service)
-                let finalOutput = Preferences.shared.translateDeleteNewline ? Self.compactWhitespace(output) : output
+                let finalOutput = deleteNewlines ? Self.compactWhitespace(output) : output
                 if firstSuccess == nil {
                     firstSuccess = finalOutput
                 }
@@ -509,6 +515,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         translateButton.title = "翻译"
         unfinished.forEach { service in
             resultRetranslateButtons[service]?.isEnabled = true
+            setServiceLoading(false, for: service)
             setResult("已取消", for: service)
         }
         let completion = takeTranslationCompletion()
@@ -752,6 +759,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     /// Re-runs a single service card with the current input and language
     /// settings, without disturbing the other cards.
     private func retranslateService(_ service: String) {
+        let deleteNewlines = Preferences.shared.translateDeleteNewline
         let input = sourceView.textView.string
         guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             status("没有可翻译的文本")
@@ -775,19 +783,26 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         )
         let displayName = PluginManager.shared.displayName(forServiceIdentifier: service)
         resultRetranslateButtons[service]?.isEnabled = false
+        setServiceLoading(true, for: service)
         failedResultKeys.remove(service)
         setResult("等待 \(displayName) 返回...", for: service)
         status("正在重新翻译 \(displayName)...")
 
+        let retryGeneration = UUID()
+        resultRetryGenerations[service] = retryGeneration
         var finished = false
         let finishOnce: (Result<String, Error>) -> Void = { [weak self] result in
-            guard let self, !finished else { return }
+            guard let self, !finished, self.resultRetryGenerations[service] == retryGeneration else { return }
             finished = true
+            self.resultRetryGenerations.removeValue(forKey: service)
+            self.resultRetryCancellations.removeValue(forKey: service)
+            self.resultRetryTimeouts.removeValue(forKey: service)?.cancel()
             self.resultRetranslateButtons[service]?.isEnabled = true
+            self.setServiceLoading(false, for: service)
             switch result {
             case .success(let output):
                 self.failedResultKeys.remove(service)
-                let finalOutput = Preferences.shared.translateDeleteNewline ? Self.compactWhitespace(output) : output
+                let finalOutput = deleteNewlines ? Self.compactWhitespace(output) : output
                 self.setResult(finalOutput, for: service)
                 HistoryStore.shared.add(PythiaHistoryRecord(
                     sourceText: input,
@@ -806,11 +821,13 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         }
 
         let serviceTimeout = timeoutInterval(forServiceIdentifier: service, text: input)
-        let timeout = DispatchWorkItem {
+        let timeout = DispatchWorkItem { [weak self] in
+            self?.resultRetryCancellations[service]?.cancel()
             finishOnce(.failure(TranslationError.requestFailed("服务超时：\(displayName) 未在 \(Int(serviceTimeout)) 秒内返回。")))
         }
+        resultRetryTimeouts[service] = timeout
         DispatchQueue.main.asyncAfter(deadline: .now() + serviceTimeout, execute: timeout)
-        TranslationService.shared.translateService(
+        let cancellation = TranslationService.shared.translateService(
             identifier: service,
             text: input,
             sourceLanguage: effectiveLanguages.source,
@@ -821,6 +838,7 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
                 finishOnce(result)
             }
         }
+        if let cancellation { resultRetryCancellations[service] = cancellation }
     }
 
     func clearInput() {
@@ -1550,6 +1568,17 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         headerRow.spacing = 8
         headerRow.addArrangedSubview(collapseButton)
         headerRow.addArrangedSubview(titleLabel)
+        if showRetranslate {
+            let progress = NSProgressIndicator()
+            progress.style = .spinning
+            progress.controlSize = .small
+            progress.isIndeterminate = true
+            progress.isDisplayedWhenStopped = false
+            progress.setAccessibilityLabel("\(title) 翻译中")
+            headerRow.addArrangedSubview(progress)
+            resultProgressIndicators[key] = progress
+            setServiceLoading(true, for: key)
+        }
         headerRow.addArrangedSubview(NSView())
         if showRetranslate {
             // Re-translate this service with the current input. Enabled only
@@ -1616,6 +1645,12 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
         resultStack.layoutSubtreeIfNeeded()
     }
 
+    private func setServiceLoading(_ loading: Bool, for key: String) {
+        guard let indicator = resultProgressIndicators[key] else { return }
+        indicator.isHidden = !loading
+        if loading { indicator.startAnimation(nil) } else { indicator.stopAnimation(nil) }
+    }
+
     private func setResult(_ text: String, for provider: String) {
         guard let textView = resultViews[provider] else { return }
         textView.setPlainText(text)
@@ -1663,10 +1698,17 @@ final class TranslatorWindowController: NSWindowController, AVSpeechSynthesizerD
     }
 
     private func clearResults() {
+        resultRetryGenerations.removeAll()
+        resultRetryCancellations.values.forEach { $0.cancel() }
+        resultRetryCancellations.removeAll()
+        resultRetryTimeouts.values.forEach { $0.cancel() }
+        resultRetryTimeouts.removeAll()
         resultScroll.hasVerticalScroller = false
         NSLayoutConstraint.deactivate(Array(resultHeightConstraints.values))
         resultHeightConstraints.removeAll()
         resultCollapseButtons.removeAll()
+        resultProgressIndicators.values.forEach { $0.stopAnimation(nil) }
+        resultProgressIndicators.removeAll()
         resultRetranslateButtons.removeAll()
         collapsedResultKeys.removeAll()
         resultHeightRefreshWorkItem?.cancel()

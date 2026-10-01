@@ -7,7 +7,7 @@
 
   A local-first desktop translator for macOS and Windows: multi-service result cards, screenshot OCR, global hotkeys, syncable history, and a real plugin system.
 
-  [![Version](https://img.shields.io/badge/Version-1.2.3-80B847)](#download)
+  [![Version](https://img.shields.io/badge/Version-1.2.4-80B847)](#download)
   [![macOS](https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white)](#macos)
   [![Windows](https://img.shields.io/badge/Windows_x64-1.2.3-0078D4?logo=windows11&logoColor=white)](#windows)
   [![Swift](https://img.shields.io/badge/Swift-AppKit-F05138?logo=swift&logoColor=white)](#macos-build)
@@ -86,7 +86,7 @@ flowchart LR
     <td width="50%" align="center">
       <img src="./Docs/images/platform-macos.svg" width="100%" alt="Pythia for macOS">
       <h3 id="macos">macOS</h3>
-      <p><strong>Native · current release 1.2.2</strong></p>
+      <p><strong>Native · current release 1.2.4</strong></p>
       <p>Swift · AppKit · macOS 14+ · Apple silicon</p>
       <p>Menu-bar app, multi-service cards, OCR, hotkeys, history sync, plugins, verified release packaging.</p>
     </td>
@@ -104,18 +104,18 @@ flowchart LR
 
 ### macOS
 
-[Download Pythia 1.2.2 for macOS Apple silicon](https://github.com/douxy1994/Pythia/releases/download/v1.2.2/Pythia-1.2.2-macos-arm64.dmg)
+[Download Pythia 1.2.4 for macOS Apple silicon](https://github.com/douxy1994/Pythia/releases/download/v1.2.4/Pythia-1.2.4-macos-arm64.dmg)
 
 - Requires macOS 14 or later, Apple silicon (`arm64`).
 - The current build uses the project's stable local code-signing identity and is not Apple Developer ID notarized — if macOS blocks the first launch, allow it in System Settings > Privacy & Security.
-- The DMG and its SHA-256 checksum are published together on the [v1.2.2 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.2.2).
+- The DMG and its SHA-256 checksum are published together on the [v1.2.4 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.2.4).
 
 ### Windows
 
 [Download Pythia 1.2.3 for Windows x64](https://github.com/douxy1994/Pythia/releases/download/v1.2.3/Pythia-1.2.3-windows-x64.exe)
 
 - Requires 64-bit Windows 10 or Windows 11.
-- The installer and SHA-256 checksum are published on the [v1.2.3 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.2.3). macOS remains at 1.2.2.
+- The installer and SHA-256 checksum are published on the [v1.2.3 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.2.3). macOS remains at 1.2.4.
 - The installer contains Pythia and its isolated runtime only; it bundles no third-party plugin or `.pythia` package.
 - The Windows 1.2.3 installer is not Authenticode-signed yet and might trigger Microsoft Defender SmartScreen. Verify its SHA-256 checksum before installation.
 
@@ -214,7 +214,7 @@ Active development happens on the `master` branch of [github.com/douxy1994/Pythi
 ## Documentation
 
 - [Pythia 1.2.3 release notes](Docs/RELEASE_NOTES_1.2.3.md)
-- [Pythia 1.2.2 release notes](Docs/RELEASE_NOTES_1.2.2.md)
+- [Pythia 1.2.4 release notes](Docs/RELEASE_NOTES_1.2.4.md)
 - [Pythia 1.2.1 release notes](Docs/RELEASE_NOTES_1.2.1.md)
 - [Pythia 1.2.0 release notes](Docs/RELEASE_NOTES_1.2.0.md)
 - [Architecture](Docs/ARCHITECTURE.md)

@@ -7,7 +7,7 @@
 
   本地优先的桌面翻译工具：多服务结果卡片、截图 OCR、全局快捷键、可同步的历史记录和真正的插件系统。
 
-  [![版本](https://img.shields.io/badge/版本-1.2.3-80B847)](#下载)
+  [![版本](https://img.shields.io/badge/版本-1.2.4-80B847)](#下载)
   [![macOS](https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white)](#macos)
   [![Windows](https://img.shields.io/badge/Windows_x64-1.2.3-0078D4?logo=windows11&logoColor=white)](#windows)
   [![Swift](https://img.shields.io/badge/Swift-AppKit-F05138?logo=swift&logoColor=white)](#macos-构建)
@@ -86,7 +86,7 @@ flowchart LR
     <td width="50%" align="center">
       <img src="./Docs/images/platform-macos.svg" width="100%" alt="Pythia macOS 版">
       <h3 id="macos">macOS</h3>
-      <p><strong>原生版本 · 当前 1.2.2</strong></p>
+      <p><strong>原生版本 · 当前 1.2.4</strong></p>
       <p>Swift · AppKit · macOS 14+ · Apple silicon</p>
       <p>菜单栏应用、多服务卡片、OCR、快捷键、历史同步、插件、签名打包全链路。</p>
     </td>
@@ -104,18 +104,18 @@ flowchart LR
 
 ### macOS
 
-[下载 Pythia 1.2.2 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.2.2/Pythia-1.2.2-macos-arm64.dmg)
+[下载 Pythia 1.2.4 macOS Apple silicon 版](https://github.com/douxy1994/Pythia/releases/download/v1.2.4/Pythia-1.2.4-macos-arm64.dmg)
 
 - 需要 macOS 14 或更高版本，Apple silicon（`arm64`）。
 - 当前构建使用项目稳定的本地代码签名身份，未经 Apple Developer ID 公证——首次打开如被拦截，请在「系统设置 > 隐私与安全性」中允许。
-- DMG 和 SHA-256 校验文件同时发布在 [v1.2.2 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.2)。
+- DMG 和 SHA-256 校验文件同时发布在 [v1.2.4 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.4)。
 
 ### Windows
 
 [下载 Pythia 1.2.3 Windows x64 版](https://github.com/douxy1994/Pythia/releases/download/v1.2.3/Pythia-1.2.3-windows-x64.exe)
 
 - 支持 64 位 Windows 10 和 Windows 11。
-- 安装程序与 SHA-256 校验文件发布在 [v1.2.3 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.3)；macOS 版本仍为 1.2.2。
+- 安装程序与 SHA-256 校验文件发布在 [v1.2.3 Release 页面](https://github.com/douxy1994/Pythia/releases/tag/v1.2.3)；macOS 版本仍为 1.2.4。
 - 安装包只包含 Pythia 及其隔离运行时，不捆绑任何第三方插件或 `.pythia` 包。
 - Windows 1.2.3 安装包暂未进行 Authenticode 签名，可能触发 Microsoft Defender SmartScreen；安装前请核对 SHA-256。
 
@@ -214,7 +214,7 @@ WINDOWS_CODEX_HANDOFF.md 完整 Windows 交接文档
 ## 文档
 
 - [Pythia 1.2.3 发布说明](Docs/RELEASE_NOTES_1.2.3.md)
-- [Pythia 1.2.2 发布说明](Docs/RELEASE_NOTES_1.2.2.md)
+- [Pythia 1.2.4 发布说明](Docs/RELEASE_NOTES_1.2.4.md)
 - [Pythia 1.2.1 发布说明](Docs/RELEASE_NOTES_1.2.1.md)
 - [Pythia 1.2.0 发布说明](Docs/RELEASE_NOTES_1.2.0.md)
 - [架构设计](Docs/ARCHITECTURE.md)
