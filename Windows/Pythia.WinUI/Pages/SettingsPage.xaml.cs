@@ -69,6 +69,7 @@ public sealed partial class SettingsPage : Page
         var settings = App.Services.Settings;
         ThemeBox.SelectedItem = ThemeBox.Items.OfType<ComboBoxItem>().First(item => (string)item.Tag == settings.ThemeMode);
         SaveHistorySwitch.IsOn = settings.SaveHistory;
+        TranslateDeleteNewlineSwitch.IsOn = settings.TranslateDeleteNewline;
         CompactTranslationWindowSwitch.IsOn = settings.CompactTranslationWindow;
         FloatingSelectionButtonSwitch.IsOn = settings.ExperimentalFloatingSelectionButton;
         LaunchAtStartupSwitch.IsOn = settings.LaunchAtStartup;
@@ -126,9 +127,9 @@ public sealed partial class SettingsPage : Page
             UpdateCard.Visibility = Visibility.Collapsed;
             UpdateButton.Visibility = Visibility.Collapsed;
             LatestNotesText.Text =
-                "1.2.3 · 新增输入翻译快捷键，所有快捷键均可直接录入单一按键。\n" +
-                "支持 Insert、Home 等按键；被其他程序占用时会显示提示并恢复原设置。\n" +
-                "Google 翻译改用可用的新通道，修复旧接口 HTTP 429。";
+                "1.2.4 · 同步 macOS 翻译修复，默认保留译文换行、空行和缩进。\n" +
+                "每个服务最多并发两段，结果卡即时显示进度和译文。\n" +
+                "清空、重试和新请求会取消旧任务，防止迟到响应覆盖结果。";
             return;
         }
 
@@ -146,7 +147,7 @@ public sealed partial class SettingsPage : Page
     {
         foreach (var toggle in new[]
                  {
-                     SaveHistorySwitch, CompactTranslationWindowSwitch, FloatingSelectionButtonSwitch, LaunchAtStartupSwitch, GoogleSwitch, BaiduSwitch,
+                     SaveHistorySwitch, TranslateDeleteNewlineSwitch, CompactTranslationWindowSwitch, FloatingSelectionButtonSwitch, LaunchAtStartupSwitch, GoogleSwitch, BaiduSwitch,
                      YoudaoSwitch, OpenAiSwitch, DeepLSwitch, LibreSwitch, OcrAutoTranslateSwitch,
                      WebDavAutoSyncSwitch, AlwaysOnTopSwitch, CloseToTraySwitch, HideOnBlurSwitch,
                      NotificationsSwitch, CheckUpdateOnStartupSwitch,
@@ -263,6 +264,7 @@ public sealed partial class SettingsPage : Page
             HotkeyConflictInfoBar.IsOpen = false;
             settings.ThemeMode = (string)((ComboBoxItem)ThemeBox.SelectedItem).Tag;
             settings.SaveHistory = SaveHistorySwitch.IsOn;
+            settings.TranslateDeleteNewline = TranslateDeleteNewlineSwitch.IsOn;
             settings.CompactTranslationWindow = CompactTranslationWindowSwitch.IsOn;
             settings.ExperimentalFloatingSelectionButton = FloatingSelectionButtonSwitch.IsOn;
             if (App.MainAppWindow is MainWindow floatingWindow &&

@@ -22,12 +22,39 @@ public sealed class TranslationResult : INotifyPropertyChanged
 
     public string ServiceId { get; set; }
     public string ServiceName { get; set; }
-    public string Text { get; set; }
-    public string? Model { get; set; }
-    public string? Error { get; set; }
+    private string _text = string.Empty;
+    private string? _error;
+    private string? _model;
+    private bool _isLoading;
+    public string Text { get => _text; set { _text = value; NotifyResult(); } }
+    public string? Model { get => _model; set { _model = value; OnPropertyChanged(); } }
+    public string? Error { get => _error; set { _error = value; NotifyResult(); } }
     public string? IconPath { get; set; }
-    public bool IsSuccess => Error is null;
-    public string DisplayText => Error ?? Text;
+    public bool IsLoading
+    {
+        get => _isLoading;
+        set { _isLoading = value; NotifyResult(); OnPropertyChanged(); OnPropertyChanged(nameof(LoadingVisibility)); OnPropertyChanged(nameof(CanRetry)); }
+    }
+    public bool CanRetry => !IsLoading;
+    public Visibility LoadingVisibility => IsLoading ? Visibility.Visible : Visibility.Collapsed;
+    public bool IsSuccess => !IsLoading && Error is null;
+    private void NotifyResult()
+    {
+        OnPropertyChanged(nameof(Text));
+        OnPropertyChanged(nameof(Error));
+        OnPropertyChanged(nameof(DisplayText));
+        OnPropertyChanged(nameof(IsSuccess));
+    }
+    public void Apply(TranslationResult completed)
+    {
+        ServiceName = completed.ServiceName;
+        OnPropertyChanged(nameof(ServiceName));
+        Text = completed.Text;
+        Error = completed.Error;
+        Model = completed.Model;
+        IsLoading = false;
+    }
+    public string DisplayText => IsLoading ? "正在翻译…" : Error ?? Text;
     public bool IsPlugin => ServiceId.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase);
     public Visibility RetryVisibility => Visibility.Visible;
     public Visibility CollapseVisibility => _showCollapse ? Visibility.Visible : Visibility.Collapsed;

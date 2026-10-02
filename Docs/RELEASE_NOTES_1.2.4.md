@@ -1,6 +1,9 @@
 # Pythia 1.2.4
 
-This is a macOS-only patch release. The Windows release remains at 1.2.3.
+This shared patch release includes macOS arm64 and Windows x64. Windows assets
+were added after the macOS release; the original macOS tag is retained. The
+Windows build's source commit is recorded in the GitHub release and executable
+informational version.
 
 ## 中文
 
@@ -26,3 +29,17 @@ This is a macOS-only patch release. The Windows release remains at 1.2.3.
 Requires macOS 14 or later on Apple silicon. Packages contain no third-party plugins or user credentials. The app uses the project's stable local signing identity, without Apple Developer ID notarization.
 
 Preserving every line separator requires separate line requests and may increase request counts for short multiline selections. Real-world latency depends on the provider and network; offline timing is not a production speed guarantee.
+
+## Windows x64
+
+- Synchronize local newline/indentation preservation across built-in services,
+  OpenAI/Anthropic-compatible APIs and plugins; the new output option defaults off.
+- Limit each service to two concurrent segments and each batch to four services;
+  preserve source order, numeric tokens and Unicode grapheme boundaries.
+- Show progress and completed results per service in full and compact windows.
+  Cancel and invalidate previous batches and retries on clear, navigation or close.
+- Preserve the existing Google RPC/dictionary fallback and five-minute LLM retry
+  policy. Settings, history, credentials and plugins retain their existing format.
+- Assets: `Pythia-1.2.4-windows-x64.exe` and matching `.sha256`.
+- Windows packages are not Authenticode-signed and may trigger SmartScreen.
+  Existing macOS assets and tag are unchanged.

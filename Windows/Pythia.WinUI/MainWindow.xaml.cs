@@ -64,6 +64,7 @@ public sealed partial class MainWindow : Window
         }
         Closed += (_, _) =>
         {
+            if (NavFrame.Content is HomePage home) home.CancelPendingTranslations();
             _placementSaveDelay?.Cancel();
             _placementSaveDelay?.Dispose();
             _blurHideDelay?.Cancel();

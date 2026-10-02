@@ -15,7 +15,9 @@ public sealed partial class HomePage : Page
 {
     private readonly List<string> _selectedServices;
     private readonly SemaphoreSlim _serviceSaveGate = new(1, 1);
-    private readonly HomeSubmissionGate _submissionGate = new();
+    private long _batchGeneration;
+    private readonly Dictionary<string, CancellationTokenSource> _retries = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _serviceGenerations = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _translationCancellation;
     private bool _isTextCompositionActive;
     private bool _isCompactMode;
@@ -43,12 +45,7 @@ public sealed partial class HomePage : Page
             }
             EmptyResultsText.Visibility = Results.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         };
-        Unloaded += (_, _) =>
-        {
-            _translationCancellation?.Cancel();
-            _translationCancellation?.Dispose();
-            _translationCancellation = null;
-        };
+        Unloaded += (_, _) => CancelPendingTranslations();
     }
 
     public AppServices Services { get; }
@@ -97,44 +94,109 @@ public sealed partial class HomePage : Page
             return;
         }
 
-        if (!_submissionGate.TryEnter())
-        {
-            Services.Status.Report("翻译正在进行，请稍候");
-            return;
-        }
-
-        _translationCancellation = new CancellationTokenSource();
-        TranslateButton.IsEnabled = false;
-        Services.Status.Report($"正在通过 {_selectedServices.Count} 个服务翻译…", true);
+        var text = SourceTextBox.Text.Trim();
+        var pair = TranslationCoordinator.ResolveLanguages(text,
+            ((LanguageOption)SourceLanguageBox.SelectedItem).Code,
+            ((LanguageOption)TargetLanguageBox.SelectedItem).Code);
+        var serviceIds = _selectedServices.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        // Repeated activation of the same request should not restart in-flight work.
+        if (_translationCancellation is not null && _lastBatch is { } active &&
+            active.SourceText == text && active.SourceLanguage == pair.Source && active.TargetLanguage == pair.Target &&
+            Results.Select(item => item.ServiceId).SequenceEqual(serviceIds, StringComparer.OrdinalIgnoreCase)) return;
+        InvalidateRequests();
+        var generation = _batchGeneration;
+        var cancellation = new CancellationTokenSource();
+        _translationCancellation = cancellation;
         Results.Clear();
+        foreach (var id in serviceIds)
+        {
+            _serviceGenerations[id] = 0;
+            Results.Add(new TranslationResult(id,
+                Services.TranslationServices.FirstOrDefault(item => item.Id == id).Name ?? ServiceCatalog.DisplayName(id),
+                string.Empty, IconPath: id.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase) ? Services.Plugins.IconPath(id) : null)
+                { IsLoading = true });
+        }
+        _lastBatch = new TranslationBatch(text, pair.Source, pair.Target, Results.ToArray());
+        Services.Status.Report($"正在通过 {serviceIds.Length} 个服务翻译…", true);
         try
         {
-            var batch = await Services.Translator.TranslateAsync(
-                SourceTextBox.Text,
-                ((LanguageOption)SourceLanguageBox.SelectedItem).Code,
-                ((LanguageOption)TargetLanguageBox.SelectedItem).Code,
-                _selectedServices,
-                Services.Settings,
-                _translationCancellation.Token);
+            var batch = await Services.Translator.TranslateAsync(text, pair.Source, pair.Target, serviceIds,
+                Services.Settings, cancellation.Token, completed => DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (generation != _batchGeneration || cancellation.IsCancellationRequested ||
+                        _serviceGenerations.GetValueOrDefault(completed.ServiceId) != 0) return;
+                    Results.FirstOrDefault(item => item.ServiceId.Equals(completed.ServiceId, StringComparison.OrdinalIgnoreCase))?.Apply(completed);
+                }));
+            if (generation != _batchGeneration || cancellation.IsCancellationRequested) return;
+            // Apply once more on the UI thread in case a queued progress callback has not run yet.
+            foreach (var completed in batch.Results)
+                if (_serviceGenerations.GetValueOrDefault(completed.ServiceId) == 0)
+                    Results.FirstOrDefault(item => item.ServiceId.Equals(completed.ServiceId, StringComparison.OrdinalIgnoreCase))?.Apply(completed);
             if (((LanguageOption)TargetLanguageBox.SelectedItem).Code != batch.TargetLanguage)
                 TargetLanguageBox.SelectedItem = LanguageOption.FindTarget(batch.TargetLanguage);
-            _lastBatch = batch;
-            foreach (var result in batch.Results) Results.Add(result);
-            await Services.AddHistoryAsync(batch);
-            var successCount = batch.Results.Count(item => item.IsSuccess);
-            Services.Status.Report(successCount > 0
-                ? $"翻译完成 · {successCount}/{batch.Results.Count} 个服务成功"
-                : "翻译失败，请检查服务设置");
+            await Services.AddHistoryAsync(batch with
+            {
+                Results = batch.Results.Where(item => _serviceGenerations.GetValueOrDefault(item.ServiceId) == 0).ToArray(),
+            });
+            if (generation == _batchGeneration) ReportResultStatus();
         }
-        catch (OperationCanceledException) { Services.Status.Report("已取消翻译"); }
-        catch (Exception exception) { Services.Status.Report(exception.Message); }
+        catch (OperationCanceledException)
+        {
+            if (generation == _batchGeneration)
+            {
+                FinishLoading("已取消翻译");
+                Services.Status.Report("已取消翻译");
+            }
+        }
+        catch (Exception exception)
+        {
+            if (generation == _batchGeneration)
+            {
+                FinishLoading(exception.Message);
+                Services.Status.Report(exception.Message);
+            }
+        }
         finally
         {
-            _translationCancellation?.Dispose();
-            _translationCancellation = null;
-            TranslateButton.IsEnabled = true;
-            _submissionGate.Exit();
+            if (ReferenceEquals(_translationCancellation, cancellation)) _translationCancellation = null;
+            cancellation.Dispose();
         }
+    }
+
+    private void FinishLoading(string error)
+    {
+        foreach (var result in Results.Where(item => item.IsLoading))
+        {
+            result.Error = error;
+            result.IsLoading = false;
+        }
+    }
+
+    public void CancelPendingTranslations()
+    {
+        var wasLoading = Results.Any(item => item.IsLoading);
+        InvalidateRequests();
+        if (wasLoading) Services.Status.Report("已取消翻译");
+    }
+
+    private void InvalidateRequests()
+    {
+        _batchGeneration++;
+        _translationCancellation?.Cancel();
+        _translationCancellation = null;
+        foreach (var retry in _retries.Values) retry.Cancel();
+        _retries.Clear();
+        _serviceGenerations.Clear();
+        FinishLoading("已取消翻译");
+        _lastBatch = null;
+    }
+
+    private void ReportResultStatus()
+    {
+        var successCount = Results.Count(item => item.IsSuccess);
+        var pending = Results.Count(item => item.IsLoading);
+        Services.Status.Report(pending > 0 ? $"翻译中 · {successCount}/{Results.Count} 个服务成功" :
+            successCount > 0 ? $"翻译完成 · {successCount}/{Results.Count} 个服务成功" : "翻译失败，请检查服务设置", pending > 0);
     }
 
     private async void ServiceButton_Click(object sender, RoutedEventArgs e)
@@ -346,6 +408,7 @@ public sealed partial class HomePage : Page
 
     private void Clear_Click(object sender, RoutedEventArgs e)
     {
+        InvalidateRequests();
         SourceTextBox.Text = string.Empty;
         Results.Clear();
         Services.Status.Report("已清空");
@@ -353,7 +416,7 @@ public sealed partial class HomePage : Page
 
     private void CopyResult_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as Button)?.Tag is not TranslationResult result) return;
+        if ((sender as Button)?.Tag is not TranslationResult result || !result.IsSuccess) return;
         var package = new DataPackage();
         package.SetText(result.DisplayText);
         Clipboard.SetContent(package);
@@ -462,25 +525,41 @@ public sealed partial class HomePage : Page
 
     private async void RetryResult_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as Button)?.Tag is not TranslationResult result) return;
-        var index = Results.IndexOf(result);
-        if (index < 0 || string.IsNullOrWhiteSpace(SourceTextBox.Text)) return;
+        if ((sender as Button)?.Tag is not TranslationResult result || result.IsLoading ||
+            !Results.Contains(result) || _lastBatch is not { } snapshot) return;
+        var generation = _batchGeneration;
+        var serviceGeneration = _serviceGenerations.GetValueOrDefault(result.ServiceId) + 1;
+        _serviceGenerations[result.ServiceId] = serviceGeneration;
+        if (_retries.Remove(result.ServiceId, out var previous)) previous.Cancel();
+        var cancellation = new CancellationTokenSource();
+        _retries[result.ServiceId] = cancellation;
+        result.IsLoading = true;
         Services.Status.Report($"正在重试 {result.ServiceName}…", true);
+        bool IsCurrent() => generation == _batchGeneration && !cancellation.IsCancellationRequested &&
+            _serviceGenerations.GetValueOrDefault(result.ServiceId) == serviceGeneration && Results.Contains(result);
         try
         {
-            var batch = await Services.Translator.TranslateAsync(
-                SourceTextBox.Text,
-                ((LanguageOption)SourceLanguageBox.SelectedItem).Code,
-                ((LanguageOption)TargetLanguageBox.SelectedItem).Code,
-                [result.ServiceId],
-                Services.Settings);
-            Results[index] = batch.Results[0];
+            var batch = await Services.Translator.TranslateAsync(snapshot.SourceText, snapshot.SourceLanguage,
+                snapshot.TargetLanguage, [result.ServiceId], Services.Settings, cancellation.Token);
+            if (!IsCurrent()) return;
+            result.Apply(batch.Results[0]);
             await Services.AddHistoryAsync(batch);
-            Services.Status.Report(batch.Results[0].IsSuccess
-                ? $"{result.ServiceName} 重试成功"
-                : $"{result.ServiceName} 重试失败");
+            if (IsCurrent()) ReportResultStatus();
         }
-        catch (Exception exception) { Services.Status.Report(exception.Message); }
+        catch (OperationCanceledException)
+        {
+            if (IsCurrent()) { result.Error = "已取消翻译"; result.IsLoading = false; ReportResultStatus(); }
+        }
+        catch (Exception exception)
+        {
+            if (IsCurrent()) { result.Error = exception.Message; result.IsLoading = false; ReportResultStatus(); }
+        }
+        finally
+        {
+            if (_retries.TryGetValue(result.ServiceId, out var active) && ReferenceEquals(active, cancellation))
+                _retries.Remove(result.ServiceId);
+            cancellation.Dispose();
+        }
     }
 
     private async void OcrImage_Click(object sender, RoutedEventArgs e)

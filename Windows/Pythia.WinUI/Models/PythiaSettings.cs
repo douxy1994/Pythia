@@ -4,6 +4,7 @@ namespace Pythia.Models;
 
 public sealed class PythiaSettings
 {
+    public bool TranslateDeleteNewline { get; set; } = false;
     public string SourceLanguage { get; set; } = "auto";
     public string TargetLanguage { get; set; } = "zh-CN";
     public List<string> EnabledTranslateServices { get; set; } = ["google"];

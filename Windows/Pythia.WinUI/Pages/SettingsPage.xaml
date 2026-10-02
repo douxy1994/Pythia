@@ -28,6 +28,8 @@
                                     <StackPanel><TextBlock FontWeight="SemiBold" Text="应用主题" /><TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="跟随 Windows，或固定浅色/深色" TextWrapping="Wrap" /></StackPanel>
                                     <ComboBox x:Name="ThemeBox" Grid.Column="1" HorizontalAlignment="Stretch"><ComboBoxItem Content="跟随系统" Tag="system" /><ComboBoxItem Content="浅色" Tag="light" /><ComboBoxItem Content="深色" Tag="dark" /></ComboBox>
                                 </Grid>
+                                <ToggleSwitch x:Name="TranslateDeleteNewlineSwitch" Header="翻译结果删除换行" OnContent="开启" OffContent="关闭" />
+                                <TextBlock Text="关闭时保留原文的段落、空行和缩进；开启时合并译文中的空白。" Style="{StaticResource PythiaSecondaryTextStyle}" TextWrapping="Wrap" />
                                 <ToggleSwitch x:Name="SaveHistorySwitch" Header="保存翻译历史" OnContent="开启" OffContent="关闭" />
                                 <ToggleSwitch x:Name="CompactTranslationWindowSwitch" Header="划词翻译或截图 OCR 翻译时默认打开简约窗口" OnContent="开启" OffContent="关闭" />
                                 <StackPanel Spacing="4">

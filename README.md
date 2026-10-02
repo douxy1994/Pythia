@@ -9,7 +9,7 @@
 
   [![Version](https://img.shields.io/badge/Version-1.2.4-80B847)](#download)
   [![macOS](https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white)](#macos)
-  [![Windows](https://img.shields.io/badge/Windows_x64-1.2.3-0078D4?logo=windows11&logoColor=white)](#windows)
+  [![Windows](https://img.shields.io/badge/Windows_x64-1.2.4-0078D4?logo=windows11&logoColor=white)](#windows)
   [![Swift](https://img.shields.io/badge/Swift-AppKit-F05138?logo=swift&logoColor=white)](#macos-build)
   [![WinUI](https://img.shields.io/badge/C%23-WinUI_3-512BD4?logo=dotnet&logoColor=white)](#windows-development)
   [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-2ea44f.svg)](./LICENSE)
@@ -93,7 +93,7 @@ flowchart LR
     <td width="50%" align="center">
       <img src="./Docs/images/platform-windows.svg" width="100%" alt="Pythia for Windows">
       <h3 id="windows">Windows</h3>
-      <p><strong>Native WinUI 3 · current release 1.2.3</strong></p>
+      <p><strong>Native WinUI 3 · current release 1.2.4</strong></p>
       <p>C# 14 · .NET 10 · x64 · Windows 10/11</p>
       <p>Compact translation, multi-service cards, Windows OCR, hotkeys, history sync, plugins, and Inno Setup packaging.</p>
     </td>
@@ -112,12 +112,12 @@ flowchart LR
 
 ### Windows
 
-[Download Pythia 1.2.3 for Windows x64](https://github.com/douxy1994/Pythia/releases/download/v1.2.3/Pythia-1.2.3-windows-x64.exe)
+[Download Pythia 1.2.4 for Windows x64](https://github.com/douxy1994/Pythia/releases/download/v1.2.4/Pythia-1.2.4-windows-x64.exe)
 
 - Requires 64-bit Windows 10 or Windows 11.
-- The installer and SHA-256 checksum are published on the [v1.2.3 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.2.3). macOS remains at 1.2.4.
+- The installer and SHA-256 checksum are published on the [v1.2.4 release page](https://github.com/douxy1994/Pythia/releases/tag/v1.2.4). macOS remains at 1.2.4.
 - The installer contains Pythia and its isolated runtime only; it bundles no third-party plugin or `.pythia` package.
-- The Windows 1.2.3 installer is not Authenticode-signed yet and might trigger Microsoft Defender SmartScreen. Verify its SHA-256 checksum before installation.
+- The Windows 1.2.4 installer is not Authenticode-signed yet and might trigger Microsoft Defender SmartScreen. Verify its SHA-256 checksum before installation.
 
 ## Downloadable plugins
 
@@ -176,7 +176,7 @@ Set-Location Windows\Pythia.WinUI
 node ..\..\script\validate_pythia_plugins.mjs
 dotnet build .\Pythia.WinUI.csproj -c Release -p:Platform=x64
 dotnet run --project ..\Pythia.WinUI.Tests\Pythia.WinUI.Tests.csproj -c Release
-.\tool\build-installer.ps1 -Version 1.2.3
+.\tool\build-installer.ps1 -Version 1.2.4
 ```
 
 ## Data and privacy
@@ -189,7 +189,7 @@ dotnet run --project ..\Pythia.WinUI.Tests\Pythia.WinUI.Tests.csproj -c Release
 - Portable backups exclude API keys, WebDAV credentials, shortcuts, startup state, and window state.
 - Release packages contain no third-party plugins and are scanned for private material before publishing.
 - The repository and release assets must never contain private keys, API keys, passwords, user history, or local configuration.
-- Windows 1.2.3 is published without Authenticode signing; signing remains planned, and certificate files must never enter Git.
+- Windows 1.2.4 is published without Authenticode signing; signing remains planned, and certificate files must never enter Git.
 
 ## Repository layout
 

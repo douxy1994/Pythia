@@ -7,6 +7,15 @@ using Pythia.Services;
 
 var failures = new List<string>();
 
+await TranslationParityTests.RunAsync((condition, message) =>
+{
+    if (!condition) failures.Add(message);
+});
+await TranslationHttpParityTests.RunAsync((condition, message) =>
+{
+    if (!condition) failures.Add(message);
+});
+
 string? FindNodeForTests()
 {
     var candidates = new[]

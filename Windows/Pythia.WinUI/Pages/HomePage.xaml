@@ -134,26 +134,27 @@
                                 <Grid MinHeight="32">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                     <StackPanel VerticalAlignment="Center" Orientation="Horizontal" Spacing="7">
+                                        <ProgressRing Width="18" Height="18" IsActive="{x:Bind IsLoading, Mode=OneWay}" Visibility="{x:Bind LoadingVisibility, Mode=OneWay}" AutomationProperties.Name="正在翻译" />
                                         <controls:SvgIcon Icon="globe" Visibility="{x:Bind BuiltInIconVisibility}" />
                                         <Image Width="18" Height="18" Source="{x:Bind IconSource}" Stretch="Uniform" Visibility="{x:Bind PluginIconVisibility}" />
                                         <Image Width="18" Height="18" Source="/Assets/AppIcon.png" Stretch="Uniform" Visibility="{x:Bind PluginFallbackVisibility}" />
-                                        <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{x:Bind ServiceName}" />
-                                        <TextBlock VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="{x:Bind Model}" TextTrimming="CharacterEllipsis" MaxWidth="220" />
+                                        <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{x:Bind ServiceName, Mode=OneWay}" />
+                                        <TextBlock VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="{x:Bind Model, Mode=OneWay}" TextTrimming="CharacterEllipsis" MaxWidth="220" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="2">
                                         <Button Visibility="{x:Bind CollapseVisibility, Mode=OneWay}" Style="{StaticResource PythiaResultIconButtonStyle}" ToolTipService.ToolTip="展开或收起结果"
                                                 AutomationProperties.Name="展开或收起翻译结果" Tag="{x:Bind}" Click="ToggleResult_Click">
                                             <controls:SvgIcon Icon="{x:Bind ExpandIcon, Mode=OneWay}" />
                                         </Button>
-                                        <Button Visibility="{x:Bind RetryVisibility}" Style="{StaticResource PythiaResultIconButtonStyle}" ToolTipService.ToolTip="重试此服务" AutomationProperties.Name="重试翻译" Tag="{x:Bind}" Click="RetryResult_Click">
+                                        <Button IsEnabled="{x:Bind CanRetry, Mode=OneWay}" Visibility="{x:Bind RetryVisibility}" Style="{StaticResource PythiaResultIconButtonStyle}" ToolTipService.ToolTip="重试此服务" AutomationProperties.Name="重试翻译" Tag="{x:Bind}" Click="RetryResult_Click">
                                             <controls:SvgIcon Icon="arrow-sync" />
                                         </Button>
-                                        <Button Style="{StaticResource PythiaResultIconButtonStyle}" ToolTipService.ToolTip="复制结果" AutomationProperties.Name="复制翻译结果" Tag="{x:Bind}" Click="CopyResult_Click">
+                                        <Button IsEnabled="{x:Bind IsSuccess, Mode=OneWay}" Style="{StaticResource PythiaResultIconButtonStyle}" ToolTipService.ToolTip="复制结果" AutomationProperties.Name="复制翻译结果" Tag="{x:Bind}" Click="CopyResult_Click">
                                             <controls:SvgIcon Icon="copy" />
                                         </Button>
                                     </StackPanel>
                                 </Grid>
-                                <TextBlock Grid.Row="1" FontSize="17" IsTextSelectionEnabled="True" Text="{x:Bind DisplayText}" TextWrapping="Wrap"
+                                <TextBlock Grid.Row="1" FontSize="17" IsTextSelectionEnabled="True" Text="{x:Bind DisplayText, Mode=OneWay}" TextWrapping="Wrap"
                                            Visibility="{x:Bind BodyVisibility, Mode=OneWay}" />
                             </Grid>
                         </Border>

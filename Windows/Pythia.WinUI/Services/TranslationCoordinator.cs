@@ -22,12 +22,16 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
         string targetLanguage,
         IEnumerable<string> serviceIds,
         PythiaSettings settings,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<TranslationResult>? onServiceCompleted = null)
     {
+        // Capture the option before the first await, including a single-card retry.
+        var deleteNewline = settings.TranslateDeleteNewline;
         var normalizedText = text.Trim();
         if (normalizedText.Length == 0)
             throw new ArgumentException("请输入需要翻译的文本。", nameof(text));
 
+        var plan = TranslationTextPlan.Create(normalizedText, deleteNewline);
         var pair = ResolveLanguages(normalizedText, sourceLanguage, targetLanguage);
         using var concurrencyGate = new SemaphoreSlim(4);
         var tasks = serviceIds.Distinct(StringComparer.OrdinalIgnoreCase).Select(async id =>
@@ -35,33 +39,46 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
             await concurrencyGate.WaitAsync(cancellationToken);
             try
             {
+                TranslationResult result;
                 try
                 {
-                    return id switch
+                    TranslationResult? metadata = null;
+                    var translated = await plan.ExecuteAsync(async (chunk, ct) =>
                     {
-                        "google" => await TranslateGoogleAsync(normalizedText, pair.Source, pair.Target, cancellationToken),
-                        "baidu" => await TranslateBaiduAsync(normalizedText, pair.Source, pair.Target, cancellationToken),
-                        "youdao" => await TranslateYoudaoAsync(normalizedText, pair.Source, pair.Target, cancellationToken),
-                        "openai-compatible" => await TranslateOpenAiAsync(normalizedText, pair.Source, pair.Target, settings, cancellationToken),
-                        "deepl" => await TranslateDeepLAsync(normalizedText, pair.Source, pair.Target, settings, cancellationToken),
-                        "libretranslate" => await TranslateLibreAsync(normalizedText, pair.Source, pair.Target, settings, cancellationToken),
-                        _ when id.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase) && plugins is not null =>
-                            new TranslationResult(id, plugins.DisplayName(id),
-                                await plugins.TranslateAsync(id, normalizedText, pair.Source, pair.Target, cancellationToken),
-                                IconPath: plugins.IconPath(id)),
-                        _ => new TranslationResult(id, ServiceCatalog.DisplayName(id), string.Empty, Error: "当前版本不支持此翻译服务。"),
-                    };
+                        var part = id switch
+                        {
+                            "google" => await TranslateGoogleAsync(chunk, pair.Source, pair.Target, ct),
+                            "baidu" => await TranslateBaiduAsync(chunk, pair.Source, pair.Target, ct),
+                            "youdao" => await TranslateYoudaoAsync(chunk, pair.Source, pair.Target, ct),
+                            "openai-compatible" => await TranslateOpenAiAsync(chunk, pair.Source, pair.Target, settings, ct),
+                            "deepl" => await TranslateDeepLAsync(chunk, pair.Source, pair.Target, settings, ct),
+                            "libretranslate" => await TranslateLibreAsync(chunk, pair.Source, pair.Target, settings, ct),
+                            _ when id.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase) && plugins is not null =>
+                                new TranslationResult(id, plugins.DisplayName(id),
+                                    await plugins.TranslateAsync(id, chunk, pair.Source, pair.Target, ct),
+                                    IconPath: plugins.IconPath(id)),
+                            _ => throw new InvalidOperationException("当前版本不支持此翻译服务。"),
+                        };
+                        if (part.Error is not null) throw new InvalidOperationException(part.Error);
+                        Interlocked.CompareExchange(ref metadata, part, null);
+                        return part.Text;
+                    }, cancellationToken);
+                    result = new TranslationResult(id, metadata?.ServiceName ?? ServiceCatalog.DisplayName(id),
+                        translated, metadata?.Model, IconPath: metadata?.IconPath);
                 }
-                catch (OperationCanceledException) { throw; }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
                 catch (Exception exception)
                 {
-                    return new TranslationResult(id, plugins?.DisplayName(id) ?? ServiceCatalog.DisplayName(id), string.Empty,
-                        Error: SafeError(exception),
+                    result = new TranslationResult(id, plugins?.DisplayName(id) ?? ServiceCatalog.DisplayName(id), string.Empty,
+                        Error: exception is OperationCanceledException ? "翻译请求超时。" : SafeError(exception),
                         IconPath: id.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase) ? plugins?.IconPath(id) : null);
                 }
+                cancellationToken.ThrowIfCancellationRequested();
+                onServiceCompleted?.Invoke(result);
+                return result;
             }
             finally { concurrencyGate.Release(); }
-        });
+        }).ToArray();
 
         var results = await Task.WhenAll(tasks);
         return new TranslationBatch(normalizedText, pair.Source, pair.Target, results);
@@ -90,7 +107,7 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
                 };
                 request.Headers.TryAddWithoutValidation("Origin", origin);
                 request.Headers.Referrer = new Uri(origin + "/");
-                request.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 Pythia/1.2.3");
+                request.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 Pythia/1.2.4");
                 using var response = await _http.SendAsync(request, ct);
                 if (response.IsSuccessStatusCode)
                 {
@@ -241,35 +258,9 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
         if (endpoint is null) throw new InvalidOperationException("自定义 API 基础地址无效。");
         var serviceName = string.IsNullOrWhiteSpace(settings.OpenAICompatibleName)
             ? "AI 翻译" : settings.OpenAICompatibleName.Trim();
-        var chunks = CustomLlmChunks(text);
-        var translatedChunks = new List<string>(chunks.Count);
-        for (var index = 0; index < chunks.Count; index++)
-        {
-            ct.ThrowIfCancellationRequested();
-            var envelope = WhitespaceEnvelope(chunks[index]);
-            if (envelope.Core.Length == 0)
-            {
-                translatedChunks.Add(chunks[index]);
-                continue;
-            }
-            try
-            {
-                var translated = await TranslateOpenAiChunkAsync(
-                    envelope.Core, source, target, settings, api, apiKey, endpoint, serviceName,
-                    index, chunks.Count, ct);
-                translatedChunks.Add(envelope.Leading + translated.Trim() + envelope.Trailing);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception exception)
-            {
-                throw new InvalidOperationException(
-                    $"{serviceName} 第 {index + 1}/{chunks.Count} 段翻译失败：{SafeError(exception)}", exception);
-            }
-        }
-        return new("openai-compatible", serviceName, string.Concat(translatedChunks), settings.OpenAICompatibleModel);
+        var translated = await TranslateOpenAiChunkAsync(
+            text, source, target, settings, api, apiKey, endpoint, serviceName, 0, 1, ct);
+        return new("openai-compatible", serviceName, translated, settings.OpenAICompatibleModel);
     }
 
     private async Task<string> TranslateOpenAiChunkAsync(
@@ -288,7 +279,7 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
         var segmentNote = chunkCount > 1
             ? $" This is segment {chunkIndex + 1} of {chunkCount}; preserve its paragraph and list formatting."
             : string.Empty;
-        var prompt = $"Translate the following text from {source} to {target}. Return only the translation.{segmentNote}\n\n{text}";
+        var prompt = $"Translate the following text from {source} to {target}. Return only the translation. Preserve paragraphs, lists, and line breaks.{segmentNote}\n\n{text}";
         var payload = api == "anthropic"
             ? JsonSerializer.Serialize(new
             {
@@ -398,92 +389,7 @@ public sealed class TranslationCoordinator(CredentialStore credentials, PluginSe
     public static IReadOnlyList<string> CustomLlmChunks(string text, int maxCharacters = CustomLlmChunkLimit)
     {
         if (maxCharacters < 64) throw new ArgumentOutOfRangeException(nameof(maxCharacters));
-        if (text.Length <= maxCharacters) return [text];
-
-        var chunks = new List<string>();
-        var cursor = 0;
-        while (cursor < text.Length)
-        {
-            var hardEnd = Math.Min(text.Length, cursor + maxCharacters);
-            if (hardEnd == text.Length)
-            {
-                chunks.Add(text[cursor..]);
-                break;
-            }
-
-            var minimumBoundary = cursor + (int)(maxCharacters * 0.55);
-            var preferredEnd = -1;
-            for (var index = minimumBoundary; index <= hardEnd; index++)
-            {
-                if (IsPreferredChunkBoundary(text, index) && IsSafeChunkBoundary(text, index))
-                    preferredEnd = index;
-            }
-            var end = preferredEnd > cursor ? preferredEnd : SafeChunkEnd(text, cursor, hardEnd);
-            if (end <= cursor) end = hardEnd;
-            chunks.Add(text[cursor..end]);
-            cursor = end;
-        }
-        return chunks;
-    }
-
-    private static bool IsPreferredChunkBoundary(string text, int index)
-    {
-        if (index <= 0 || index > text.Length) return false;
-        var previous = text[index - 1];
-        if (previous is '\n' or '\r' or '。' or '！' or '？' or '!' or '?' or '；' or ';' or '：' or ':') return true;
-        if (char.IsWhiteSpace(previous) && index >= 2 && text[index - 2] is '.' or ',' or '，') return true;
-        return false;
-    }
-
-    private static int SafeChunkEnd(string text, int cursor, int proposedEnd)
-    {
-        var end = proposedEnd;
-        while (end > cursor && !IsSafeChunkBoundary(text, end)) end--;
-        if (end > cursor) return end;
-        end = proposedEnd;
-        while (end < text.Length && !IsSafeChunkBoundary(text, end)) end++;
-        return end;
-    }
-
-    private static bool IsSafeChunkBoundary(string text, int index)
-    {
-        if (index <= 0 || index >= text.Length) return true;
-        if (char.IsHighSurrogate(text[index - 1]) && char.IsLowSurrogate(text[index])) return false;
-        return !WouldSplitNumber(text, index);
-    }
-
-    private static bool WouldSplitNumber(string text, int index)
-    {
-        char At(int offset) => index + offset >= 0 && index + offset < text.Length ? text[index + offset] : '\0';
-        var before = At(-1);
-        var after = At(0);
-        var beforeBefore = At(-2);
-        var afterAfter = At(1);
-        var threeBefore = At(-3);
-        var twoAfter = At(2);
-        static bool Digit(char value) => char.IsDigit(value);
-        static bool Separator(char value) => ".,，．:/：／-－'’ \u00A0\u202F".Contains(value);
-        static bool Sign(char value) => "+-−＋－".Contains(value);
-
-        if (Digit(before) && Digit(after)) return true;
-        if (Digit(before) && Separator(after) && Digit(afterAfter)) return true;
-        if (Separator(before) && Digit(beforeBefore) && Digit(after)) return true;
-        if (".,，．".Contains(before) && Digit(after)) return true;
-        if (Sign(before) && Digit(after)) return true;
-        if (Digit(before) && after is 'e' or 'E' &&
-            (Digit(afterAfter) || (afterAfter is '+' or '-' && Digit(twoAfter)))) return true;
-        if (before is 'e' or 'E' && Digit(beforeBefore) &&
-            (Digit(after) || (after is '+' or '-' && Digit(afterAfter)))) return true;
-        return before is '+' or '-' && beforeBefore is 'e' or 'E' && Digit(threeBefore) && Digit(after);
-    }
-
-    private static (string Leading, string Core, string Trailing) WhitespaceEnvelope(string chunk)
-    {
-        var start = 0;
-        while (start < chunk.Length && char.IsWhiteSpace(chunk[start])) start++;
-        var end = chunk.Length;
-        while (end > start && char.IsWhiteSpace(chunk[end - 1])) end--;
-        return (chunk[..start], chunk[start..end], chunk[end..]);
+        return TranslationTextPlan.SplitChunks(text, maxCharacters);
     }
 
     public static Uri? CustomLlmEndpoint(string baseUrl, string api)
