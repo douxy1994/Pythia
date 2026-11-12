@@ -10,25 +10,6 @@ final class SelectionReader {
         let items: [[NSPasteboard.PasteboardType: Data]]
     }
 
-    /// Apps whose Accessibility selection is unreliable. Microsoft Word can
-    /// truncate AXSelectedText across page breaks, while WPS Office uses custom
-    /// document canvases that do not consistently expose AXSelectedText or
-    /// AXSelectedTextRange. Copy via ⌘C first for these apps and only fall back
-    /// to the Accessibility tree when the copy reads nothing.
-    private static let clipboardFirstBundleIDs: Set<String> = [
-        "com.microsoft.Word",
-        "com.kingsoft.wpsoffice.mac",
-    ]
-
-    private func prefersClipboardCopy(for app: NSRunningApplication?) -> Bool {
-        guard let bundleID = app?.bundleIdentifier else { return false }
-        let normalized = bundleID.lowercased()
-        return Self.clipboardFirstBundleIDs.contains(bundleID)
-            || bundleID.hasPrefix("com.kingsoft.wpsoffice.mac.")
-            || normalized.contains("kingsoft")
-            || normalized.contains("wpsoffice")
-    }
-
     func selectedText(targetApplication: NSRunningApplication? = nil, completion: @escaping (String) -> Void) {
         guard accessibilityTrusted() else {
             completion("")
@@ -38,27 +19,19 @@ final class SelectionReader {
         let target = validExternalApplication(targetApplication)
         let read: () -> Void = { [weak self] in
             guard let self else { completion(""); return }
-            if self.prefersClipboardCopy(for: target) {
-                // Global shortcuts can arrive while their modifier keys are
-                // still physically held. Give Word/WPS a brief release window
-                // before synthesizing Command-C, which is especially important
-                // for WPS's PDF canvas.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
-                    self.readClipboardFallback(targetApplication: target) { text in
-                        if !text.isEmpty {
-                            completion(text)
-                            return
-                        }
-                        completion(self.readAccessibilitySelection(targetApplication: target) ?? "")
-                    }
+            // AXSelectedText can contain all selected words but omit DOM/PDF
+            // paragraph separators. A nonempty AX result is not proof that its
+            // structure is intact, so verify it against a fresh copy for every
+            // app, not only Word/WPS. Snapshot AX before the asynchronous copy.
+            let accessibilityText = self.readAccessibilitySelection(targetApplication: target)
+            // Let shortcut modifiers settle before sending Command-C.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                self.readClipboardFallback(targetApplication: target) { copiedText in
+                    completion(SelectionTextPolicy.preferredText(
+                        accessibilityText: accessibilityText, copiedText: copiedText
+                    ))
                 }
-                return
             }
-            if let text = self.readAccessibilitySelection(targetApplication: target), !text.isEmpty {
-                completion(text)
-                return
-            }
-            self.readClipboardFallback(targetApplication: target, completion: completion)
         }
 
         // When the user clicks Pythia's own "划词" button, Pythia becomes the
@@ -142,18 +115,23 @@ final class SelectionReader {
         let pasteboard = NSPasteboard.general
         let original = capturePasteboard(pasteboard)
         let changeBefore = pasteboard.changeCount
+        ClipboardMonitor.shared.beginSelectionRead()
+        let complete: (String) -> Void = { text in
+            ClipboardMonitor.shared.endSelectionRead()
+            completion(text)
+        }
         let copyAndWait: (NSRunningApplication?, Int, @escaping (Bool) -> Void) -> Void = { [weak self] copyTarget, baseline, done in
             guard let self else { done(false); return }
             self.sendCopyShortcut(targetApplication: copyTarget)
             self.waitForClipboardChange(from: baseline, remainingChecks: 16, completion: done)
         }
         copyAndWait(targetApplication, changeBefore) { [weak self] changed in
-            guard let self else { completion(""); return }
+            guard let self else { complete(""); return }
             if changed {
-                let result = pasteboard.string(forType: .string) ?? ""
+                let result = Self.selectionText(from: pasteboard)
                 if !result.isEmpty {
                     self.restorePasteboard(original, to: pasteboard)
-                    completion(result)
+                    complete(result)
                     return
                 }
             }
@@ -163,12 +141,22 @@ final class SelectionReader {
             // writing an empty item, so take a fresh baseline for the HID retry.
             let retryBaseline = pasteboard.changeCount
             copyAndWait(nil, retryBaseline) { [weak self] changedAfterRetry in
-                guard let self else { completion(""); return }
-                let result = changedAfterRetry ? (pasteboard.string(forType: .string) ?? "") : ""
+                guard let self else { complete(""); return }
+                let result = changedAfterRetry ? Self.selectionText(from: pasteboard) : ""
                 self.restorePasteboard(original, to: pasteboard)
-                completion(result)
+                complete(result)
             }
         }
+    }
+
+    /// Read only the newly copied item. RTF may retain paragraph separators
+    /// that an application's plain-text representation has flattened.
+    static func selectionText(from pasteboard: NSPasteboard) -> String {
+        let plain = pasteboard.string(forType: .string) ?? ""
+        let rich = pasteboard.data(forType: .rtf).flatMap {
+            NSAttributedString(rtf: $0, documentAttributes: nil)?.string
+        }
+        return SelectionTextPolicy.preferredText(accessibilityText: rich, copiedText: plain)
     }
 
     private func waitForClipboardChange(from changeCount: Int, remainingChecks: Int, completion: @escaping (Bool) -> Void) {

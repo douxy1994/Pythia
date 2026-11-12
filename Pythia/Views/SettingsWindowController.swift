@@ -1848,10 +1848,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         ])
 
         let updateItems = [
-            aboutUpdateItem("大模型长文档翻译", "自定义 OpenAI 与 Anthropic 接口按约 1800 字符安全分段并顺序合并，不再被固定短超时中断。"),
-            aboutUpdateItem("数字与格式保护", "分段不切断小数、日期、时间、版本号、科学计数法或扩展字形簇，并保留段落、列表和空白。"),
-            aboutUpdateItem("有界重试", "临时网络错误、限流和服务端错误最多尝试三次，支持 Retry-After 秒数与 HTTP 日期。"),
-            aboutUpdateItem("真正可取消", "取消会立即终止当前请求或退避等待、停止后续分段，并与请求超时显示不同结果。"),
+            aboutUpdateItem("划词段落修复", "取词时核对本次复制内容，修复辅助功能返回完整文字却丢失段落、导致简约窗口剩余内容合段的问题。"),
+            aboutUpdateItem("多种文本格式校验", "优先保留相同文字中段落更完整的版本，支持纯文本与 RTF；复制失败时保留辅助功能结果。"),
+            aboutUpdateItem("保持原有翻译设置", "关闭“翻译结果删除换行”时保留原文段落、空行及缩进；开启时仍按设置输出紧凑文本。"),
+            aboutUpdateItem("分段回归检查", "增加首段独立、后续合段及全部合段的取词测试，并检查复制失败回退和 RTF 段落恢复。"),
         ]
         let rows = FullWidthStackView()
         updateItems.forEach { item in

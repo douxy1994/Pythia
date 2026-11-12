@@ -45,6 +45,7 @@
 				A100000000000000000000A3 /* PluginPackagePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A2 /* PluginPackagePolicy.swift */; };
 				A100000000000000000000B4 /* TranslationChunkPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B5 /* TranslationChunkPolicy.swift */; };
 				A100000000000000000000B6 /* WindowPlacementPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B7 /* WindowPlacementPolicy.swift */; };
+		A100000000000000000000B8 /* SelectionTextPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B9 /* SelectionTextPolicy.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -90,6 +91,7 @@
 				A100000000000000000000A2 /* PluginPackagePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/PluginPackagePolicy.swift; sourceTree = SOURCE_ROOT; };
 				A100000000000000000000B5 /* TranslationChunkPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/TranslationChunkPolicy.swift; sourceTree = SOURCE_ROOT; };
 				A100000000000000000000B7 /* WindowPlacementPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/WindowPlacementPolicy.swift; sourceTree = SOURCE_ROOT; };
+		A100000000000000000000B9 /* SelectionTextPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/PythiaCore/Sources/PythiaCore/SelectionTextPolicy.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -365,6 +367,7 @@
 						A100000000000000000000A3 /* PluginPackagePolicy.swift in Sources */,
 						A100000000000000000000B4 /* TranslationChunkPolicy.swift in Sources */,
 						A100000000000000000000B6 /* WindowPlacementPolicy.swift in Sources */,
+						A100000000000000000000B8 /* SelectionTextPolicy.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
